@@ -44,6 +44,7 @@ The app is written in Swift and uses SwiftUI for most interface code, with AppKi
 
 ## Dependencies and Assets
 
+- Flofoil source code is distributed under the MIT License. Ensure new code and assets can legally be distributed under that license, and preserve all required third-party notices.
 - The default decision for a new third-party dependency is **no**. First document why Apple frameworks or a small local implementation are insufficient.
 - Prefer dependencies that can be removed cleanly and that do not require a separate runtime, background service, or broad transitive dependency graph.
 - Do not replace or expand the existing vendored cmark integration casually; evaluate binary size, licensing, security, and maintenance impact before changing it.

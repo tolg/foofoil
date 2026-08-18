@@ -78,8 +78,14 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : ""
+            "state" : "translated",
+            "value" : "Copyright © 2026 Beijing Memory Vision Technology Co., Ltd."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版权所有 © 2026 北京记忆视界科技有限公司"
           }
         }
       }

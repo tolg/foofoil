@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F10F011A3123000100F10F01 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = F10F011C3123000100F10F01 /* LICENSE */; };
+		F10F011B3123000100F10F01 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = F10F011D3123000100F10F01 /* THIRD_PARTY_NOTICES.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		AB7D0D192FFB8BCA00ED4438 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,8 @@
 		AB7D0D0B2FFB8BC800ED4438 /* Flofoil.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Flofoil.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7D0D182FFB8BCA00ED4438 /* flofoilTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = flofoilTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7D0D222FFB8BCA00ED4438 /* flofoilUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = flofoilUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F10F011C3123000100F10F01 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+		F10F011D3123000100F10F01 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +82,8 @@
 		AB7D0D022FFB8BC800ED4438 = {
 			isa = PBXGroup;
 			children = (
+				F10F011C3123000100F10F01 /* LICENSE */,
+				F10F011D3123000100F10F01 /* THIRD_PARTY_NOTICES.md */,
 				AB7D0D0D2FFB8BC800ED4438 /* flofoil */,
 				AB7D0D1B2FFB8BCA00ED4438 /* flofoilTests */,
 				AB7D0D252FFB8BCA00ED4438 /* flofoilUITests */,
@@ -213,6 +222,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F10F011A3123000100F10F01 /* LICENSE in Resources */,
+				F10F011B3123000100F10F01 /* THIRD_PARTY_NOTICES.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,7 +419,7 @@
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flofoil";
 				INFOPLIST_KEY_CFBundleName = "Flofoil";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Beijing Memory Vision Technology Co., Ltd.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -449,7 +460,7 @@
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flofoil";
 				INFOPLIST_KEY_CFBundleName = "Flofoil";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Beijing Memory Vision Technology Co., Ltd.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

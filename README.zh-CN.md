@@ -6,6 +6,8 @@ Flofoil 是一款轻量级 macOS 悬浮参考应用。它可以把图片、文�
 
 Flofoil 使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
 
+Flofoil 由北京记忆视界科技有限公司发布，并采用 MIT 许可证作为开源软件分发。
+
 ## 功能特性
 
 - 打开多个相互独立的悬浮窗口。
@@ -97,3 +99,13 @@ Flofoil 主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮�
 - 确保持久化数据向后兼容，并保护用户拥有的文件。
 
 完整的贡献与实现规范请参阅 [AGENTS.md](AGENTS.md)。
+
+## 参与贡献
+
+欢迎参与 Flofoil 的开发。提交更改前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 许可证
+
+Flofoil 使用 [MIT License](LICENSE)，版权所有 © 2026 北京记忆视界科技有限公司。
+
+应用内置的 cmark 库使用其自身的宽松开源许可证，所需声明请参阅 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

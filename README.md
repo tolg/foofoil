@@ -6,6 +6,8 @@ Flofoil is a lightweight floating reference app for macOS. It keeps images, docu
 
 Built with SwiftUI and AppKit, Flofoil favors native macOS capabilities, fast interaction, and a small dependency footprint.
 
+Flofoil is published by Beijing Memory Vision Technology Co., Ltd. and distributed as open-source software under the MIT License.
+
 ## Features
 
 - Open multiple independent floating windows.
@@ -97,3 +99,13 @@ History and cached content are stored locally in the user's Application Support 
 - Keep persisted data backward compatible and user-owned files safe.
 
 See [AGENTS.md](AGENTS.md) for the full contribution and implementation guidelines.
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change.
+
+## License
+
+Flofoil is licensed under the [MIT License](LICENSE), copyright © 2026 Beijing Memory Vision Technology Co., Ltd.
+
+The bundled cmark library is distributed under its own permissive licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the required notices.
