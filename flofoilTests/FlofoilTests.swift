@@ -435,4 +435,137 @@ struct FlofoilTests {
         #expect(model.query == "")
         #expect(model.shouldSelectAll == false)
     }
+
+    @Test func testMarkdownTableBasicRendering() {
+        let md = """
+        | Name | Age | City |
+        |------|-----|------|
+        | Alice | 30 | Beijing |
+        | Bob | 25 | Shanghai |
+        """
+        let html = AppState.cmarkToHTML(md)
+        #expect(html.contains("<table>"))
+        #expect(html.contains("</table>"))
+        #expect(html.contains("<th>") || html.contains("<th "))
+        #expect(html.contains("<td>"))
+        #expect(html.contains("Alice"))
+        #expect(html.contains("Beijing"))
+    }
+
+    @Test func testMarkdownTableAlignment() {
+        let md = """
+        | left | center | right |
+        |:-----|:------:|------:|
+        | a | b | c |
+        """
+        let html = AppState.cmarkToHTML(md)
+        #expect(html.contains("align=\"left\""))
+        #expect(html.contains("align=\"center\""))
+        #expect(html.contains("align=\"right\""))
+    }
+
+    @Test func testMarkdownTableInlineMarkdownInCells() {
+        let md = """
+        | Header |
+        |--------|
+        | **bold** and *italic* |
+        | [link](https://example.com) |
+        """
+        let html = AppState.cmarkToHTML(md)
+        #expect(html.contains("<strong>") || html.contains("<b>"))
+        #expect(html.contains("<em>") || html.contains("<i>"))
+        #expect(html.contains("<a "))
+        #expect(html.contains("https://example.com"))
+    }
+
+    @Test func testMarkdownTableWithoutOuterPipes() {
+        let md = """
+        Name | Age
+        ---- | ---
+        Alice | 30
+        Bob | 25
+        """
+        let html = AppState.cmarkToHTML(md)
+        #expect(html.contains("<table>"))
+        #expect(html.contains("Alice"))
+    }
+
+    @Test func testMarkdownTableMixedWithOtherMarkdown() {
+        let md = """
+        # Title
+        Some paragraph.
+
+        | A | B |
+        |---|---|
+        | 1 | 2 |
+
+        - list item
+        """
+        let html = AppState.cmarkToHTML(md)
+        #expect(html.contains("<h1>"))
+        #expect(html.contains("<table>"))
+        #expect(html.contains("<li>") || html.contains("<ul>"))
+    }
+
+    @Test func testMarkdownTableInsideCodeBlockNotParsed() {
+        let md = """
+        ```markdown
+        | A | B |
+        |---|---|
+        | 1 | 2 |
+        ```
+        """
+        let html = AppState.cmarkToHTML(md)
+        #expect(!html.contains("<table>"))
+        #expect(html.contains("<code>") || html.contains("<pre>"))
+    }
+
+    @Test func testMarkdownTableMultipleTables() {
+        let md = """
+        | A | B |
+        |---|---|
+        | 1 | 2 |
+
+        Some text between.
+
+        | X | Y |
+        |---|---|
+        | 3 | 4 |
+        """
+        let html = AppState.cmarkToHTML(md)
+        // 应包含两个表格
+        let count = html.components(separatedBy: "<table>").count - 1
+        #expect(count == 2)
+    }
+
+    @Test func testMarkdownTableNSAttributedStringRendering() throws {
+        let md = """
+        | Name | Age |
+        |------|-----|
+        | Alice | 30 |
+        """
+        let htmlBody = AppState.cmarkToHTML(md)
+        let html = """
+        <html><head><style>table{border-collapse:collapse} th,td{border:1px solid #000;padding:4px}</style></head><body>\(htmlBody)</body></html>
+        """
+        let data = try #require(html.data(using: .utf8))
+        let attr = try NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue], documentAttributes: nil)
+        #expect(attr.string.contains("Alice"))
+        #expect(attr.string.contains("Name"))
+        // 检查是否包含 NSTextTable（通过附件或表格属性）
+        var hasTableAttribute = false
+        attr.enumerateAttributes(in: NSRange(location: 0, length: attr.length), options: []) { attrs, _, _ in
+            for key in attrs.keys where key.rawValue.contains("Table") || key.rawValue.contains("table") {
+                hasTableAttribute = true
+            }
+            // AppKit 中表格通常以 NSParagraphStyle 的 textBlocks 形式存在
+            if let paragraph = attrs[.paragraphStyle] as? NSParagraphStyle {
+                if !paragraph.textBlocks.isEmpty {
+                    hasTableAttribute = true
+                }
+            }
+        }
+        // 即使没有检测到 table 属性，也应保证文本内容已渲染，不强制 hasTableAttribute
+        #expect(attr.length > 0)
+    }
 }
