@@ -63,6 +63,7 @@ The app is written in Swift and uses SwiftUI for most interface code, with AppKi
 
 - For window interaction, menus, drag and drop, keyboard handling, or visual changes that are impractical to cover with unit tests, perform a focused manual check and report what was verified.
 - Treat new warnings as defects. Do not silence warnings without addressing or documenting the underlying reason.
+- After completing a task that results in app code changes, run `./run` from the repository root to build and launch the app so the user can directly see the result. Skip this only if the change cannot or should not affect the running app.
 
 ## Change Discipline
 

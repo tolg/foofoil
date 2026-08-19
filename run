@@ -1,0 +1,26 @@
+#!/bin/zsh
+#
+# run - 构建并启动 Flofoil，替代 Xcode 的 Run 按钮。
+# 如果已有正在运行的实例，会先终止所有实例再重新启动。
+
+set -euo pipefail
+
+PROJECT="flofoil.xcodeproj"
+SCHEME="flofoil"
+APP_NAME="Flofoil"
+DESTINATION='platform=macOS'
+
+SCRIPT_DIR="${0:A:h}"
+cd "$SCRIPT_DIR"
+
+# 构建
+xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
+    -derivedDataPath build -destination "$DESTINATION" build
+
+APP_PATH="build/Build/Products/Debug/$APP_NAME.app"
+
+# 终止所有正在运行的实例
+pkill -x "$APP_NAME" 2>/dev/null || true
+
+# 启动
+open "$APP_PATH"
