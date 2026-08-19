@@ -166,6 +166,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(togglePinAction(_:)),
                 keyEquivalent: "t"
             )
+            pinItem.withSymbol("pin")
             pinItem.keyEquivalentModifierMask = [.command]
             pinItem.target = self
             pinItem.state = appState.isPinned ? .on : .off
@@ -176,6 +177,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(toggleBorderAction(_:)),
                 keyEquivalent: "b"
             )
+            borderItem.withSymbol("rectangle")
             borderItem.keyEquivalentModifierMask = [.command]
             borderItem.target = self
             borderItem.state = appState.showBorder ? .on : .off
@@ -188,6 +190,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(previousPageAction(_:)),
                 keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!)
             )
+            previousPageItem.withSymbol("chevron.left")
             previousPageItem.keyEquivalentModifierMask = []
             previousPageItem.target = self
             menu.addItem(previousPageItem)
@@ -197,6 +200,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(nextPageAction(_:)),
                 keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!)
             )
+            nextPageItem.withSymbol("chevron.right")
             nextPageItem.keyEquivalentModifierMask = []
             nextPageItem.target = self
             menu.addItem(nextPageItem)
@@ -206,6 +210,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(goToPageAction(_:)),
                 keyEquivalent: "g"
             )
+            goToPageItem.withSymbol("number.square")
             goToPageItem.keyEquivalentModifierMask = [.command]
             goToPageItem.target = self
             menu.addItem(goToPageItem)
@@ -217,6 +222,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(copyAction(_:)),
                 keyEquivalent: "c"
             )
+            copyItem.withSymbol("photo.on.rectangle")
             copyItem.keyEquivalentModifierMask = [.command]
             copyItem.target = self
             menu.addItem(copyItem)
@@ -226,6 +232,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(resetAction(_:)),
                 keyEquivalent: "k"
             )
+            resetItem.withSymbol("arrow.counterclockwise")
             resetItem.keyEquivalentModifierMask = [.command]
             resetItem.target = self
             menu.addItem(resetItem)
@@ -235,6 +242,7 @@ struct PDFModeView: NSViewRepresentable {
                 action: #selector(closeAction(_:)),
                 keyEquivalent: "w"
             )
+            closeItem.withSymbol("xmark.circle")
             closeItem.keyEquivalentModifierMask = [.command]
             closeItem.target = self
             menu.addItem(closeItem)

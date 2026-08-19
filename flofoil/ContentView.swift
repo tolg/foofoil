@@ -180,11 +180,15 @@ public struct ContentView: View {
                 }
         )
         .contextMenu {
-            Toggle(NSLocalizedString("Toggle Pin (ContextMenu)", comment: ""), isOn: $appState.isPinned)
+            Toggle(isOn: $appState.isPinned) {
+                Label(NSLocalizedString("Toggle Pin (ContextMenu)", comment: ""), systemImage: "pin")
+            }
                 .keyboardShortcut("t", modifiers: [.command])
 
             if appState.imageURL != nil || appState.webURL != nil {
-                Toggle(NSLocalizedString("Border (ContextMenu)", comment: ""), isOn: $appState.showBorder)
+                Toggle(isOn: $appState.showBorder) {
+                    Label(NSLocalizedString("Border (ContextMenu)", comment: ""), systemImage: "rectangle")
+                }
                     .keyboardShortcut("b", modifiers: [.command])
             }
 
@@ -192,7 +196,7 @@ public struct ContentView: View {
                 Button(action: {
                     appState.copyCurrentImageToPasteboard()
                 }) {
-                    Text(NSLocalizedString("Copy Image", comment: ""))
+                    Label(NSLocalizedString("Copy Image", comment: ""), systemImage: "photo.on.rectangle")
                 }
                 .keyboardShortcut("c", modifiers: [.command])
 
@@ -200,7 +204,7 @@ public struct ContentView: View {
                     Button(action: {
                         appState.showColorPanel()
                     }) {
-                        Text(NSLocalizedString("Select Color", comment: ""))
+                        Label(NSLocalizedString("Select Color", comment: ""), systemImage: "eyedropper")
                     }
                 }
 
@@ -212,7 +216,7 @@ public struct ContentView: View {
                             userInfo: ["id": appState.id]
                         )
                     }) {
-                        Text(NSLocalizedString("Fit Window to Image", comment: ""))
+                        Label(NSLocalizedString("Fit Window to Image", comment: ""), systemImage: "rectangle.inset.filled")
                     }
                     .keyboardShortcut("[", modifiers: [.command])
 
@@ -223,7 +227,7 @@ public struct ContentView: View {
                             userInfo: ["id": appState.id]
                         )
                     }) {
-                        Text(NSLocalizedString("Fit Image to Window Width", comment: ""))
+                        Label(NSLocalizedString("Fit Image to Window Width", comment: ""), systemImage: "arrow.left.and.right")
                     }
                     .keyboardShortcut("]", modifiers: [.command])
                 }
@@ -234,7 +238,7 @@ public struct ContentView: View {
             Button(action: {
                 appState.resetContent()
             }) {
-                Text(NSLocalizedString("Reset (ContextMenu)", comment: ""))
+                Label(NSLocalizedString("Reset (ContextMenu)", comment: ""), systemImage: "arrow.counterclockwise")
             }
             .keyboardShortcut("k", modifiers: [.command])
 
@@ -245,7 +249,7 @@ public struct ContentView: View {
                     userInfo: ["id": appState.id]
                 )
             }) {
-                Text(NSLocalizedString("Close (ContextMenu)", comment: ""))
+                Label(NSLocalizedString("Close (ContextMenu)", comment: ""), systemImage: "xmark.circle")
             }
             .keyboardShortcut("w", modifiers: [.command])
         }

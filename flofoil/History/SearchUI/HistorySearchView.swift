@@ -27,7 +27,11 @@ struct HistorySearchView: View {
                                 HistorySearchResultRow(result: result, isSelected: model.selectedIndex == index)
                                     .onTapGesture { model.open(result) }
                                     .contextMenu {
-                                        Button(NSLocalizedString("Delete", comment: ""), role: .destructive) { model.delete(result) }
+                                        Button(role: .destructive) {
+                                            model.delete(result)
+                                        } label: {
+                                            Label(NSLocalizedString("Delete", comment: ""), systemImage: "trash")
+                                        }
                                 }
                             }
                             if let url = model.openURL {

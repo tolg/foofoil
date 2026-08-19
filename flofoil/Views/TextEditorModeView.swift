@@ -98,13 +98,13 @@ struct TextEditorModeView: View {
                                                 newTitleText = rawTitle
                                                 showRenameAlert = true
                                             }) {
-                                                Text(NSLocalizedString("Change Title", comment: ""))
+                                                Label(NSLocalizedString("Change Title", comment: ""), systemImage: "pencil")
                                             }
 
                                             Button(action: {
                                                 historyManager.removeFromHistory(config)
                                             }) {
-                                                Text(NSLocalizedString("Delete", comment: ""))
+                                                Label(NSLocalizedString("Delete", comment: ""), systemImage: "trash")
                                             }
                                         }
                                     }

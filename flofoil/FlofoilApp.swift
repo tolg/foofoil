@@ -10,6 +10,15 @@ import UniformTypeIdentifiers
 import Combine
 import WebKit
 
+extension NSMenuItem {
+    /// 使用系统符号统一菜单图标，同时保留 AppKit 对禁用状态的自动着色。
+    @discardableResult
+    func withSymbol(_ symbolName: String) -> Self {
+        image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        return self
+    }
+}
+
 
 @objc private protocol EditMenuCommands {
     func undo(_ sender: Any?)
@@ -191,6 +200,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? "Flofoil"
         appMenu.addItem(withTitle: String(format: NSLocalizedString("About %@", comment: ""), appName), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+            .withSymbol("info.circle")
         appMenu.addItem(NSMenuItem.separator())
 
         let hideItem = NSMenuItem(
@@ -198,6 +208,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
+        hideItem.withSymbol("eye.slash")
         appMenu.addItem(hideItem)
 
         let hideOthersItem = NSMenuItem(
@@ -206,6 +217,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "h"
         )
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        hideOthersItem.withSymbol("eye.slash.fill")
         appMenu.addItem(hideOthersItem)
 
         let showAllItem = NSMenuItem(
@@ -213,10 +225,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSApplication.unhideAllApplications(_:)),
             keyEquivalent: ""
         )
+        showAllItem.withSymbol("eye")
         appMenu.addItem(showAllItem)
 
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: String(format: NSLocalizedString("Quit %@", comment: ""), appName), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+            .withSymbol("power")
 
         let appMenuItem = NSMenuItem()
         appMenuItem.submenu = appMenu
@@ -228,30 +242,36 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         self.fileMenu = fileMenu
 
         let newWindowItem = NSMenuItem(title: NSLocalizedString("New Flofoil", comment: ""), action: #selector(newWindowAction), keyEquivalent: "n")
+        newWindowItem.withSymbol("plus.rectangle.on.rectangle")
         newWindowItem.target = self
         fileMenu.addItem(newWindowItem)
 
         fileMenu.addItem(NSMenuItem.separator())
 
         let openItem = NSMenuItem(title: NSLocalizedString("Open...", comment: ""), action: #selector(openFileAction), keyEquivalent: "o")
+        openItem.withSymbol("folder")
         openItem.target = self
         fileMenu.addItem(openItem)
 
         let openClipboardImageItem = NSMenuItem(title: NSLocalizedString("Open Clipboard Image", comment: ""), action: #selector(openClipboardImageAction), keyEquivalent: "v")
+        openClipboardImageItem.withSymbol("photo.on.rectangle")
         openClipboardImageItem.keyEquivalentModifierMask = [.command, .shift]
         openClipboardImageItem.target = self
         fileMenu.addItem(openClipboardImageItem)
 
         let openWebURLItem = NSMenuItem(title: NSLocalizedString("Open URL Menu Item", comment: ""), action: #selector(openWebURLAction), keyEquivalent: "l")
+        openWebURLItem.withSymbol("link")
         openWebURLItem.target = self
         fileMenu.addItem(openWebURLItem)
 
         let saveAsItem = NSMenuItem(title: NSLocalizedString("Save As...", comment: ""), action: #selector(saveAsAction), keyEquivalent: "s")
+        saveAsItem.withSymbol("square.and.arrow.down")
         saveAsItem.keyEquivalentModifierMask = [.command]
         saveAsItem.target = self
         fileMenu.addItem(saveAsItem)
 
         let shareItem = NSMenuItem(title: NSLocalizedString("Share...", comment: ""), action: #selector(shareAction), keyEquivalent: "")
+        shareItem.withSymbol("square.and.arrow.up")
         shareItem.target = self
         fileMenu.addItem(shareItem)
 
@@ -260,6 +280,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(openInDefaultBrowserAction),
             keyEquivalent: ""
         )
+        openInDefaultBrowserItem.withSymbol("safari")
         openInDefaultBrowserItem.target = self
         fileMenu.addItem(openInDefaultBrowserItem)
 
@@ -268,17 +289,20 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(copyWebURLAction),
             keyEquivalent: ""
         )
+        copyWebURLItem.withSymbol("link")
         copyWebURLItem.target = self
         fileMenu.addItem(copyWebURLItem)
 
         fileMenu.addItem(NSMenuItem.separator())
 
         let resetContentItem = NSMenuItem(title: NSLocalizedString("Reset", comment: ""), action: #selector(resetContentAction), keyEquivalent: "k")
+        resetContentItem.withSymbol("arrow.counterclockwise")
         resetContentItem.keyEquivalentModifierMask = [.command]
         resetContentItem.target = self
         fileMenu.addItem(resetContentItem)
 
         let closeWindowItem = NSMenuItem(title: NSLocalizedString("Close Flofoil", comment: ""), action: #selector(closeWindowAction), keyEquivalent: "w")
+        closeWindowItem.withSymbol("xmark.circle")
         closeWindowItem.target = self
         fileMenu.addItem(closeWindowItem)
 
@@ -306,6 +330,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(previousPDFPageAction),
             keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!)
         )
+        previousPageItem.withSymbol("chevron.left")
         previousPageItem.keyEquivalentModifierMask = []
         previousPageItem.target = self
         goMenu.addItem(previousPageItem)
@@ -315,12 +340,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(nextPDFPageAction),
             keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!)
         )
+        nextPageItem.withSymbol("chevron.right")
         nextPageItem.keyEquivalentModifierMask = []
         nextPageItem.target = self
         goMenu.addItem(nextPageItem)
 
         goMenu.addItem(NSMenuItem.separator())
         let goToPageItem = NSMenuItem(title: NSLocalizedString("Go to Page Menu Item", comment: ""), action: #selector(goToPDFPageAction), keyEquivalent: "g")
+        goToPageItem.withSymbol("number.square")
         goToPageItem.keyEquivalentModifierMask = [.command]
         goToPageItem.target = self
         goMenu.addItem(goToPageItem)
@@ -337,18 +364,21 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Toggle Pin - 快捷键 Command + T
         let togglePinItem = NSMenuItem(title: NSLocalizedString("Toggle Pin", comment: ""), action: #selector(togglePinAction), keyEquivalent: "t")
+        togglePinItem.withSymbol("pin")
         togglePinItem.keyEquivalentModifierMask = [.command]
         togglePinItem.target = self
         viewMenu.addItem(togglePinItem)
 
         // Toggle Border - 快捷键 Command + B
         let toggleBorderItem = NSMenuItem(title: NSLocalizedString("Border", comment: ""), action: #selector(toggleShowBorderAction), keyEquivalent: "b")
+        toggleBorderItem.withSymbol("rectangle")
         toggleBorderItem.keyEquivalentModifierMask = [.command]
         toggleBorderItem.target = self
         viewMenu.addItem(toggleBorderItem)
 
         // Reload Page - 快捷键 Command + R
         let reloadPageItem = NSMenuItem(title: NSLocalizedString("Reload Page", comment: ""), action: #selector(reloadPageAction), keyEquivalent: "r")
+        reloadPageItem.withSymbol("arrow.clockwise")
         reloadPageItem.keyEquivalentModifierMask = [.command]
         reloadPageItem.target = self
         viewMenu.addItem(reloadPageItem)
@@ -359,47 +389,56 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(captureImageFlofoilAction),
             keyEquivalent: ""
         )
+        captureImageFlofoilItem.withSymbol("camera.viewfinder")
         captureImageFlofoilItem.target = self
         viewMenu.addItem(captureImageFlofoilItem)
 
         // Select Color - 选择颜色
         let selectColorItem = NSMenuItem(title: NSLocalizedString("Select Color", comment: ""), action: #selector(selectColorAction), keyEquivalent: "")
+        selectColorItem.withSymbol("eyedropper")
         selectColorItem.target = self
         viewMenu.addItem(selectColorItem)
 
         viewMenu.addItem(NSMenuItem.separator())
 
         let zoomInItem = NSMenuItem(title: NSLocalizedString("Zoom In Content", comment: ""), action: #selector(zoomInAction), keyEquivalent: "+")
+        zoomInItem.withSymbol("plus.magnifyingglass")
         zoomInItem.keyEquivalentModifierMask = [.command]
         zoomInItem.target = self
         viewMenu.addItem(zoomInItem)
 
         let zoomOutItem = NSMenuItem(title: NSLocalizedString("Zoom Out Content", comment: ""), action: #selector(zoomOutAction), keyEquivalent: "-")
+        zoomOutItem.withSymbol("minus.magnifyingglass")
         zoomOutItem.keyEquivalentModifierMask = [.command]
         zoomOutItem.target = self
         viewMenu.addItem(zoomOutItem)
 
         let actualSizeItem = NSMenuItem(title: NSLocalizedString("Actual Size", comment: ""), action: #selector(actualSizeAction), keyEquivalent: "0")
+        actualSizeItem.withSymbol("arrow.up.left.and.arrow.down.right")
         actualSizeItem.keyEquivalentModifierMask = [.command]
         actualSizeItem.target = self
         viewMenu.addItem(actualSizeItem)
 
         let fitWindowToImageItem = NSMenuItem(title: NSLocalizedString("Fit Window to Image", comment: ""), action: #selector(fitWindowToImageAction), keyEquivalent: "[")
+        fitWindowToImageItem.withSymbol("rectangle.inset.filled")
         fitWindowToImageItem.keyEquivalentModifierMask = [.command]
         fitWindowToImageItem.target = self
         viewMenu.addItem(fitWindowToImageItem)
 
         let fitImageToWidthItem = NSMenuItem(title: NSLocalizedString("Fit Image to Window Width", comment: ""), action: #selector(fitImageToWindowWidthAction), keyEquivalent: "]")
+        fitImageToWidthItem.withSymbol("arrow.left.and.right")
         fitImageToWidthItem.keyEquivalentModifierMask = [.command]
         fitImageToWidthItem.target = self
         viewMenu.addItem(fitImageToWidthItem)
 
         let zoomOutWindowItem = NSMenuItem(title: NSLocalizedString("Zoom Out Window", comment: ""), action: #selector(zoomOutWindowAction), keyEquivalent: "<")
+        zoomOutWindowItem.withSymbol("rectangle.compress.vertical")
         zoomOutWindowItem.keyEquivalentModifierMask = [.command]
         zoomOutWindowItem.target = self
         viewMenu.addItem(zoomOutWindowItem)
 
         let zoomInWindowItem = NSMenuItem(title: NSLocalizedString("Zoom In Window", comment: ""), action: #selector(zoomInWindowAction), keyEquivalent: ">")
+        zoomInWindowItem.withSymbol("rectangle.expand.vertical")
         zoomInWindowItem.keyEquivalentModifierMask = [.command]
         zoomInWindowItem.target = self
         viewMenu.addItem(zoomInWindowItem)
@@ -408,11 +447,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Background Color - 同时设置窗体与 PDF 阅读区的背景色
         let backgroundColorItem = NSMenuItem(title: NSLocalizedString("Background Color", comment: ""), action: #selector(backgroundColorAction), keyEquivalent: "")
+        backgroundColorItem.withSymbol("paintpalette")
         backgroundColorItem.target = self
         viewMenu.addItem(backgroundColorItem)
 
         // Increase Opacity - 快捷键 Command + Shift + ↑
         let increaseOpacityItem = NSMenuItem(title: NSLocalizedString("Increase Opacity", comment: ""), action: #selector(increaseOpacityAction), keyEquivalent: "")
+        increaseOpacityItem.withSymbol("sun.max")
         // macOS AppKit 中，上箭头字符为 "\u{F700}" (NSUpArrowFunctionKey)
         increaseOpacityItem.keyEquivalent = "\u{F700}"
         increaseOpacityItem.keyEquivalentModifierMask = [.command, .shift]
@@ -421,6 +462,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Decrease Opacity - 快捷键 Command + Shift + ↓
         let decreaseOpacityItem = NSMenuItem(title: NSLocalizedString("Decrease Opacity", comment: ""), action: #selector(decreaseOpacityAction), keyEquivalent: "")
+        decreaseOpacityItem.withSymbol("sun.min")
         // macOS AppKit 中，下箭头字符为 "\u{F701}" (NSDownArrowFunctionKey)
         decreaseOpacityItem.keyEquivalent = "\u{F701}"
         decreaseOpacityItem.keyEquivalentModifierMask = [.command, .shift]
@@ -436,11 +478,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEquivalent: ""
             )
             item.representedObject = val
+            item.withSymbol("circle.lefthalf.filled")
             item.target = self
             chooseOpacitySubmenu.addItem(item)
         }
 
         let chooseOpacityItem = NSMenuItem(title: NSLocalizedString("Choose Opacity", comment: ""), action: nil, keyEquivalent: "")
+        chooseOpacityItem.withSymbol("slider.horizontal.3")
         chooseOpacityItem.submenu = chooseOpacitySubmenu
         viewMenu.addItem(chooseOpacityItem)
 
@@ -452,20 +496,21 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let windowMenu = NSMenu(title: NSLocalizedString("Window", comment: ""))
         self.windowMenu = windowMenu
 
-        let windowPositionItems: [(title: String, action: Selector, key: String)] = [
-            (NSLocalizedString("Top-Left", comment: ""), #selector(moveToTopLeftAction), "q"),
-            (NSLocalizedString("Top", comment: ""), #selector(moveToTopAction), "w"),
-            (NSLocalizedString("Top-Right", comment: ""), #selector(moveToTopRightAction), "e"),
-            (NSLocalizedString("Left", comment: ""), #selector(moveToLeftAction), "a"),
-            (NSLocalizedString("Center", comment: ""), #selector(moveToCenterAction), "s"),
-            (NSLocalizedString("Right", comment: ""), #selector(moveToRightAction), "d"),
-            (NSLocalizedString("Bottom-Left", comment: ""), #selector(moveToBottomLeftAction), "z"),
-            (NSLocalizedString("Bottom", comment: ""), #selector(moveToBottomAction), "x"),
-            (NSLocalizedString("Bottom-Right", comment: ""), #selector(moveToBottomRightAction), "c")
+        let windowPositionItems: [(title: String, action: Selector, key: String, symbol: String)] = [
+            (NSLocalizedString("Top-Left", comment: ""), #selector(moveToTopLeftAction), "q", "arrow.up.left"),
+            (NSLocalizedString("Top", comment: ""), #selector(moveToTopAction), "w", "arrow.up"),
+            (NSLocalizedString("Top-Right", comment: ""), #selector(moveToTopRightAction), "e", "arrow.up.right"),
+            (NSLocalizedString("Left", comment: ""), #selector(moveToLeftAction), "a", "arrow.left"),
+            (NSLocalizedString("Center", comment: ""), #selector(moveToCenterAction), "s", "scope"),
+            (NSLocalizedString("Right", comment: ""), #selector(moveToRightAction), "d", "arrow.right"),
+            (NSLocalizedString("Bottom-Left", comment: ""), #selector(moveToBottomLeftAction), "z", "arrow.down.left"),
+            (NSLocalizedString("Bottom", comment: ""), #selector(moveToBottomAction), "x", "arrow.down"),
+            (NSLocalizedString("Bottom-Right", comment: ""), #selector(moveToBottomRightAction), "c", "arrow.down.right")
         ]
 
         for itemInfo in windowPositionItems {
             let item = NSMenuItem(title: itemInfo.title, action: itemInfo.action, keyEquivalent: itemInfo.key)
+            item.withSymbol(itemInfo.symbol)
             item.keyEquivalentModifierMask = [.control, .option]
             item.target = self
             windowMenu.addItem(item)
@@ -478,6 +523,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(moveToNextScreenAction),
             keyEquivalent: "\t"
         )
+        moveToNextScreenItem.withSymbol("display.2")
         moveToNextScreenItem.keyEquivalentModifierMask = [.control, .option]
         moveToNextScreenItem.target = self
         windowMenu.addItem(moveToNextScreenItem)
@@ -496,6 +542,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // 5. Help 菜单
         let helpMenu = NSMenu(title: NSLocalizedString("Help", comment: ""))
         helpMenu.addItem(withTitle: String(format: NSLocalizedString("About %@", comment: ""), appName), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+            .withSymbol("info.circle")
 
         let helpMenuItem = NSMenuItem(title: NSLocalizedString("Help", comment: ""), action: nil, keyEquivalent: "")
         helpMenuItem.submenu = helpMenu
@@ -516,23 +563,28 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 action: #selector(EditMenuCommands.copy(_:)),
                 keyEquivalent: "c"
             )
+            copyImageItem.withSymbol("photo.on.rectangle")
             menu.addItem(copyImageItem)
             return
         }
 
         let undoItem = NSMenuItem(title: NSLocalizedString("Undo", comment: ""), action: #selector(EditMenuCommands.undo(_:)), keyEquivalent: "z")
+        undoItem.withSymbol("arrow.uturn.backward")
         menu.addItem(undoItem)
 
         let redoItem = NSMenuItem(title: NSLocalizedString("Redo", comment: ""), action: #selector(EditMenuCommands.redo(_:)), keyEquivalent: "z")
+        redoItem.withSymbol("arrow.uturn.forward")
         redoItem.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(redoItem)
 
         menu.addItem(NSMenuItem.separator())
 
         let cutItem = NSMenuItem(title: NSLocalizedString("Cut", comment: ""), action: #selector(EditMenuCommands.cut(_:)), keyEquivalent: "x")
+        cutItem.withSymbol("scissors")
         menu.addItem(cutItem)
 
         let copyItem = NSMenuItem(title: NSLocalizedString("Copy", comment: ""), action: #selector(EditMenuCommands.copy(_:)), keyEquivalent: "c")
+        copyItem.withSymbol("doc.on.doc")
         menu.addItem(copyItem)
 
         if activeAppState?.webURL != nil {
@@ -541,18 +593,22 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 action: #selector(copyWebURLAction),
                 keyEquivalent: "c"
             )
+            copyURLItem.withSymbol("link")
             copyURLItem.keyEquivalentModifierMask = [.command, .option]
             copyURLItem.target = self
             menu.addItem(copyURLItem)
         }
 
         let pasteItem = NSMenuItem(title: NSLocalizedString("Paste", comment: ""), action: #selector(EditMenuCommands.paste(_:)), keyEquivalent: "v")
+        pasteItem.withSymbol("clipboard")
         menu.addItem(pasteItem)
 
         let deleteItem = NSMenuItem(title: NSLocalizedString("Delete", comment: ""), action: #selector(EditMenuCommands.delete(_:)), keyEquivalent: "")
+        deleteItem.withSymbol("trash")
         menu.addItem(deleteItem)
 
         let selectAllItem = NSMenuItem(title: NSLocalizedString("Select All", comment: ""), action: #selector(EditMenuCommands.selectAll(_:)), keyEquivalent: "a")
+        selectAllItem.withSymbol("checkmark.square")
         menu.addItem(selectAllItem)
     }
 
@@ -1159,6 +1215,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         if configs.isEmpty {
             let noHistoryItem = NSMenuItem(title: NSLocalizedString("No History", comment: ""), action: nil, keyEquivalent: "")
+            noHistoryItem.withSymbol("clock")
             noHistoryItem.isEnabled = false
             dockMenu.addItem(noHistoryItem)
         } else {
@@ -1180,10 +1237,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         dockMenu.addItem(NSMenuItem.separator())
 
         let searchItem = NSMenuItem(title: NSLocalizedString("Search History Menu Item", comment: ""), action: #selector(showHistorySearchAction), keyEquivalent: "")
+        searchItem.withSymbol("magnifyingglass")
         searchItem.target = self
         dockMenu.addItem(searchItem)
 
         let clearHistoryItem = NSMenuItem(title: NSLocalizedString("Clear History Menu Item", comment: ""), action: #selector(clearHistoryAction), keyEquivalent: "")
+        clearHistoryItem.withSymbol("trash")
         clearHistoryItem.target = self
         dockMenu.addItem(clearHistoryItem)
 
@@ -1195,6 +1254,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         historyMenu.removeAllItems()
 
         let searchItem = NSMenuItem(title: NSLocalizedString("Search History Menu Item", comment: ""), action: #selector(showHistorySearchAction), keyEquivalent: "p")
+        searchItem.withSymbol("magnifyingglass")
         searchItem.keyEquivalentModifierMask = [.command]
         searchItem.target = self
         historyMenu.addItem(searchItem)
@@ -1204,6 +1264,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         if configs.isEmpty {
             let noHistoryItem = NSMenuItem(title: NSLocalizedString("No History", comment: ""), action: nil, keyEquivalent: "")
+            noHistoryItem.withSymbol("clock")
             noHistoryItem.isEnabled = false
             historyMenu.addItem(noHistoryItem)
         } else {
@@ -1226,6 +1287,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         historyMenu.addItem(NSMenuItem.separator())
 
         let clearHistoryItem = NSMenuItem(title: NSLocalizedString("Clear History Menu Item", comment: ""), action: #selector(clearHistoryAction), keyEquivalent: "")
+        clearHistoryItem.withSymbol("trash")
         clearHistoryItem.target = self
         historyMenu.addItem(clearHistoryItem)
     }
