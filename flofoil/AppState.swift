@@ -24,6 +24,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     private var sourceFingerprint: String?
     public var isInteractiveZooming: Bool = false
     private var isBatchUpdating = false
+    /// 递增的拖拽代次，用于丢弃过期异步回调，避免“打开以前的东西”或并发覆盖。
+    private var currentDropGeneration: UInt64 = 0
 
     @Published public var isCommandKeyPressed: Bool = false
     @Published public var isLoading: Bool = false
@@ -1119,148 +1121,96 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
     }
 
+    private func isCurrentDrop(_ generation: UInt64) -> Bool {
+        generation == currentDropGeneration
+    }
+
     public func handleDrop(providers: [NSItemProvider], completion: @escaping (Bool) -> Void = { _ in }) {
         NSLog("handleDrop started for \(providers.count) providers")
         for (index, p) in providers.enumerated() {
             NSLog("Provider [\(index)] types: \(p.registeredTypeIdentifiers), suggestedName: \(p.suggestedName ?? "nil")")
         }
 
-        // 首先尝试从 drag pasteboard 获取数据
-        self.tryLoadFromDragPasteboard { [weak self] success in
-            guard let self = self else {
+        // 递增代次，后续所有异步回调需校验仍为当前代次，否则丢弃（防止并发覆盖与“打开以前的东西”）。
+        currentDropGeneration &+= 1
+        let generation = currentDropGeneration
+
+        // 直接基于 providers 解析，不再读取全局 drag pasteboard，避免读取到过期/残留的粘贴板内容导致误打开旧数据。
+        tryLoadProviders(providers, index: 0, generation: generation, completion: { [weak self] success in
+            guard let self else {
                 completion(false)
                 return
             }
-            if success {
-                completion(true)
-            } else {
-                // 如果从 pasteboard 载入失败，则回退到通过 providers 逐个载入
-                NSLog("Pasteboard loading failed or yielded no results, falling back to providers.")
-                self.tryLoadProviders(providers, index: 0, completion: completion)
-            }
-        }
-    }
-
-    private func tryLoadFromDragPasteboard(completion: @escaping (Bool) -> Void) {
-        let pb = NSPasteboard(name: .drag)
-        NSLog("Attempting to parse from drag pasteboard. Available types: \(pb.types ?? [])")
-
-        // 1. 尝试读取 URL
-        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
-            NSLog("Found URLs in drag pasteboard: \(urls.map { $0.absoluteString })")
-            // 筛选出受支持 of URL
-            let supportedURLs = urls.filter { self.isSupportedDroppedURL($0) }
-            if !supportedURLs.isEmpty {
-                self.tryOpenPasteboardURLs(supportedURLs, index: 0) { success in
-                    if success {
-                        completion(true)
-                    } else {
-                        // 文件拖入失败时不读取 Finder 提供的文件图标。
-                        completion(false)
-                    }
-                }
-                return
-            }
-
-            // 剪贴板中已有文件 URL，但它们都不受支持：直接忽略。
-            if urls.contains(where: \.isFileURL) {
+            // 若在处理期间已发生更新的拖拽，本次结果视为过期。
+            guard self.isCurrentDrop(generation) else {
+                NSLog("handleDrop completion discarded due to newer drop (generation \(generation) vs \(self.currentDropGeneration))")
                 completion(false)
                 return
             }
-        }
-
-        // 2. 尝试读取 Image
-        self.tryLoadImageFromPasteboard(pb, completion: completion)
+            completion(success)
+        })
     }
 
-    private func tryOpenPasteboardURLs(_ urls: [URL], index: Int, completion: @escaping (Bool) -> Void) {
-        guard index < urls.count else {
+    private func tryLoadProviders(_ providers: [NSItemProvider], index: Int, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
             completion(false)
             return
         }
-
-        self.openDroppedURL(urls[index]) { [weak self] success in
-            guard let self = self else {
-                completion(false)
-                return
-            }
-            if success {
-                completion(true)
-            } else {
-                self.tryOpenPasteboardURLs(urls, index: index + 1, completion: completion)
-            }
-        }
-    }
-
-    private func tryLoadImageFromPasteboard(_ pb: NSPasteboard, completion: @escaping (Bool) -> Void) {
-        // 尝试直接读取 NSImage 对象
-        if pb.canReadObject(forClasses: [NSImage.self], options: nil) {
-            if let images = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage], let firstImage = images.first {
-                NSLog("Successfully read NSImage from drag pasteboard")
-                DispatchQueue.main.async {
-                    self.openImage(image: firstImage)
-                    completion(true)
-                }
-                return
-            }
-        }
-
-        // 尝试读取原始的图片 Data (tiff, png)
-        let imageTypes = [NSPasteboard.PasteboardType.tiff, NSPasteboard.PasteboardType.png]
-        for type in imageTypes {
-            if let data = pb.data(forType: type), let image = NSImage(data: data) {
-                NSLog("Successfully loaded NSImage from drag pasteboard data type: \(type.rawValue)")
-                DispatchQueue.main.async {
-                    self.openImage(image: image)
-                    completion(true)
-                }
-                return
-            }
-        }
-
-        completion(false)
-    }
-
-    private func tryLoadProviders(_ providers: [NSItemProvider], index: Int, completion: @escaping (Bool) -> Void) {
         guard index < providers.count else {
             completion(false)
             return
         }
 
-        self.tryLoadProvider(providers[index]) { [weak self] success in
-            guard let self = self else {
+        self.tryLoadProvider(providers[index], generation: generation) { [weak self] success in
+            guard let self else {
+                completion(false)
+                return
+            }
+            guard self.isCurrentDrop(generation) else {
                 completion(false)
                 return
             }
             if success {
                 completion(true)
             } else {
-                self.tryLoadProviders(providers, index: index + 1, completion: completion)
+                self.tryLoadProviders(providers, index: index + 1, generation: generation, completion: completion)
             }
         }
     }
 
-    private func tryLoadProvider(_ provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
-        // 1. 尝试以 URL 载入
+    private func tryLoadProvider(_ provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
+        // 1. 尝试以 URL 载入（包括 fileURL 与 http(s) URL）
         if provider.canLoadObject(ofClass: URL.self) {
             _ = provider.loadObject(ofClass: URL.self) { [weak self] url, error in
-                guard let self = self else {
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                guard self.isCurrentDrop(generation) else {
                     completion(false)
                     return
                 }
 
-                if let error = error {
+                if let error {
                     NSLog("loadObject URL failed for provider: \(error.localizedDescription)")
                 }
 
                 if let droppedURL = url, self.isSupportedDroppedURL(droppedURL) {
                     NSLog("Successfully loaded supported URL: \(droppedURL.absoluteString)")
-                    self.openDroppedURL(droppedURL) { success in
+                    self.openDroppedURL(droppedURL, generation: generation) { success in
+                        guard self.isCurrentDrop(generation) else {
+                            completion(false)
+                            return
+                        }
                         if success {
                             completion(true)
                         } else {
                             // URL 处理失败，尝试加载为 Image / Fallback
-                            self.tryLoadProviderAsImage(provider, completion: completion)
+                            self.tryLoadProviderAsImage(provider, generation: generation, completion: completion)
                         }
                     }
                 } else if let droppedURL = url, droppedURL.isFileURL {
@@ -1268,41 +1218,57 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                     completion(false)
                 } else {
                     // 没有得到 URL，或者 URL 不受支持，尝试加载为 Image / Fallback
-                    self.tryLoadProviderAsImage(provider, completion: completion)
+                    self.tryLoadProviderAsImage(provider, generation: generation, completion: completion)
                 }
             }
         } else {
             // 不能作为 URL 载入，尝试加载为 Image / Fallback
-            self.tryLoadProviderAsImage(provider, completion: completion)
+            self.tryLoadProviderAsImage(provider, generation: generation, completion: completion)
         }
     }
 
-    private func tryLoadProviderAsImage(_ provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
+    private func tryLoadProviderAsImage(_ provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         if provider.canLoadObject(ofClass: NSImage.self) {
             _ = provider.loadObject(ofClass: NSImage.self) { [weak self] image, error in
-                guard let self = self else {
+                guard let self else {
                     completion(false)
                     return
                 }
-                if let error = error {
+                guard self.isCurrentDrop(generation) else {
+                    completion(false)
+                    return
+                }
+                if let error {
                     NSLog("loadObject NSImage failed for provider: \(error.localizedDescription)")
                 }
                 if let nsImage = image as? NSImage {
                     NSLog("Successfully loaded NSImage object from provider")
                     DispatchQueue.main.async {
+                        guard self.isCurrentDrop(generation) else {
+                            completion(false)
+                            return
+                        }
                         self.openImage(image: nsImage, originalName: provider.suggestedName)
                         completion(true)
                     }
                 } else {
-                    self.tryLoadProviderAsImageData(provider, completion: completion)
+                    self.tryLoadProviderAsImageData(provider, generation: generation, completion: completion)
                 }
             }
         } else {
-            self.tryLoadProviderAsImageData(provider, completion: completion)
+            self.tryLoadProviderAsImageData(provider, generation: generation, completion: completion)
         }
     }
 
-    private func tryLoadProviderAsImageData(_ provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
+    private func tryLoadProviderAsImageData(_ provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         let imageIdentifiers = provider.registeredTypeIdentifiers.filter { ident in
             if let utType = UTType(ident) {
                 return utType.conforms(to: .image)
@@ -1312,36 +1278,53 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
         if !imageIdentifiers.isEmpty {
             NSLog("Found image identifiers in provider: \(imageIdentifiers)")
-            self.tryLoadImageData(from: provider, with: imageIdentifiers, index: 0) { [weak self] image in
-                guard let self = self else {
+            self.tryLoadImageData(from: provider, with: imageIdentifiers, index: 0, generation: generation) { [weak self] image in
+                guard let self else {
                     completion(false)
                     return
                 }
-                if let image = image {
+                guard self.isCurrentDrop(generation) else {
+                    completion(false)
+                    return
+                }
+                if let image {
                     NSLog("Successfully loaded NSImage from data representation")
                     DispatchQueue.main.async {
+                        guard self.isCurrentDrop(generation) else {
+                            completion(false)
+                            return
+                        }
                         self.openImage(image: image, originalName: provider.suggestedName)
                         completion(true)
                     }
                 } else {
-                    self.tryLoadProviderAsFallback(provider, completion: completion)
+                    self.tryLoadProviderAsFallback(provider, generation: generation, completion: completion)
                 }
             }
         } else {
-            self.tryLoadProviderAsFallback(provider, completion: completion)
+            self.tryLoadProviderAsFallback(provider, generation: generation, completion: completion)
         }
     }
 
-    private func tryLoadProviderAsFallback(_ provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
-        self.loadAsItemRepresentation(provider: provider, completion: completion)
+    private func tryLoadProviderAsFallback(_ provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
+        self.loadAsItemRepresentation(provider: provider, generation: generation, completion: completion)
     }
 
     private func tryLoadImageData(
         from provider: NSItemProvider,
         with identifiers: [String],
         index: Int,
+        generation: UInt64,
         completion: @escaping (NSImage?) -> Void
     ) {
+        guard isCurrentDrop(generation) else {
+            completion(nil)
+            return
+        }
         guard index < identifiers.count else {
             completion(nil)
             return
@@ -1351,22 +1334,30 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         NSLog("Attempting to loadDataRepresentation for type: \(typeId)")
 
         provider.loadDataRepresentation(forTypeIdentifier: typeId) { [weak self] data, error in
-            guard let self = self else {
+            guard let self else {
                 completion(nil)
                 return
             }
-            if let error = error {
+            guard self.isCurrentDrop(generation) else {
+                completion(nil)
+                return
+            }
+            if let error {
                 NSLog("Failed loadDataRepresentation for \(typeId): \(error.localizedDescription)")
             }
-            if let data = data, let image = NSImage(data: data) {
+            if let data, let image = NSImage(data: data) {
                 NSLog("Successfully loaded NSImage from type: \(typeId)")
                 completion(image)
             } else {
-                self.tryLoadImageFileRepresentation(from: provider, typeIdentifier: typeId) { image in
-                    if let image = image {
+                self.tryLoadImageFileRepresentation(from: provider, typeIdentifier: typeId, generation: generation) { image in
+                    guard self.isCurrentDrop(generation) else {
+                        completion(nil)
+                        return
+                    }
+                    if let image {
                         completion(image)
                     } else {
-                        self.tryLoadImageData(from: provider, with: identifiers, index: index + 1, completion: completion)
+                        self.tryLoadImageData(from: provider, with: identifiers, index: index + 1, generation: generation, completion: completion)
                     }
                 }
             }
@@ -1376,15 +1367,28 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     private func tryLoadImageFileRepresentation(
         from provider: NSItemProvider,
         typeIdentifier: String,
+        generation: UInt64,
         completion: @escaping (NSImage?) -> Void
     ) {
+        guard isCurrentDrop(generation) else {
+            completion(nil)
+            return
+        }
         NSLog("Attempting to loadFileRepresentation for type: \(typeIdentifier)")
         provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, error in
-            if let error = error {
+            guard let self else {
+                completion(nil)
+                return
+            }
+            guard self.isCurrentDrop(generation) else {
+                completion(nil)
+                return
+            }
+            if let error {
                 NSLog("Failed loadFileRepresentation for \(typeIdentifier): \(error.localizedDescription)")
             }
 
-            guard let self = self, let url = url else {
+            guard let url else {
                 completion(nil)
                 return
             }
@@ -1396,41 +1400,57 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 }
                 completion(image)
             } else {
-                self.loadDownloadedImage(from: url, completion: completion)
+                self.loadDownloadedImage(from: url, generation: generation, completion: completion)
             }
         }
     }
 
-    private func handleDropFallback(provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
+    private func handleDropFallback(provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         NSLog("handleDropFallback started")
         if provider.canLoadObject(ofClass: URL.self) {
             _ = provider.loadObject(ofClass: URL.self) { [weak self] url, error in
-                if let error = error {
-                    NSLog("Failed to loadObject URL: \(error.localizedDescription)")
-                }
-                guard let self = self else {
+                guard let self else {
                     completion(false)
                     return
                 }
-                if let fileURL = url {
-                    NSLog("Loaded URL: \(fileURL.absoluteString) (isFileURL: \(fileURL.isFileURL))")
-                    self.openDroppedURL(fileURL, completion: completion)
+                guard self.isCurrentDrop(generation) else {
+                    completion(false)
                     return
                 }
-                self.loadAsItemRepresentation(provider: provider, completion: completion)
+                if let error {
+                    NSLog("Failed to loadObject URL: \(error.localizedDescription)")
+                }
+                if let fileURL = url {
+                    NSLog("Loaded URL: \(fileURL.absoluteString) (isFileURL: \(fileURL.isFileURL))")
+                    self.openDroppedURL(fileURL, generation: generation, completion: completion)
+                    return
+                }
+                self.loadAsItemRepresentation(provider: provider, generation: generation, completion: completion)
             }
         } else {
             NSLog("Provider cannot load URL, trying loadItem fallback")
-            self.loadAsItemRepresentation(provider: provider, completion: completion)
+            self.loadAsItemRepresentation(provider: provider, generation: generation, completion: completion)
         }
     }
 
-    private func loadAsItemRepresentation(provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
+    private func loadAsItemRepresentation(provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         let identifiers = fallbackTypeIdentifiers(for: provider)
         NSLog("Attempting loadItem fallback for identifiers: \(identifiers)")
 
-        tryLoadDroppedItem(from: provider, with: identifiers, index: 0) { [weak self] item in
-            guard let self = self else {
+        tryLoadDroppedItem(from: provider, with: identifiers, index: 0, generation: generation) { [weak self] item in
+            guard let self else {
+                completion(false)
+                return
+            }
+            guard self.isCurrentDrop(generation) else {
                 completion(false)
                 return
             }
@@ -1438,14 +1458,18 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             switch item {
             case let .image(image, originalName):
                 DispatchQueue.main.async {
+                    guard self.isCurrentDrop(generation) else {
+                        completion(false)
+                        return
+                    }
                     self.openImage(image: image, originalName: originalName)
                     completion(true)
                 }
             case let .url(url):
-                self.openDroppedURL(url, completion: completion)
+                self.openDroppedURL(url, generation: generation, completion: completion)
             case nil:
                 NSLog("loadItem fallback failed, trying loadAsImage fallback")
-                self.loadAsImage(provider: provider, completion: completion)
+                self.loadAsImage(provider: provider, generation: generation, completion: completion)
             }
         }
     }
@@ -1466,8 +1490,13 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         from provider: NSItemProvider,
         with identifiers: [String],
         index: Int,
+        generation: UInt64,
         completion: @escaping (DroppedItem?) -> Void
     ) {
+        guard isCurrentDrop(generation) else {
+            completion(nil)
+            return
+        }
         guard index < identifiers.count else {
             completion(nil)
             return
@@ -1476,19 +1505,23 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         let typeIdentifier = identifiers[index]
         NSLog("Attempting loadItem for type: \(typeIdentifier)")
         provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { [weak self] item, error in
-            guard let self = self else {
+            guard let self else {
+                completion(nil)
+                return
+            }
+            guard self.isCurrentDrop(generation) else {
                 completion(nil)
                 return
             }
 
-            if let error = error {
+            if let error {
                 NSLog("Failed loadItem for \(typeIdentifier): \(error.localizedDescription)")
             }
 
             if let droppedItem = self.droppedItem(from: item, typeIdentifier: typeIdentifier, suggestedName: provider.suggestedName) {
                 completion(droppedItem)
             } else {
-                self.tryLoadDroppedItem(from: provider, with: identifiers, index: index + 1, completion: completion)
+                self.tryLoadDroppedItem(from: provider, with: identifiers, index: index + 1, generation: generation, completion: completion)
             }
         }
     }
@@ -1569,32 +1602,87 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         return scheme == "http" || scheme == "https"
     }
 
-    private func openDroppedURL(_ url: URL, completion: @escaping (Bool) -> Void) {
+    private func openDroppedURL(_ url: URL, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         if url.isFileURL {
-            if canOpenFile(url: url) {
+            // 拖拽文件可能为安全范围 URL，需临时获取访问授权；临时拷贝路径则无需授权亦可读取
+            let canOpen: Bool = {
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                return canOpenFile(url: url)
+            }()
+            if canOpen {
                 DispatchQueue.main.async {
+                    guard self.isCurrentDrop(generation) else {
+                        completion(false)
+                        return
+                    }
+                    let accessed = url.startAccessingSecurityScopedResource()
                     self.openFile(url: url)
+                    if accessed { url.stopAccessingSecurityScopedResource() }
                     completion(true)
                 }
             } else {
                 completion(false)
             }
         } else {
-            downloadImage(from: url, completion: completion)
+            // 远程 URL：优先尝试作为图片下载，失败则回退为网页打开，避免“拖进去没反应”
+            downloadImage(from: url, generation: generation, isHTMLFallbackAllowed: true) { [weak self] success in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                guard self.isCurrentDrop(generation) else {
+                    completion(false)
+                    return
+                }
+                if success {
+                    completion(true)
+                } else {
+                    DispatchQueue.main.async {
+                        guard self.isCurrentDrop(generation) else {
+                            completion(false)
+                            return
+                        }
+                        NSLog("Remote URL not decoded as image, opening as web: \(url.absoluteString)")
+                        self.openWeb(url: url)
+                        completion(true)
+                    }
+                }
+            }
         }
     }
 
-    private func loadAsImage(provider: NSItemProvider, completion: @escaping (Bool) -> Void) {
+    private func loadAsImage(provider: NSItemProvider, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         if provider.canLoadObject(ofClass: NSImage.self) {
             _ = provider.loadObject(ofClass: NSImage.self) { [weak self] image, error in
-                if let error = error {
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                guard self.isCurrentDrop(generation) else {
+                    completion(false)
+                    return
+                }
+                if let error {
                     NSLog("Failed to loadObject NSImage: \(error.localizedDescription)")
                 }
-                guard let self = self, let nsImage = image as? NSImage else {
+                guard let nsImage = image as? NSImage else {
                     completion(false)
                     return
                 }
                 DispatchQueue.main.async {
+                    guard self.isCurrentDrop(generation) else {
+                        completion(false)
+                        return
+                    }
                     self.openImage(image: nsImage)
                     completion(true)
                 }
@@ -1604,16 +1692,28 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
     }
 
-    private func downloadImage(from url: URL, isHTMLFallbackAllowed: Bool = true, completion: @escaping (Bool) -> Void) {
+    private func downloadImage(from url: URL, generation: UInt64, isHTMLFallbackAllowed: Bool = true, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         NSLog("downloadImage started for \(url.absoluteString)")
-        loadDownloadedImage(from: url) { [weak self] image in
-            guard let self = self else {
+        loadDownloadedImage(from: url, generation: generation) { [weak self] image in
+            guard let self else {
+                completion(false)
+                return
+            }
+            guard self.isCurrentDrop(generation) else {
                 completion(false)
                 return
             }
 
-            if let image = image {
+            if let image {
                 DispatchQueue.main.async {
+                    guard self.isCurrentDrop(generation) else {
+                        completion(false)
+                        return
+                    }
                     self.openImage(image: image, originalName: url.lastPathComponent)
                     completion(true)
                 }
@@ -1621,7 +1721,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             }
 
             if isHTMLFallbackAllowed {
-                self.downloadHTMLImageFallback(from: url, completion: completion)
+                self.downloadHTMLImageFallback(from: url, generation: generation, completion: completion)
             } else {
                 NSLog("Failed to decode downloaded image data from \(url.absoluteString)")
                 completion(false)
@@ -1629,18 +1729,26 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
     }
 
-    private func loadDownloadedImage(from url: URL, completion: @escaping (NSImage?) -> Void) {
+    private func loadDownloadedImage(from url: URL, generation: UInt64, completion: @escaping (NSImage?) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(nil)
+            return
+        }
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
 
-        let task = URLSession.shared.dataTask(with: request) { data, _, error in
-            if let error = error {
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            guard let self, self.isCurrentDrop(generation) else {
+                completion(nil)
+                return
+            }
+            if let error {
                 NSLog("Failed to download image from \(url.absoluteString): \(error.localizedDescription)")
                 completion(nil)
                 return
             }
 
-            guard let data = data else {
+            guard let data else {
                 NSLog("No data returned from \(url.absoluteString)")
                 completion(nil)
                 return
@@ -1657,19 +1765,26 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         task.resume()
     }
 
-    private func downloadHTMLImageFallback(from url: URL, completion: @escaping (Bool) -> Void) {
+    private func downloadHTMLImageFallback(from url: URL, generation: UInt64, completion: @escaping (Bool) -> Void) {
+        guard isCurrentDrop(generation) else {
+            completion(false)
+            return
+        }
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
 
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            if let error = error {
+            guard let self, self.isCurrentDrop(generation) else {
+                completion(false)
+                return
+            }
+            if let error {
                 NSLog("Failed to download HTML fallback from \(url.absoluteString): \(error.localizedDescription)")
                 completion(false)
                 return
             }
 
-            guard let self = self,
-                  let data = data,
+            guard let data,
                   let htmlString = String(data: data, encoding: .utf8),
                   htmlString.range(of: "<html", options: .caseInsensitive) != nil else {
                 completion(false)
@@ -1679,7 +1794,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             NSLog("Downloaded content is HTML. Attempting to extract og:image or twitter:image.")
             if let extractedURL = self.extractImageURL(from: htmlString) {
                 NSLog("Extracted image URL: \(extractedURL.absoluteString). Retrying download.")
-                self.downloadImage(from: extractedURL, isHTMLFallbackAllowed: false, completion: completion)
+                self.downloadImage(from: extractedURL, generation: generation, isHTMLFallbackAllowed: false, completion: completion)
             } else {
                 NSLog("Failed to extract any cover image URL from HTML.")
                 completion(false)
