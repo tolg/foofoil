@@ -1812,6 +1812,22 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
     private var renderTask: Task<Void, Never>?
 
+    // 根据当前系统外观判断是否为暗色模式，需在主线程调用
+    private static func isDarkMode() -> Bool {
+        guard Thread.isMainThread else { return false }
+        let appearance = NSApp.effectiveAppearance
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return true
+        }
+        // 兼容自定义外观名称
+        return appearance.name.rawValue.lowercased().contains("dark")
+    }
+
+    /// 供视图层在系统明暗外观切换时主动触发重新渲染
+    func refreshMarkdownRendering() {
+        updateRenderedMarkdown()
+    }
+
     private func updateRenderedMarkdown() {
         // 性能防御：如果当前不是预览模式或者不是 Markdown 文档，直接跳过 markdown 解析，保证打字零开销！
         guard isMarkdownPreview && isMarkdownDocument else { return }
@@ -1820,12 +1836,25 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
         let textToRender = self.text
         let fontSize = self.textFontSize
+        // 在主线程捕获当前外观，避免后台任务无法正确获取有效外观
+        let isDark = Self.isDarkMode()
 
         renderTask = Task.detached(priority: .userInitiated) {
             if Task.isCancelled { return }
 
             let htmlBody = Self.cmarkToHTML(textToRender)
             if Task.isCancelled { return }
+
+            // 根据当前明暗外观显式生成对应配色的 CSS，避免依赖 @media 查询导致 NSAttributedString 在后台解析时颜色固化
+            let textColor = isDark ? "#ffffff" : "#000000"
+            let borderColor = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"
+            let codeBg = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.06)"
+            let preBg = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.04)"
+            let blockquoteColor = isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.6)"
+            let blockquoteBorder = isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.2)"
+            let tableBorder = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)"
+            let thBg = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"
+            let trEvenBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)"
 
             // 构建包含 CSS 的完整 HTML，支持自适应系统明暗主题与字号大小缩放
             let htmlContent = """
@@ -1836,7 +1865,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
                 font-size: \(fontSize)px;
                 line-height: 1.8;
-                color: #000000;
+                color: \(textColor);
                 background-color: transparent;
             }
             body {
@@ -1853,15 +1882,15 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 margin-bottom: 16px;
                 line-height: 1.25;
             }
-            h1 { font-size: 1.6em; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 0.3em; }
-            h2 { font-size: 1.4em; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 0.3em; }
+            h1 { font-size: 1.6em; border-bottom: 1px solid \(borderColor); padding-bottom: 0.3em; }
+            h2 { font-size: 1.4em; border-bottom: 1px solid \(borderColor); padding-bottom: 0.3em; }
             h3 { font-size: 1.25em; }
             h4 { font-size: 1.15em; }
             code {
                 padding: 0.2em 0.4em;
                 margin: 0;
                 font-size: 85%;
-                background-color: rgba(0,0,0,0.06);
+                background-color: \(codeBg);
                 border-radius: 6px;
                 font-family: Menlo, Consolas, monospace;
             }
@@ -1870,7 +1899,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 overflow: auto;
                 font-size: 85%;
                 line-height: 1.45;
-                background-color: rgba(0,0,0,0.04);
+                background-color: \(preBg);
                 border-radius: 6px;
             }
             pre code {
@@ -1880,8 +1909,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             }
             blockquote {
                 padding: 0 1em;
-                color: rgba(0,0,0,0.6);
-                border-left: 0.25em solid rgba(0,0,0,0.2);
+                color: \(blockquoteColor);
+                border-left: 0.25em solid \(blockquoteBorder);
                 margin: 0 0 16px 0;
             }
             ul, ol {
@@ -1897,45 +1926,18 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 line-height: 1.5;
             }
             th, td {
-                border: 1px solid rgba(0,0,0,0.12);
+                border: 1px solid \(tableBorder);
                 padding: 6px 10px;
                 text-align: left;
                 vertical-align: top;
                 word-break: break-word;
             }
             th {
-                background-color: rgba(0,0,0,0.04);
+                background-color: \(thBg);
                 font-weight: 600;
             }
             tr:nth-child(even) td {
-                background-color: rgba(0,0,0,0.02);
-            }
-            @media (prefers-color-scheme: dark) {
-                body {
-                    color: #ffffff;
-                }
-                h1, h2 {
-                    border-bottom-color: rgba(255,255,255,0.15);
-                }
-                code {
-                    background-color: rgba(255,255,255,0.15);
-                }
-                pre {
-                    background-color: rgba(255,255,255,0.1);
-                }
-                blockquote {
-                    color: rgba(255,255,255,0.6);
-                    border-left-color: rgba(255,255,255,0.25);
-                }
-                th, td {
-                    border-color: rgba(255,255,255,0.15);
-                }
-                th {
-                    background-color: rgba(255,255,255,0.08);
-                }
-                tr:nth-child(even) td {
-                    background-color: rgba(255,255,255,0.04);
-                }
+                background-color: \(trEvenBg);
             }
             </style>
             </head>

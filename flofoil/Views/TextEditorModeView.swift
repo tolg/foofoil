@@ -15,6 +15,7 @@ struct TextEditorModeView: View {
     @State private var showRenameAlert = false
     @State private var newTitleText = ""
     @State private var targetRenameConfig: WindowConfig? = nil
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         GeometryReader { geometry in
@@ -178,6 +179,12 @@ struct TextEditorModeView: View {
             }
         } message: {
             Text("")
+        }
+        // 暗色/亮色切换时重新生成 markdown 富文本，使颜色跟随系统外观
+        .onChange(of: colorScheme) { _, _ in
+            if appState.isMarkdownPreview && appState.isMarkdownDocument {
+                appState.refreshMarkdownRendering()
+            }
         }
     }
 }
