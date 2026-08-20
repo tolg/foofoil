@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import AppKit
+import AVFoundation
 import UniformTypeIdentifiers
 import ImageIO
 import SwiftUI
@@ -52,6 +53,43 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         return name.hasSuffix(".pdf")
     }
 
+    /// 当前内容是否为视频文档（复用图片内容通道，但不经缓存）。
+    public var isVideoDocument: Bool {
+        guard let name = originalImageName else { return false }
+        return Self.isVideoFileName(name)
+    }
+
+    /// 按扩展名判断是否属于视频类型；仅作快速预筛，实际能否播放需在打开时验证。
+    public static func isVideoFileName(_ name: String) -> Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .movie)
+    }
+
+    public static func isVideoFile(url: URL) -> Bool {
+        isVideoFileName(url.lastPathComponent)
+    }
+
+    /// 为视频原始文件创建安全范围书签，用于跨进程生命周期保留沙盒访问授权。
+    public static func makeSecurityScopedBookmark(for url: URL) -> Data? {
+        try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+    }
+
+    /// 解析视频安全范围书签并校验文件仍存在；返回解析后的 URL（文件移动后可解析到新路径）。
+    /// 仅在内部临时持有访问授权完成存在性检查，不会长期占用授权。
+    public static func resolveVideoBookmark(_ bookmark: Data) -> URL? {
+        var isStale = false
+        guard let url = try? URL(
+            resolvingBookmarkData: bookmark,
+            options: .withSecurityScope,
+            bookmarkDataIsStale: &isStale
+        ) else { return nil }
+        // 重启后尚未持有授权，fileExists 需在安全范围内检查才准确
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     @Published public var originalImageName: String? {
         didSet {
             saveState()
@@ -63,15 +101,21 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     @Published public var imageURL: URL? {
         didSet {
             if let url = imageURL {
-                let cacheDir = getCachedImageURL()?.deletingLastPathComponent()
-                let isAlreadyCached = cacheDir.map { url.path.hasPrefix($0.path) } ?? false
-                if !isAlreadyCached {
-                    if let cachedURL = cacheImage(from: url) {
-                        imageURL = cachedURL
+                // 视频不复制到应用缓存目录，仅记录原始文件路径。
+                if !Self.isVideoFile(url: url) {
+                    // 切到非视频内容时释放旧视频的安全范围访问授权
+                    stopVideoAccess()
+                    let cacheDir = getCachedImageURL()?.deletingLastPathComponent()
+                    let isAlreadyCached = cacheDir.map { url.path.hasPrefix($0.path) } ?? false
+                    if !isAlreadyCached {
+                        if let cachedURL = cacheImage(from: url) {
+                            imageURL = cachedURL
+                        }
                     }
                 }
                 saveState()
             } else {
+                stopVideoAccess()
                 saveState()
                 clearCachedImages()
             }
@@ -200,6 +244,18 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             }
         }
     }
+
+    /// 视频循环播放开关；仅视频模式生效，默认开启。
+    @Published public var isVideoLooping: Bool {
+        didSet {
+            saveState()
+        }
+    }
+
+    /// 视频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问。
+    public var videoBookmarkData: Data?
+    /// 当前已通过书签持有访问授权的视频 URL，切换内容或销毁时需停止访问。
+    private var accessingVideoURL: URL?
 
     private enum DroppedItem {
         case image(NSImage, originalName: String?)
@@ -513,10 +569,21 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.createdAt = config.createdAt
         self.svgColor = config.svgColor
         self.backgroundColorHex = config.backgroundColorHex
+        self.isVideoLooping = config.isVideoLooping
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
-            if FileManager.default.fileExists(atPath: url.path) {
+            // 视频经安全范围书签恢复沙盒访问（重启后路径直接不可达）
+            if Self.isVideoFileName(config.originalImageName ?? path) {
+                if let restored = Self.restoreVideoAccess(config: config, fallbackURL: url) {
+                    self.accessingVideoURL = restored.accessedURL
+                    self.videoBookmarkData = restored.bookmark
+                    self.imageURL = restored.url
+                } else {
+                    self.videoBookmarkData = nil
+                    self.imageURL = nil
+                }
+            } else if FileManager.default.fileExists(atPath: url.path) {
                 self.imageURL = url
             } else if let resolvedURL = Self.findCachedImageInDirectory(for: config.id) {
                 self.imageURL = resolvedURL
@@ -543,11 +610,14 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             self.actualWebURL = nil
         }
         super.init()
-        // 在调用 saveState 时避免触发死循环
+        // 在调用 saveState 时避免触发死循环；视频经书签恢复后可能重建了书签，也需要落盘
         if let path = config.imagePath, !FileManager.default.fileExists(atPath: path) {
             if Self.findCachedImageInDirectory(for: config.id) != nil || Self.findLegacyCachedImageInDirectory() != nil {
                 saveState()
             }
+        }
+        if Self.isVideoFileName(config.originalImageName ?? ""), videoBookmarkData != config.videoBookmark {
+            saveState()
         }
         updateRenderedMarkdown()
     }
@@ -573,6 +643,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.createdAt = Date()
         self.svgColor = nil
         self.backgroundColorHex = nil
+        self.isVideoLooping = true
         super.init()
         updateRenderedMarkdown()
     }
@@ -610,6 +681,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.createdAt = config.createdAt
         self.svgColor = config.svgColor
         self.backgroundColorHex = config.backgroundColorHex
+        self.isVideoLooping = config.isVideoLooping
 
         // 载入历史记录时，一律尝试通知窗口控制器恢复当初保存的窗口位置与尺寸
         if let frameString = config.windowFrame {
@@ -622,7 +694,19 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
-            if FileManager.default.fileExists(atPath: url.path) {
+            // 视频经安全范围书签恢复沙盒访问（重启后路径直接不可达）
+            if Self.isVideoFileName(config.originalImageName ?? path) {
+                // 加载新配置前先释放旧的视频授权
+                stopVideoAccess()
+                if let restored = Self.restoreVideoAccess(config: config, fallbackURL: url) {
+                    self.accessingVideoURL = restored.accessedURL
+                    self.videoBookmarkData = restored.bookmark
+                    self.imageURL = restored.url
+                } else {
+                    self.videoBookmarkData = nil
+                    self.imageURL = nil
+                }
+            } else if FileManager.default.fileExists(atPath: url.path) {
                 self.imageURL = url
             } else {
                 self.imageURL = nil
@@ -691,7 +775,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 textPath: textURL?.path
             )),
             sourceFingerprint: sourceFingerprint,
-            webZoom: webZoom
+            webZoom: webZoom,
+            isVideoLooping: isVideoLooping,
+            videoBookmark: videoBookmarkData
         )
     }
 
@@ -715,6 +801,74 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             self.imageURL = cachedURL
         } else {
             self.imageURL = url
+        }
+    }
+
+    /// 打开本地视频；与图片不同，视频不复制到缓存目录，仅记录原始路径。
+    public func openVideo(url: URL) {
+        isBatchUpdating = true
+        defer {
+            isBatchUpdating = false
+            saveState()
+        }
+        if imageURL != nil || webURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            self.id = UUID()
+        }
+        stopVideoAccess()
+        self.originalImageName = url.lastPathComponent
+        self.sourceFingerprint = Self.localSourceFingerprint(for: url)
+        self.imageSource = nil
+        self.showBorder = false
+        self.imageScale = 1.0
+        // 新打开的视频恢复默认的循环播放
+        self.isVideoLooping = true
+        self.createdAt = Date()
+        self.webURL = nil
+        self.actualWebURL = nil
+        // 创建安全范围书签，保证 app 重启后仍能访问原始文件
+        self.videoBookmarkData = Self.makeSecurityScopedBookmark(for: url)
+        self.imageURL = url
+    }
+
+    /// 停止当前视频文件的安全范围访问授权。
+    private func stopVideoAccess() {
+        accessingVideoURL?.stopAccessingSecurityScopedResource()
+        accessingVideoURL = nil
+    }
+
+    /// 从历史配置恢复视频文件的沙盒访问：优先解析安全范围书签重新授权；
+    /// 书签缺失或失效时，进程内仍有授权（如拖入后未重启）则直接使用原始路径。
+    /// 返回 (播放 URL, 应持久化的书签, 已持有授权的 URL)；无法访问时返回 nil。
+    private static func restoreVideoAccess(config: WindowConfig, fallbackURL: URL) -> (url: URL, bookmark: Data?, accessedURL: URL?)? {
+        if let bookmark = config.videoBookmark {
+            var isStale = false
+            if let url = try? URL(
+                resolvingBookmarkData: bookmark,
+                options: .withSecurityScope,
+                bookmarkDataIsStale: &isStale
+            ) {
+                let accessed = url.startAccessingSecurityScopedResource()
+                if FileManager.default.fileExists(atPath: url.path) {
+                    // 书签过期（如文件被移动）时按解析出的新位置重建并持久化
+                    let newBookmark = isStale ? Self.makeSecurityScopedBookmark(for: url) : bookmark
+                    return (url, newBookmark, accessed ? url : nil)
+                }
+                if accessed {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+        }
+        guard FileManager.default.fileExists(atPath: fallbackURL.path) else { return nil }
+        return (fallbackURL, Self.makeSecurityScopedBookmark(for: fallbackURL), nil)
+    }
+
+    /// UTType 对视频的声明较宽（MKV/AVI 等也归为 movie），需再确认 macOS 原生可播放后才打开。
+    private func openVideoIfPlayable(url: URL) {
+        let asset = AVURLAsset(url: url)
+        Task { @MainActor [weak self] in
+            let isPlayable = (try? await asset.load(.isPlayable)) ?? false
+            guard isPlayable, let self else { return }
+            self.openVideo(url: url)
         }
     }
 
@@ -849,6 +1003,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         if ["html", "htm", "webarchive", "xhtml"].contains(ext) || isTextFile(url: url) {
             return true
         }
+        if Self.isVideoFile(url: url) {
+            return true
+        }
         return NSImage(contentsOf: url) != nil
     }
 
@@ -860,6 +1017,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             openWeb(url: url)
         } else if isTextFile(url: url) {
             openTextFile(url: url)
+        } else if Self.isVideoFile(url: url) {
+            openVideoIfPlayable(url: url)
         } else {
             openImage(url: url)
         }
@@ -1603,6 +1762,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.id = UUID()
         self.createdAt = Date()
         self.svgColor = nil
+        self.isVideoLooping = true
+        self.videoBookmarkData = nil
         isBatchUpdating = false
 
         NotificationCenter.default.post(
@@ -1646,6 +1807,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     deinit {
         renderTask?.cancel()
         saveTask?.cancel()
+        stopVideoAccess()
     }
 
     private var renderTask: Task<Void, Never>?
@@ -2261,4 +2423,5 @@ extension Notification.Name {
     public static let shouldFitPDFToWindow = Notification.Name("shouldFitPDFToWindow")
     public static let shouldMatchPDFWindowAspectRatio = Notification.Name("shouldMatchPDFWindowAspectRatio")
     public static let shouldApplyPDFScaleToWindow = Notification.Name("shouldApplyPDFScaleToWindow")
+    public static let shouldToggleVideoPlayback = Notification.Name("shouldToggleVideoPlayback")
 }

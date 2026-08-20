@@ -40,6 +40,10 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     /// 预先生成并单独存储的 HEIC 缩略图路径，仅用作历史列表展示，不作为窗口内容来源。
     public var thumbnailPath: String?
     public var webZoom: Double
+    /// 视频是否循环播放；仅视频模式生效，默认开启。
+    public var isVideoLooping: Bool
+    /// 视频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问权限。
+    public var videoBookmark: Data?
 
 
     public init(
@@ -65,7 +69,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         sourceFingerprint: String? = nil,
         storedDisplayTitle: String? = nil,
         thumbnailPath: String? = nil,
-        webZoom: Double = 1.0
+        webZoom: Double = 1.0,
+        isVideoLooping: Bool = true,
+        videoBookmark: Data? = nil
     ) {
         self.id = id
         self.imagePath = imagePath
@@ -90,10 +96,12 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         self.storedDisplayTitle = storedDisplayTitle
         self.thumbnailPath = thumbnailPath
         self.webZoom = webZoom
+        self.isVideoLooping = isVideoLooping
+        self.videoBookmark = videoBookmark
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom
+        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark
     }
 
     public init(from decoder: Decoder) throws {
@@ -121,6 +129,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         storedDisplayTitle = try container.decodeIfPresent(String.self, forKey: .storedDisplayTitle)
         thumbnailPath = try container.decodeIfPresent(String.self, forKey: .thumbnailPath)
         webZoom = try container.decodeIfPresent(Double.self, forKey: .webZoom) ?? 1.0
+        // 旧数据没有循环播放字段；解码时默认开启。
+        isVideoLooping = try container.decodeIfPresent(Bool.self, forKey: .isVideoLooping) ?? true
+        videoBookmark = try container.decodeIfPresent(Data.self, forKey: .videoBookmark)
     }
 
     public var historyMenuSymbolName: String {
@@ -183,6 +194,7 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         switch historyMenuSymbolName {
         case "globe": emoji = "🌐"
         case "photo", "text.document": emoji = "🏞️"
+        case "play.rectangle": emoji = "🎬"
         case "tablecells": emoji = "▦"
         case "arrow.down.document": emoji = "Ⓜ️"
         default: emoji = "📝"

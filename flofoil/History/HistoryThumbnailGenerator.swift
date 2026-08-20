@@ -7,6 +7,7 @@
 
 import Foundation
 import AppKit
+import AVFoundation
 import PDFKit
 import ImageIO
 
@@ -49,6 +50,23 @@ public enum HistoryThumbnailGenerator {
                let source = CGImageSourceCreateWithData(tiffData as CFData, nil),
                let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
                 // 裁剪为正方形并缩放到 128x128 像素
+                finalImage = cropAndResize(cgImage, to: 128)
+            }
+
+        case .video:
+            // 视频引用原始文件且不做 OCR；取首帧画面作为缩略图
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 512, height: 512)
+            // 当前调用位于后台索引队列，可用信号量同步等待异步取帧结果
+            let semaphore = DispatchSemaphore(value: 0)
+            var generatedImage: CGImage?
+            generator.generateCGImageAsynchronously(for: .zero) { cgImage, _, _ in
+                generatedImage = cgImage
+                semaphore.signal()
+            }
+            semaphore.wait()
+            if let cgImage = generatedImage {
                 finalImage = cropAndResize(cgImage, to: 128)
             }
 

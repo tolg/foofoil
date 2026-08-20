@@ -91,6 +91,21 @@ public class FloatingWindow: NSWindow {
             }
         }
 
+        // 视频模式使用窗口级空格键切换播放/暂停；忽略按住空格产生的重复事件。
+        if event.type == .keyDown,
+           modifiers.isEmpty,
+           event.keyCode == 49,
+           !event.isARepeat,
+           let controller = self.windowController as? FloatingWindowController,
+           controller.appState.isVideoDocument {
+            NotificationCenter.default.post(
+                name: .shouldToggleVideoPlayback,
+                object: nil,
+                userInfo: ["id": controller.appState.id]
+            )
+            return
+        }
+
         // 无边框 PDF 的缩放只调整窗口；手势结束后再由 PDFKit 适配新的窗口尺寸。
         if let controller = self.windowController as? FloatingWindowController,
            controller.appState.isPDFDocument,
@@ -127,13 +142,13 @@ public class FloatingWindow: NSWindow {
                 let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 0.003 : 0.03
                 let factor = 1.0 + delta * multiplier
 
-                if appState.imageURL != nil && appState.webURL == nil {
+                if appState.imageURL != nil && appState.webURL == nil && !(appState.isVideoDocument && appState.showBorder) {
                     // 有边框 PDF 保留 PDFViewer 的原生缩放与滚动响应。
                     if appState.isPDFDocument && appState.showBorder {
                         super.sendEvent(event)
                         return
                     }
-                    // 图片模式：缩放内容大小
+                    // 图片/无边框视频模式：缩放内容大小
                     let newScale = appState.imageScale * Double(factor)
                     appState.imageScale = AppState.clampImageScale(newScale)
 
@@ -146,7 +161,7 @@ public class FloatingWindow: NSWindow {
                     }
                     appState.saveState()
                 } else {
-                    // 非图片模式（网页、文本、Markdown）：缩放窗口
+                    // 非图片模式（网页、文本、Markdown、有边框视频）：缩放窗口
                     let currentSize = self.frame.size
                     let targetSize = NSSize(
                         width: currentSize.width * factor,
@@ -159,10 +174,10 @@ public class FloatingWindow: NSWindow {
             return
         }
 
-        // 处理手势捏合（仅非图片模式拦截）
+        // 处理手势捏合（仅非图片模式拦截；视频画面随窗口自适应，因此按窗口缩放处理）
         if event.type == .magnify {
             if let controller = self.windowController as? FloatingWindowController,
-               (controller.appState.imageURL == nil || controller.appState.webURL != nil) {
+               (controller.appState.imageURL == nil || controller.appState.isVideoDocument || controller.appState.webURL != nil) {
 
                 let phase = event.phase
                 if phase.contains(.began) {
@@ -207,7 +222,7 @@ public class FloatingWindow: NSWindow {
             } else {
                 pdfView.copyCurrentPageToPasteboard()
             }
-        } else {
+        } else if !controller.appState.isVideoDocument {
             controller.appState.copyCurrentImageToPasteboard()
         }
     }
@@ -215,7 +230,7 @@ public class FloatingWindow: NSWindow {
     public override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(FloatingWindow.copy(_:)) {
             guard let controller = windowController as? FloatingWindowController else { return false }
-            return controller.appState.imageURL != nil && controller.appState.webURL == nil
+            return controller.appState.imageURL != nil && controller.appState.webURL == nil && !controller.appState.isVideoDocument
         }
         return super.validateMenuItem(menuItem)
     }

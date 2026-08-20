@@ -63,6 +63,9 @@ public struct ContentView: View {
                     }, shouldHideBorder: shouldHideBorder)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.opacity)
+                } else if let videoURL = appState.imageURL, appState.isVideoDocument {
+                    VideoModeView(appState: appState, url: videoURL, shouldHideBorder: shouldHideBorder)
+                        .transition(.opacity)
                 } else if let pdfURL = appState.imageURL, appState.isPDFDocument {
                     PDFModeView(appState: appState, url: pdfURL)
                         .transition(.opacity)
@@ -153,11 +156,11 @@ public struct ContentView: View {
                 }
             }
         }
-        // 图片模式继续由 ImageModeView 自己处理捏合缩放；其余模式仅缩放窗口，不改变内容字号或网页倍率。
+        // 图片模式继续由 ImageModeView 自己处理捏合缩放；视频及其余模式仅缩放窗口，不改变内容字号或网页倍率。
         .simultaneousGesture(
             MagnificationGesture()
                 .onChanged { value in
-                    guard appState.imageURL == nil || appState.webURL != nil else { return }
+                    guard appState.imageURL == nil || appState.isVideoDocument || appState.webURL != nil else { return }
 
                     if !isResizingWindowWithPinch {
                         isResizingWindowWithPinch = true
@@ -169,7 +172,7 @@ public struct ContentView: View {
                     )
                 }
                 .onEnded { _ in
-                    guard (appState.imageURL == nil || appState.webURL != nil), isResizingWindowWithPinch else { return }
+                    guard (appState.imageURL == nil || appState.isVideoDocument || appState.webURL != nil), isResizingWindowWithPinch else { return }
 
                     NotificationCenter.default.post(
                         name: .shouldEndWindowPinchResize,
@@ -193,12 +196,15 @@ public struct ContentView: View {
             }
 
             if appState.imageURL != nil, appState.webURL == nil {
-                Button(action: {
-                    appState.copyCurrentImageToPasteboard()
-                }) {
-                    Label(NSLocalizedString("Copy Image", comment: ""), systemImage: "photo.on.rectangle")
+                // 视频没有“拷贝图片”能力
+                if !appState.isVideoDocument {
+                    Button(action: {
+                        appState.copyCurrentImageToPasteboard()
+                    }) {
+                        Label(NSLocalizedString("Copy Image", comment: ""), systemImage: "photo.on.rectangle")
+                    }
+                    .keyboardShortcut("c", modifiers: [.command])
                 }
-                .keyboardShortcut("c", modifiers: [.command])
 
                 if appState.isSVG {
                     Button(action: {

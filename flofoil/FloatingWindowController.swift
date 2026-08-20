@@ -8,6 +8,7 @@
 import Cocoa
 import SwiftUI
 import Combine
+import AVFoundation
 
 public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
@@ -17,6 +18,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private var isLiveResizing = false
     private var pendingFrameSave: DispatchWorkItem?
     private var currentImageSize: NSSize? // 缓存当前加载的图片原始尺寸
+    private var currentVideoSize: NSSize? // 缓存当前加载的视频原始尺寸（含旋转信息）
     private let borderedImageInset: CGFloat = 24
     private let zoomStep: Double = 1.1
     private let initialImageScreenLimit: CGFloat = 0.8
@@ -56,9 +58,16 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: contentView)
         window.contentView = hostingView
 
-        // 预先缓存可能已有的图片原始尺寸
-        if let url = appState.imageURL, let nsImage = appState.loadImage(from: url) {
-            self.currentImageSize = nsImage.size
+        // 预先缓存可能已有的图片/视频原始尺寸
+        if let url = appState.imageURL {
+            if appState.isVideoDocument {
+                fetchVideoNaturalSize(for: url) { [weak self] size in
+                    guard let self, self.appState.imageURL == url else { return }
+                    self.currentVideoSize = size
+                }
+            } else if let nsImage = appState.loadImage(from: url) {
+                self.currentImageSize = nsImage.size
+            }
         }
 
         // 绑定状态监听
@@ -72,15 +81,25 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private func setupBindings() {
         guard let window = window else { return }
 
-        // 监听图片变化以实时缓存图片原始尺寸
+        // 监听图片变化以实时缓存图片/视频原始尺寸
         appState.$imageURL
             .sink { [weak self] imageURL in
                 guard let self = self else { return }
                 DispatchQueue.main.async {
-                    if let url = imageURL, let nsImage = self.appState.loadImage(from: url) {
-                        self.currentImageSize = nsImage.size
-                    } else {
+                    guard let url = imageURL else {
                         self.currentImageSize = nil
+                        self.currentVideoSize = nil
+                        return
+                    }
+                    if self.appState.isVideoDocument {
+                        self.currentImageSize = nil
+                        self.fetchVideoNaturalSize(for: url) { size in
+                            guard self.appState.imageURL == url else { return }
+                            self.currentVideoSize = size
+                        }
+                    } else {
+                        self.currentVideoSize = nil
+                        self.currentImageSize = self.appState.loadImage(from: url)?.size
                     }
                 }
             }
@@ -104,7 +123,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
-        // 监听新图片拖入/载入以进行一次自适应大小调整
+        // 监听新图片/视频拖入或载入以进行一次自适应大小调整
         appState.$imageURL
             .sink { [weak self] imageURL in
                 guard let self = self, let url = imageURL else { return }
@@ -120,7 +139,14 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                         return
                     }
 
-                    if let nsImage = self.appState.loadImage(from: url) {
+                    if self.appState.isVideoDocument {
+                        // 视频尺寸需异步读取，确认窗口内容未再变化后才调整布局
+                        self.fetchVideoNaturalSize(for: url) { size in
+                            guard self.appState.imageURL == url, let size else { return }
+                            if self.isRestoringFrame { return }
+                            self.initializeImageLayout(imageSize: size, animated: !isFirst)
+                        }
+                    } else if let nsImage = self.appState.loadImage(from: url) {
                         self.initializeImageLayout(imageSize: nsImage.size, animated: !isFirst)
                     }
                 }
@@ -428,7 +454,26 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         if appState.isPDFDocument, let currentPDFPageSize {
             return currentPDFPageSize
         }
+        if appState.isVideoDocument {
+            return currentVideoSize
+        }
         return currentImage()?.size
+    }
+
+    /// 异步读取视频原始显示尺寸（含旋转信息），在主线程回调。
+    private func fetchVideoNaturalSize(for url: URL, completion: @escaping (NSSize?) -> Void) {
+        let asset = AVURLAsset(url: url)
+        Task {
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+                  let naturalSize = try? await track.load(.naturalSize) else {
+                await MainActor.run { completion(nil) }
+                return
+            }
+            let transform = (try? await track.load(.preferredTransform)) ?? .identity
+            let transformed = naturalSize.applying(transform)
+            let size = NSSize(width: abs(transformed.width), height: abs(transformed.height))
+            await MainActor.run { completion(size) }
+        }
     }
 
     private func displaySize(for imageSize: NSSize, scale: Double) -> NSSize {
@@ -503,7 +548,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func resizeWindowForPinch(magnification: CGFloat) {
-        guard appState.imageURL == nil || appState.webURL != nil, let window = window else { return }
+        guard appState.imageURL == nil || appState.isVideoDocument || appState.webURL != nil, let window = window else { return }
 
         if pinchResizeInitialSize == nil {
             pinchResizeInitialSize = window.frame.size
@@ -607,22 +652,22 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     public func windowWillStartLiveResize(_ notification: Notification) {
         isLiveResizing = true
 
-        // 无边框图片模式下，拖拽窗口边缘等同于整体缩放图片窗口。
+        // 无边框图片/视频模式下，拖拽窗口边缘等同于整体缩放内容窗口。
         guard let window = window,
               isImageMode,
               !appState.showBorder,
-              let imageSize = currentImageSize else { return }
-        let imageRatio = imageSize.width / imageSize.height
-        if imageRatio > 0 {
-            window.aspectRatio = imageSize
+              let contentSize = currentContentSize() else { return }
+        let contentRatio = contentSize.width / contentSize.height
+        if contentRatio > 0 {
+            window.aspectRatio = contentSize
         }
     }
 
     public func windowDidEndLiveResize(_ notification: Notification) {
         // 用户松开鼠标结束缩放时，通过重置 resizeIncrements 来解除宽高比锁定，为其余代码主动 setFrame 预留通路，根治死锁
         window?.resizeIncrements = NSSize(width: 1.0, height: 1.0)
-        if isImageMode, !appState.showBorder, let window = window, let imageSize = currentImageSize, imageSize.width > 0 {
-            appState.imageScale = Double(window.frame.width / imageSize.width)
+        if isImageMode, !appState.showBorder, let window = window, let contentSize = currentContentSize(), contentSize.width > 0 {
+            appState.imageScale = Double(window.frame.width / contentSize.width)
         }
         isLiveResizing = false
         scheduleWindowFrameSave()

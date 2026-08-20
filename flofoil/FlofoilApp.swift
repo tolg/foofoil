@@ -557,14 +557,17 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         menu.removeAllItems()
 
         if activeAppState?.imageURL != nil, activeAppState?.webURL == nil {
-            // 不设 target，让 Cmd+C 经由 responder chain 到当前图片窗口；文本编辑器仍可优先处理复制。
-            let copyImageItem = NSMenuItem(
-                title: NSLocalizedString("Copy Image", comment: ""),
-                action: #selector(EditMenuCommands.copy(_:)),
-                keyEquivalent: "c"
-            )
-            copyImageItem.withSymbol("photo.on.rectangle")
-            menu.addItem(copyImageItem)
+            // 视频没有“拷贝图片”能力，不提供该菜单项。
+            if activeAppState?.isVideoDocument != true {
+                // 不设 target，让 Cmd+C 经由 responder chain 到当前图片窗口；文本编辑器仍可优先处理复制。
+                let copyImageItem = NSMenuItem(
+                    title: NSLocalizedString("Copy Image", comment: ""),
+                    action: #selector(EditMenuCommands.copy(_:)),
+                    keyEquivalent: "c"
+                )
+                copyImageItem.withSymbol("photo.on.rectangle")
+                menu.addItem(copyImageItem)
+            }
             return
         }
 
@@ -905,7 +908,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
-        var types: [UTType] = [.image, .pdf, .html, .text]
+        var types: [UTType] = [.image, .pdf, .html, .text, .movie]
         if let webarchiveType = UTType("com.apple.webarchive") {
             types.append(webarchiveType)
         }
@@ -1302,12 +1305,29 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         guard let config = HistoryRepository.shared.config(id: id) else { return }
         let requiredPaths = [config.imagePath, config.textPath].compactMap { $0 }
         if requiredPaths.contains(where: { !FileManager.default.fileExists(atPath: $0) }) {
+            // 视频经安全范围书签仍可访问时放行（沙盒重启后路径直接不可达但授权可恢复）。
+            let isVideo = (config.contentKind ?? HistoryContentKind.infer(from: config)) == .video
+            if isVideo, let bookmark = config.videoBookmark, AppState.resolveVideoBookmark(bookmark) != nil {
+                openHistoryConfig(config: config, id: id)
+                return
+            }
+            // 视频源文件缺失时直接移除历史记录，不再提示。
+            if isVideo {
+                HistoryRepository.shared.remove(id: config.id)
+                HistoryManager.shared.refresh()
+                HistorySearchWindowController.shared.dismiss()
+                return
+            }
             let alert = NSAlert()
             alert.messageText = NSLocalizedString("History Content Missing Title", comment: "")
             alert.informativeText = NSLocalizedString("History Content Missing Message", comment: "")
             alert.runModal()
             return
         }
+        openHistoryConfig(config: config, id: id)
+    }
+
+    private func openHistoryConfig(config: WindowConfig, id: UUID) {
         if let controller = availableBlankWindowController {
             controller.appState.loadConfig(config)
             activateWindow(controller)

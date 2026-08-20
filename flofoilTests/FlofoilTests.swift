@@ -8,6 +8,7 @@
 import Testing
 import Foundation
 import AppKit
+import AVFoundation
 import CoreGraphics
 @testable import Flofoil
 
@@ -72,6 +73,67 @@ struct HistorySearchTests {
         #expect(history.first?.id == secondID)
         #expect(history.first?.sourceFingerprint == fingerprint)
     }
+
+    @Test func recentHistoryDropsVideoEntriesWithMissingSourceFile() throws {
+        let (repository, directory) = try repository()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // 一条源文件缺失的视频历史与一条源文件存在的视频历史
+        let missingID = UUID()
+        #expect(repository.upsert(WindowConfig(
+            id: missingID,
+            imagePath: "/tmp/flofoil-definitely-missing-\(UUID().uuidString).mp4",
+            originalImageName: "gone.mp4",
+            contentKind: .video
+        )))
+        let existingURL = directory.appendingPathComponent("present.m4v")
+        try Data("fake video".utf8).write(to: existingURL)
+        let existingID = UUID()
+        #expect(repository.upsert(WindowConfig(
+            id: existingID,
+            imagePath: existingURL.path,
+            originalImageName: "present.m4v",
+            contentKind: .video
+        )))
+
+        let recent = repository.recent()
+        #expect(!recent.contains(where: { $0.id == missingID }))
+        #expect(recent.contains(where: { $0.id == existingID }))
+        // 缺失源文件的记录已被物理移除
+        #expect(repository.config(id: missingID) == nil)
+    }
+
+    @Test func recentHistoryKeepsVideoEntriesWithResolvableBookmark() throws {
+        let (repository, directory) = try repository()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // 源文件存在但记录的路径已变化：书签仍能解析出文件（模拟文件被移动后书签找回）
+        let realFileURL = directory.appendingPathComponent("moved.mp4")
+        try Data("fake video".utf8).write(to: realFileURL)
+        let bookmark = try #require(AppState.makeSecurityScopedBookmark(for: realFileURL))
+
+        let bookmarkedID = UUID()
+        #expect(repository.upsert(WindowConfig(
+            id: bookmarkedID,
+            imagePath: "/tmp/flofoil-stale-path-\(UUID().uuidString).mp4",
+            originalImageName: "moved.mp4",
+            contentKind: .video,
+            videoBookmark: bookmark
+        )))
+
+        // 无书签且路径不存在的记录仍然被移除
+        let missingID = UUID()
+        #expect(repository.upsert(WindowConfig(
+            id: missingID,
+            imagePath: "/tmp/flofoil-definitely-missing-\(UUID().uuidString).mp4",
+            originalImageName: "gone.mp4",
+            contentKind: .video
+        )))
+
+        let recent = repository.recent()
+        #expect(recent.contains(where: { $0.id == bookmarkedID }))
+        #expect(!recent.contains(where: { $0.id == missingID }))
+    }
 }
 
 @MainActor
@@ -85,6 +147,172 @@ struct FlofoilTests {
         state.loadConfig(WindowConfig(id: historyID, text: "历史内容"))
 
         #expect(state.id == historyID)
+    }
+
+    @Test func testVideoFileTypeDetection() {
+        #expect(AppState.isVideoFileName("movie.mp4"))
+        #expect(AppState.isVideoFileName("clip.MOV"))
+        #expect(AppState.isVideoFileName("recording.m4v"))
+        #expect(!AppState.isVideoFileName("photo.png"))
+        #expect(!AppState.isVideoFileName("note.txt"))
+        #expect(!AppState.isVideoFileName("document.pdf"))
+        #expect(!AppState.isVideoFileName("noextension"))
+    }
+
+    @Test func testHistoryContentKindInfersVideo() {
+        let video = WindowConfig(id: UUID(), imagePath: "/tmp/sample.mp4", originalImageName: "sample.mp4")
+        #expect(HistoryContentKind.infer(from: video) == .video)
+
+        let image = WindowConfig(id: UUID(), imagePath: "/tmp/sample.png", originalImageName: "sample.png")
+        #expect(HistoryContentKind.infer(from: image) == .image)
+
+        let pdf = WindowConfig(id: UUID(), imagePath: "/tmp/doc.pdf", originalImageName: "doc.pdf")
+        #expect(HistoryContentKind.infer(from: pdf) == .pdf)
+    }
+
+    @Test func testOpenedVideoKeepsOriginalFileWithoutCaching() throws {
+        // 视频不复制到缓存目录，历史记录仅保存原始路径
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flofoil-video-source-\(UUID().uuidString).mp4")
+        try Data("fake video".utf8).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+        let state = AppState()
+        state.openVideo(url: sourceURL)
+
+        #expect(state.isVideoDocument)
+        #expect(state.imageURL == sourceURL)
+        #expect(state.imageURL?.lastPathComponent.hasPrefix("cached_image") == false)
+
+        let config = try #require(SettingsStore.shared.historyConfigs.first(where: { $0.id == state.id }))
+        #expect(config.contentKind == .video)
+        #expect(config.imagePath == sourceURL.path)
+
+        // 从历史中移除时不得删除用户原始视频文件
+        HistoryManager.shared.removeFromHistory(config)
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path))
+    }
+
+    @Test func testOpenedVideoCreatesSecurityScopedBookmark() throws {
+        // 打开视频时创建安全范围书签并随配置持久化，供 app 重启后恢复沙盒访问
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flofoil-video-bookmark-\(UUID().uuidString).mp4")
+        try Data("fake video".utf8).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+        let state = AppState()
+        state.openVideo(url: sourceURL)
+
+        let bookmark = try #require(state.videoBookmarkData)
+        let resolvedURL = try #require(AppState.resolveVideoBookmark(bookmark))
+        #expect(resolvedURL.path == sourceURL.path)
+
+        let config = state.toConfig()
+        #expect(config.videoBookmark == bookmark)
+
+        // 经配置恢复窗口状态时同样能访问到文件
+        let restored = AppState(config: config)
+        #expect(restored.imageURL == sourceURL)
+        #expect(restored.videoBookmarkData != nil)
+
+        // 清理历史记录
+        if let saved = SettingsStore.shared.historyConfigs.first(where: { $0.id == state.id }) {
+            HistoryManager.shared.removeFromHistory(saved)
+        }
+    }
+
+    @Test func testCanOpenFileAcceptsVideoCandidates() throws {
+        // UTType 预筛接受视频候选（MKV 等不可播格式在打开时再异步验证）
+        let videoURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flofoil-canopen-\(UUID().uuidString).mp4")
+        try Data("fake video".utf8).write(to: videoURL)
+        defer { try? FileManager.default.removeItem(at: videoURL) }
+
+        let state = AppState()
+        #expect(state.canOpenFile(url: videoURL))
+    }
+
+    @Test func testVideoPlayerMuteToggle() {
+        let controller = VideoPlayerController(
+            appStateID: UUID(),
+            url: URL(fileURLWithPath: "/tmp/flofoil-mute-test.mp4"),
+            isLooping: true
+        )
+        #expect(!controller.isMuted)
+        #expect(!controller.player.isMuted)
+
+        controller.toggleMute()
+        #expect(controller.isMuted)
+        #expect(controller.player.isMuted)
+
+        controller.toggleMute()
+        #expect(!controller.isMuted)
+        #expect(!controller.player.isMuted)
+    }
+
+    @Test func testVideoPlayerVolumeAdjustment() {
+        let controller = VideoPlayerController(
+            appStateID: UUID(),
+            url: URL(fileURLWithPath: "/tmp/flofoil-volume-test.mp4"),
+            isLooping: true
+        )
+        #expect(controller.volume == 1.0)
+
+        controller.setVolume(0.5)
+        #expect(controller.volume == 0.5)
+        #expect(controller.player.volume == 0.5)
+
+        // 越界值会被钳制到 0...1
+        controller.setVolume(1.5)
+        #expect(controller.volume == 1.0)
+        controller.setVolume(-0.5)
+        #expect(controller.volume == 0)
+
+        // 静音状态下拖起音量时自动解除静音
+        controller.toggleMute()
+        #expect(controller.isMuted)
+        controller.setVolume(0.8)
+        #expect(!controller.isMuted)
+        #expect(!controller.player.isMuted)
+        #expect(controller.player.volume == 0.8)
+        #expect(controller.volumeIconName == "speaker.wave.2.fill")
+
+        // 音量为零时图标显示为静音
+        controller.setVolume(0)
+        #expect(controller.volumeIconName == "speaker.slash.fill")
+    }
+
+    @Test func testVideoScrollWheelStepCalculation() {
+        // 进度滚轮：触摸板精细滚动小步长，鼠标滚轮整格大步长
+        #expect(VideoPlayerController.timeScrollStep(deltaY: 1, preciseScrolling: false) == 2.0)
+        #expect(VideoPlayerController.timeScrollStep(deltaY: -2, preciseScrolling: false) == -4.0)
+        #expect(VideoPlayerController.timeScrollStep(deltaY: 5, preciseScrolling: true) == 1.0)
+
+        // 音量滚轮：整格 0.05，精细滚动 0.005（浮点结果按近似值比较）
+        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: 1, preciseScrolling: false) - 0.05) < 0.0001)
+        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: -1, preciseScrolling: false) + 0.05) < 0.0001)
+        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: 10, preciseScrolling: true) - 0.05) < 0.0001)
+    }
+
+    @Test func testVideoScrollAdjustmentsAreClamped() {
+        let controller = VideoPlayerController(
+            appStateID: UUID(),
+            url: URL(fileURLWithPath: "/tmp/flofoil-scroll-test.mp4"),
+            isLooping: true
+        )
+
+        // 未加载出时长时进度调节不生效
+        controller.adjustTime(by: 5)
+        #expect(controller.currentTime == 0)
+
+        // 音量滚轮调节自动钳制到 0...1
+        controller.adjustVolume(by: 0.1)
+        #expect(abs(controller.volume - 1.0) < 0.0001) // 已在满音量，向上滚不超过 1
+        controller.adjustVolume(by: -0.3)
+        #expect(abs(controller.volume - 0.7) < 0.0001)
+        controller.adjustVolume(by: -1.0)
+        #expect(controller.volume == 0)
+        #expect(controller.volumeIconName == "speaker.slash.fill")
     }
 
     @Test func testCSVParserHandlesQuotedValuesAndNewlines() {

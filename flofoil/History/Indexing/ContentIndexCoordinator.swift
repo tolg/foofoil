@@ -17,7 +17,7 @@ public final class ContentIndexCoordinator: @unchecked Sendable {
 
     public func schedule(config: WindowConfig) {
         let kind = config.contentKind ?? HistoryContentKind.infer(from: config)
-        guard kind == .image || kind == .pdf, let path = config.imagePath else { return }
+        guard kind == .image || kind == .pdf || kind == .video, let path = config.imagePath else { return }
         lock.lock()
         if scheduledPaths[config.id] == path {
             lock.unlock()
@@ -40,16 +40,18 @@ public final class ContentIndexCoordinator: @unchecked Sendable {
                     HistoryManager.shared.refresh()
                 }
 
-                // 2. 提取文本 OCR 并进行索引
-                let chunks: [(String, Int?)]
-                if kind == .pdf {
-                    chunks = try PDFTextIndexer.extract(url: URL(fileURLWithPath: path)) { operation?.isCancelled ?? true }
-                } else {
-                    chunks = [(try ImageOCRIndexer.recognize(url: URL(fileURLWithPath: path)), nil)]
+                // 2. 提取文本 OCR 并进行索引；视频没有可索引的文本内容，仅保留元数据
+                if kind != .video {
+                    let chunks: [(String, Int?)]
+                    if kind == .pdf {
+                        chunks = try PDFTextIndexer.extract(url: URL(fileURLWithPath: path)) { operation?.isCancelled ?? true }
+                    } else {
+                        chunks = [(try ImageOCRIndexer.recognize(url: URL(fileURLWithPath: path)), nil)]
+                    }
+                    guard operation?.isCancelled == false,
+                          HistoryRepository.shared.config(id: config.id)?.imagePath == path else { return }
+                    HistoryRepository.shared.replaceChunks(historyID: config.id, chunkKind: kind == .pdf ? 4 : 2, chunks: chunks.filter { !$0.0.isEmpty })
                 }
-                guard operation?.isCancelled == false,
-                      HistoryRepository.shared.config(id: config.id)?.imagePath == path else { return }
-                HistoryRepository.shared.replaceChunks(historyID: config.id, chunkKind: kind == .pdf ? 4 : 2, chunks: chunks.filter { !$0.0.isEmpty })
             } catch {
                 NSLog("内容索引失败（%@）：%@", config.id.uuidString, error.localizedDescription)
             }

@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 nonisolated final class HistoryDatabase {
-    static let schemaVersion = 3
+    static let schemaVersion = 5
 
     private let queue = DispatchQueue(label: "com.flofoil.history.database", qos: .utility)
     private var connection: OpaquePointer?
@@ -61,8 +61,8 @@ nonisolated final class HistoryDatabase {
                         web_url, actual_web_url, image_source, inline_text, is_pinned, opacity,
                         window_frame, show_border, image_scale, text_font_size, is_markdown_preview,
                         svg_color, background_color_hex, created_at, updated_at, last_opened_at,
-                        source_fingerprint, index_status, index_version
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        source_fingerprint, index_status, index_version, video_looping, video_bookmark
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
                         content_kind=excluded.content_kind, display_title=excluded.display_title,
                         original_filename=excluded.original_filename, image_path=excluded.image_path,
@@ -75,14 +75,16 @@ nonisolated final class HistoryDatabase {
                         is_markdown_preview=excluded.is_markdown_preview, svg_color=excluded.svg_color,
                         background_color_hex=excluded.background_color_hex, updated_at=excluded.updated_at,
                         last_opened_at=excluded.last_opened_at,
-                        source_fingerprint=excluded.source_fingerprint
+                        source_fingerprint=excluded.source_fingerprint,
+                        video_looping=excluded.video_looping, video_bookmark=excluded.video_bookmark
                     """, bindings: [
                         config.id.uuidString, kind.rawValue, title, config.originalImageName,
                         config.imagePath, config.textPath, config.webURLString, config.actualWebURLString,
                         config.imageSource?.rawValue, config.text, config.isPinned, config.opacity,
                         config.windowFrame, config.showBorder, config.imageScale, config.textFontSize,
                         config.isMarkdownPreview, config.svgColor, config.backgroundColorHex,
-                        createdAt, now, now, config.sourceFingerprint, 0, 1
+                        createdAt, now, now, config.sourceFingerprint, 0, 1, config.isVideoLooping,
+                        config.videoBookmark?.base64EncodedString()
                     ])
 
                 let metadata = [config.webURLString, config.actualWebURLString].compactMap { $0 }.joined(separator: " ")
@@ -245,7 +247,8 @@ nonisolated final class HistoryDatabase {
                 is_markdown_preview INTEGER NOT NULL DEFAULT 0, svg_color TEXT, background_color_hex TEXT,
                 created_at REAL NOT NULL, updated_at REAL NOT NULL, last_opened_at REAL NOT NULL,
                 source_fingerprint TEXT, index_status INTEGER NOT NULL DEFAULT 0,
-                index_version INTEGER NOT NULL DEFAULT 0, index_error TEXT, thumbnail_path TEXT
+                index_version INTEGER NOT NULL DEFAULT 0, index_error TEXT, thumbnail_path TEXT,
+                video_looping INTEGER NOT NULL DEFAULT 1, video_bookmark TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_history_last_opened ON history_items(last_opened_at DESC);
             CREATE INDEX IF NOT EXISTS idx_history_kind ON history_items(content_kind);
@@ -274,6 +277,14 @@ nonisolated final class HistoryDatabase {
             for row in rows {
                 try executePrepared("INSERT INTO search_fts(rowid, title_terms, body_terms) VALUES (?,?,?)", bindings: [row.0, SearchNGramEncoder.titleTerms(SearchTextNormalizer.normalize(row.1)), SearchNGramEncoder.bodyTerms(row.2)])
             }
+        }
+        if previousVersion >= 1 && previousVersion < 4 {
+            // v4 新增视频循环播放开关；旧记录默认开启。
+            try execute("ALTER TABLE history_items ADD COLUMN video_looping INTEGER NOT NULL DEFAULT 1")
+        }
+        if previousVersion >= 1 && previousVersion < 5 {
+            // v5 新增视频安全范围书签（Base64 文本）；沙盒授权仅随进程有效，靠它在重启后恢复访问。
+            try execute("ALTER TABLE history_items ADD COLUMN video_bookmark TEXT")
         }
         try execute("PRAGMA user_version = \(Self.schemaVersion)")
         // 新库明确不读取旧历史；初始化成功后移除旧键，避免旧路径复活。
@@ -408,7 +419,9 @@ nonisolated final class HistoryDatabase {
                     contentKind: kind,
                     sourceFingerprint: optionalText(statement, columns["source_fingerprint"]!),
                     storedDisplayTitle: text(statement, columns["display_title"]!),
-                    thumbnailPath: optionalText(statement, columns["thumbnail_path"]!)
+                    thumbnailPath: optionalText(statement, columns["thumbnail_path"]!),
+                    isVideoLooping: sqlite3_column_int(statement, columns["video_looping"]!) != 0,
+                    videoBookmark: optionalText(statement, columns["video_bookmark"]!).flatMap { Data(base64Encoded: $0) }
                 ))
             }
         }
