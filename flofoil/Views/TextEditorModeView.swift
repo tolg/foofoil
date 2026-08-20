@@ -67,49 +67,70 @@ struct TextEditorModeView: View {
                     if isBlank && showTipsAndHistory {
                         VStack(alignment: .leading, spacing: 0) {
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
+                                HStack(alignment: .top, spacing: 12) {
                                     let configs = Array(historyManager.historyConfigs.prefix(30))
                                     ForEach(Array(configs.enumerated()), id: \.element.id) { index, config in
-                                        HistoryCardView(
-                                            config: config,
-                                            shortcutText: index < 9 && appState.isCommandKeyPressed ? "⌘\(index + 1)" : nil,
-                                            action: {
-                                                let isCurrentlyBlank = appState.imageURL == nil && appState.webURL == nil && appState.text.isEmpty
-                                                if isCurrentlyBlank {
-                                                    withAnimation(.easeInOut(duration: 0.35)) {
+                                        VStack(spacing: 4) {
+                                            HistoryCardView(
+                                                config: config,
+                                                shortcutText: index < 9 && appState.isCommandKeyPressed ? "⌘\(index + 1)" : nil,
+                                                action: {
+                                                    let isCurrentlyBlank = appState.imageURL == nil && appState.webURL == nil && appState.text.isEmpty
+                                                    if isCurrentlyBlank {
+                                                        withAnimation(.easeInOut(duration: 0.35)) {
+                                                            appState.loadConfig(config)
+                                                        }
+                                                    } else {
                                                         appState.loadConfig(config)
                                                     }
-                                                } else {
-                                                    appState.loadConfig(config)
+                                                },
+                                                onHoverChanged: { hovering in
+                                                    if hovering {
+                                                        hoveredConfig = config
+                                                    } else if hoveredConfig?.id == config.id {
+                                                        hoveredConfig = nil
+                                                    }
                                                 }
-                                            },
-                                            onHoverChanged: { hovering in
-                                                if hovering {
-                                                    hoveredConfig = config
-                                                } else if hoveredConfig?.id == config.id {
-                                                    hoveredConfig = nil
+                                            )
+                                            .contextMenu {
+                                                Button(action: {
+                                                    targetRenameConfig = config
+                                                    let rawTitle = config.originalImageName ?? config.historyMenuDisplayName
+                                                    newTitleText = rawTitle
+                                                    showRenameAlert = true
+                                                }) {
+                                                    Label(NSLocalizedString("Change Title", comment: ""), systemImage: "pencil")
                                                 }
-                                            }
-                                        )
-                                        .contextMenu {
-                                            Button(action: {
-                                                targetRenameConfig = config
-                                                let rawTitle = config.originalImageName ?? config.historyMenuDisplayName
-                                                newTitleText = rawTitle
-                                                showRenameAlert = true
-                                            }) {
-                                                Label(NSLocalizedString("Change Title", comment: ""), systemImage: "pencil")
+
+                                                Button(action: {
+                                                    historyManager.removeFromHistory(config)
+                                                }) {
+                                                    Label(NSLocalizedString("Delete", comment: ""), systemImage: "trash")
+                                                }
                                             }
 
-                                            Button(action: {
-                                                historyManager.removeFromHistory(config)
-                                            }) {
-                                                Label(NSLocalizedString("Delete", comment: ""), systemImage: "trash")
-                                            }
+                                            // 预留标题高度，按住 ⌘ 时仅切换透明度，避免布局跳动；复用现有底部 padding 的空间。
+                                            Text(config.historyMenuDisplayName)
+                                                .font(.system(size: 9, design: .rounded))
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                                .truncationMode(.tail)
+                                                .frame(width: 60)
+                                                .opacity(appState.isCommandKeyPressed ? 1 : 0)
+                                                .animation(.easeInOut(duration: 0.15), value: appState.isCommandKeyPressed)
                                         }
                                     }
-                                    SearchHistoryCard(shortcutText: appState.isCommandKeyPressed ? "⌘P" : nil) {
-                                        HistorySearchWindowController.shared.show()
+                                    VStack(spacing: 4) {
+                                        SearchHistoryCard(shortcutText: appState.isCommandKeyPressed ? "⌘P" : nil) {
+                                            HistorySearchWindowController.shared.show()
+                                        }
+                                        Text(NSLocalizedString("Search History", comment: ""))
+                                            .font(.system(size: 9, design: .rounded))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                            .frame(width: 60)
+                                            .opacity(appState.isCommandKeyPressed ? 1 : 0)
+                                            .animation(.easeInOut(duration: 0.15), value: appState.isCommandKeyPressed)
                                     }
                                 }
                                 .padding(.horizontal, 16)
