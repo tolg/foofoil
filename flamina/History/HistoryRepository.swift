@@ -28,10 +28,10 @@ nonisolated public final class HistoryRepository: @unchecked Sendable {
         guard let database else { return [] }
         do {
             let configs = try database.recent(limit: limit)
-            // 视频历史仅记录原始文件路径；源文件已不存在（且书签也无法解析）时移除该条历史记录。
+            // 音视频历史仅记录原始文件路径；源文件已不存在（且书签也无法解析）时移除该条历史记录。
             return configs.filter { config in
                 let kind = config.contentKind ?? HistoryContentKind.infer(from: config)
-                guard kind == .video else { return true }
+                guard kind == .video || kind == .audio else { return true }
                 // 路径当前可达（进程内仍有授权），或安全范围书签仍可解析出存在的文件，均保留
                 if let path = config.imagePath, FileManager.default.fileExists(atPath: path) { return true }
                 if let bookmark = config.videoBookmark, AppState.resolveVideoBookmark(bookmark) != nil { return true }

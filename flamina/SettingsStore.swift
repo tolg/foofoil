@@ -40,9 +40,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     /// 预先生成并单独存储的 HEIC 缩略图路径，仅用作历史列表展示，不作为窗口内容来源。
     public var thumbnailPath: String?
     public var webZoom: Double
-    /// 视频是否循环播放；仅视频模式生效，默认开启。
+    /// 视频/音频是否循环播放；仅媒体模式生效，默认开启。
     public var isVideoLooping: Bool
-    /// 视频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问权限。
+    /// 视频/音频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问权限。
     public var videoBookmark: Data?
 
 
@@ -195,6 +195,7 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         case "globe": emoji = "🌐"
         case "photo", "text.document": emoji = "🏞️"
         case "play.rectangle": emoji = "🎬"
+        case "music.note": emoji = "🎵"
         case "tablecells": emoji = "▦"
         case "arrow.down.document": emoji = "Ⓜ️"
         default: emoji = "📝"

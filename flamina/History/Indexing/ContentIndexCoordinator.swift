@@ -17,7 +17,7 @@ public final class ContentIndexCoordinator: @unchecked Sendable {
 
     public func schedule(config: WindowConfig) {
         let kind = config.contentKind ?? HistoryContentKind.infer(from: config)
-        guard kind == .image || kind == .pdf || kind == .video, let path = config.imagePath else { return }
+        guard kind == .image || kind == .pdf || kind == .video || kind == .audio, let path = config.imagePath else { return }
         lock.lock()
         if scheduledPaths[config.id] == path {
             lock.unlock()
@@ -40,8 +40,19 @@ public final class ContentIndexCoordinator: @unchecked Sendable {
                     HistoryManager.shared.refresh()
                 }
 
-                // 2. 提取文本 OCR 并进行索引；视频没有可索引的文本内容，仅保留元数据
-                if kind != .video {
+                // 2. 提取文本 OCR 并进行索引；音视频没有可 OCR 的画面，音频改为索引曲目元数据
+                if kind == .audio {
+                    let info = AudioMetadataLoader.loadSynchronously(from: URL(fileURLWithPath: path))
+                    let text = [info.title, info.artist, info.album, info.albumArtist, info.composer, info.genre, info.year]
+                        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: "\n")
+                    guard operation?.isCancelled == false,
+                          HistoryRepository.shared.config(id: config.id)?.imagePath == path else { return }
+                    if !text.isEmpty {
+                        HistoryRepository.shared.replaceChunks(historyID: config.id, chunkKind: 2, chunks: [(text, nil)])
+                    }
+                } else if kind != .video {
                     let chunks: [(String, Int?)]
                     if kind == .pdf {
                         chunks = try PDFTextIndexer.extract(url: URL(fileURLWithPath: path)) { operation?.isCancelled ?? true }

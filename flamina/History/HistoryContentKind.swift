@@ -10,6 +10,7 @@ nonisolated public enum HistoryContentKind: Int, Codable, Sendable {
     case web = 5
     case pdf = 6
     case video = 7
+    case audio = 8
 
     public var symbolName: String {
         switch self {
@@ -17,6 +18,7 @@ nonisolated public enum HistoryContentKind: Int, Codable, Sendable {
         case .image: return "photo"
         case .pdf: return "text.document"
         case .video: return "play.rectangle"
+        case .audio: return "music.note"
         case .markdown: return "arrow.down.document"
         case .csv: return "tablecells"
         case .note, .text: return "note.text"
@@ -29,8 +31,9 @@ nonisolated public enum HistoryContentKind: Int, Codable, Sendable {
         if name.hasSuffix(".pdf") { return .pdf }
         if config.imagePath != nil {
             let ext = URL(fileURLWithPath: name).pathExtension
-            if !ext.isEmpty, let type = UTType(filenameExtension: ext), type.conforms(to: .movie) {
-                return .video
+            if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
+                if type.conforms(to: .movie) { return .video }
+                if type.conforms(to: .audio) { return .audio }
             }
             return .image
         }

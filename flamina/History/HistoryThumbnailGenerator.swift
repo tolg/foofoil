@@ -70,6 +70,14 @@ public enum HistoryThumbnailGenerator {
                 finalImage = cropAndResize(cgImage, to: 128)
             }
 
+        case .audio:
+            // 音频缩略图优先使用内嵌封面，其次同目录匹配的封面图
+            let info = AudioMetadataLoader.loadSynchronously(from: url)
+            if let artwork = info.artwork,
+               let cgImage = artwork.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                finalImage = cropAndResize(cgImage, to: 128)
+            }
+
         default:
             return false
         }

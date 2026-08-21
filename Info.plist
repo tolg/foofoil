@@ -20,6 +20,24 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>Related Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>None</string>
+			<key>NSIsRelatedItemType</key>
+			<true/>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.image</string>
+				<string>public.jpeg</string>
+				<string>public.png</string>
+				<string>public.heic</string>
+				<string>public.tiff</string>
+				<string>com.compuserve.gif</string>
+				<string>org.webmproject.webp</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>PDF Document</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -102,6 +120,18 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.movie</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Audio</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.audio</string>
 			</array>
 		</dict>
 	</array>

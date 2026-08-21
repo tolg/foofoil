@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-Flamina is a lightweight reference app for macOS that keeps images, videos, documents, notes, and web content visible in minimal floating windows while you work.
+Flamina is a lightweight reference app for macOS that keeps images, videos, audio, documents, notes, and web content visible in minimal floating windows while you work.
 
 The name Flamina comes from *floating lamina*: a thin layer of content that can rest anywhere in your workspace, without the visual weight of a traditional window.
 
@@ -15,7 +15,7 @@ Built with SwiftUI and AppKit, Flamina favors native macOS capabilities, fast in
 - Open multiple independent floating windows.
 - Pin a window above other apps, adjust its opacity, and show or hide its border.
 - Drag, resize, zoom, and position windows across multiple displays.
-- Open images, videos, PDFs, plain text, Markdown, CSV, HTML, and web URLs.
+- Open images, videos, audio, PDFs, plain text, Markdown, CSV, HTML, and web URLs.
 - Paste or open an image directly from the clipboard.
 - Preview Markdown, browse CSV data as a table, and navigate PDF pages.
 - Zoom images and web content, fit images to a window, and customize SVG or window background colors.

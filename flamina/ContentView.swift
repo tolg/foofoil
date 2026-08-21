@@ -66,6 +66,9 @@ public struct ContentView: View {
                 } else if let videoURL = appState.imageURL, appState.isVideoDocument {
                     VideoModeView(appState: appState, url: videoURL, shouldHideBorder: shouldHideBorder)
                         .transition(.opacity)
+                } else if let audioURL = appState.imageURL, appState.isAudioDocument {
+                    AudioModeView(appState: appState, url: audioURL, shouldHideBorder: shouldHideBorder)
+                        .transition(.opacity)
                 } else if let pdfURL = appState.imageURL, appState.isPDFDocument {
                     PDFModeView(appState: appState, url: pdfURL)
                         .transition(.opacity)
@@ -156,11 +159,11 @@ public struct ContentView: View {
                 }
             }
         }
-        // 图片模式继续由 ImageModeView 自己处理捏合缩放；视频及其余模式仅缩放窗口，不改变内容字号或网页倍率。
+        // 图片模式继续由 ImageModeView 自己处理捏合缩放；音视频及其余模式仅缩放窗口，不改变内容字号或网页倍率。
         .simultaneousGesture(
             MagnificationGesture()
                 .onChanged { value in
-                    guard appState.imageURL == nil || appState.isVideoDocument || appState.webURL != nil else { return }
+                    guard appState.imageURL == nil || appState.isExternalMediaDocument || appState.webURL != nil else { return }
 
                     if !isResizingWindowWithPinch {
                         isResizingWindowWithPinch = true
@@ -172,7 +175,7 @@ public struct ContentView: View {
                     )
                 }
                 .onEnded { _ in
-                    guard (appState.imageURL == nil || appState.isVideoDocument || appState.webURL != nil), isResizingWindowWithPinch else { return }
+                    guard (appState.imageURL == nil || appState.isExternalMediaDocument || appState.webURL != nil), isResizingWindowWithPinch else { return }
 
                     NotificationCenter.default.post(
                         name: .shouldEndWindowPinchResize,
@@ -196,8 +199,8 @@ public struct ContentView: View {
             }
 
             if appState.imageURL != nil, appState.webURL == nil {
-                // 视频没有“拷贝图片”能力
-                if !appState.isVideoDocument {
+                // 视频/音频没有“拷贝图片”能力
+                if !appState.isExternalMediaDocument {
                     Button(action: {
                         appState.copyCurrentImageToPasteboard()
                     }) {

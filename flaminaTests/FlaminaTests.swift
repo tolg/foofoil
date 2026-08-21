@@ -159,6 +159,19 @@ struct FlaminaTests {
         #expect(!AppState.isVideoFileName("noextension"))
     }
 
+    @Test func testAudioFileTypeDetection() {
+        #expect(AppState.isAudioFileName("song.mp3"))
+        #expect(AppState.isAudioFileName("track.M4A"))
+        #expect(AppState.isAudioFileName("clip.wav"))
+        #expect(AppState.isAudioFileName("sound.aiff"))
+        #expect(AppState.isAudioFileName("loop.caf"))
+        #expect(!AppState.isAudioFileName("movie.mp4"))
+        #expect(!AppState.isAudioFileName("clip.MOV"))
+        #expect(!AppState.isAudioFileName("photo.png"))
+        #expect(!AppState.isAudioFileName("note.txt"))
+        #expect(!AppState.isAudioFileName("noextension"))
+    }
+
     @Test func testHistoryContentKindInfersVideo() {
         let video = WindowConfig(id: UUID(), imagePath: "/tmp/sample.mp4", originalImageName: "sample.mp4")
         #expect(HistoryContentKind.infer(from: video) == .video)
@@ -168,6 +181,12 @@ struct FlaminaTests {
 
         let pdf = WindowConfig(id: UUID(), imagePath: "/tmp/doc.pdf", originalImageName: "doc.pdf")
         #expect(HistoryContentKind.infer(from: pdf) == .pdf)
+    }
+
+    @Test func testHistoryContentKindInfersAudio() {
+        let audio = WindowConfig(id: UUID(), imagePath: "/tmp/sample.mp3", originalImageName: "sample.mp3")
+        #expect(HistoryContentKind.infer(from: audio) == .audio)
+        #expect(HistoryContentKind.audio.symbolName == "music.note")
     }
 
     @Test func testOpenedVideoKeepsOriginalFileWithoutCaching() throws {
@@ -219,6 +238,102 @@ struct FlaminaTests {
         if let saved = SettingsStore.shared.historyConfigs.first(where: { $0.id == state.id }) {
             HistoryManager.shared.removeFromHistory(saved)
         }
+    }
+
+    @Test func testOpenedAudioKeepsOriginalFileWithoutCaching() throws {
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flamina-audio-source-\(UUID().uuidString).mp3")
+        try Data("fake audio".utf8).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+        let state = AppState()
+        state.openAudio(url: sourceURL)
+
+        #expect(state.isAudioDocument)
+        #expect(state.isExternalMediaDocument)
+        #expect(state.imageURL == sourceURL)
+        #expect(state.imageURL?.lastPathComponent.hasPrefix("cached_image") == false)
+
+        let config = try #require(SettingsStore.shared.historyConfigs.first(where: { $0.id == state.id }))
+        #expect(config.contentKind == .audio)
+        #expect(config.imagePath == sourceURL.path)
+
+        HistoryManager.shared.removeFromHistory(config)
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path))
+    }
+
+    @Test func testOpenedAudioCreatesSecurityScopedBookmark() throws {
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flamina-audio-bookmark-\(UUID().uuidString).m4a")
+        try Data("fake audio".utf8).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+        let state = AppState()
+        state.openAudio(url: sourceURL)
+
+        let bookmark = try #require(state.videoBookmarkData)
+        let resolvedURL = try #require(AppState.resolveVideoBookmark(bookmark))
+        #expect(resolvedURL.path == sourceURL.path)
+
+        let config = state.toConfig()
+        #expect(config.contentKind == .audio)
+        #expect(config.videoBookmark == bookmark)
+
+        let restored = AppState(config: config)
+        #expect(restored.imageURL == sourceURL)
+        #expect(restored.isAudioDocument)
+        #expect(restored.videoBookmarkData != nil)
+
+        if let saved = SettingsStore.shared.historyConfigs.first(where: { $0.id == state.id }) {
+            HistoryManager.shared.removeFromHistory(saved)
+        }
+    }
+
+    @Test func testCanOpenFileAcceptsAudioCandidates() throws {
+        let audioURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flamina-canopen-\(UUID().uuidString).mp3")
+        try Data("fake audio".utf8).write(to: audioURL)
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let state = AppState()
+        #expect(state.canOpenFile(url: audioURL))
+    }
+
+    @Test func testAudioSidecarCoverPrefersMatchingBasename() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flamina-audio-cover-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let audioURL = directory.appendingPathComponent("song.mp3")
+        try Data("fake audio".utf8).write(to: audioURL)
+
+        let image = NSImage(size: NSSize(width: 16, height: 16))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 16, height: 16)).fill()
+        image.unlockFocus()
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        let jpeg = try #require(bitmap.representation(using: .jpeg, properties: [:]))
+
+        let matchingCover = directory.appendingPathComponent("song.jpg")
+        let genericCover = directory.appendingPathComponent("cover.jpg")
+        try jpeg.write(to: genericCover)
+        try jpeg.write(to: matchingCover)
+
+        #expect(AudioMetadataLoader.sidecarCoverURL(for: audioURL) == matchingCover)
+        #expect(AudioMetadataLoader.sidecarCoverImage(for: audioURL) != nil)
+    }
+
+    @Test func testAudioMetadataFormatters() {
+        #expect(AudioMetadataLoader.formatSampleRate(44100) == String(format: NSLocalizedString("%@ kHz", comment: ""), "44.1"))
+        #expect(AudioMetadataLoader.formatSampleRate(48000) == String(format: NSLocalizedString("%@ kHz", comment: ""), "48"))
+        #expect(AudioMetadataLoader.formatBitRate(320000) == String(format: NSLocalizedString("%@ kbps", comment: ""), "320"))
+        #expect(AudioMetadataLoader.formatChannels(1) == NSLocalizedString("Mono", comment: ""))
+        #expect(AudioMetadataLoader.formatChannels(2) == NSLocalizedString("Stereo", comment: ""))
+        #expect(AudioMetadataLoader.formatDuration(185) == "3:05")
+        #expect(AudioMetadataLoader.formatDuration(3723) == "1:02:03")
     }
 
     @Test func testCanOpenFileAcceptsVideoCandidates() throws {
@@ -288,10 +403,10 @@ struct FlaminaTests {
         #expect(VideoPlayerController.timeScrollStep(deltaY: -2, preciseScrolling: false) == -4.0)
         #expect(VideoPlayerController.timeScrollStep(deltaY: 5, preciseScrolling: true) == 1.0)
 
-        // 音量滚轮：整格 0.05，精细滚动 0.005（浮点结果按近似值比较）
-        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: 1, preciseScrolling: false) - 0.05) < 0.0001)
-        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: -1, preciseScrolling: false) + 0.05) < 0.0001)
-        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: 10, preciseScrolling: true) - 0.05) < 0.0001)
+        // 音量滚轮：向上滚动增大音量（与纵向滑块同向），整格 0.05，精细滚动 0.005
+        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: 1, preciseScrolling: false) + 0.05) < 0.0001)
+        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: -1, preciseScrolling: false) - 0.05) < 0.0001)
+        #expect(abs(VideoPlayerController.volumeScrollStep(deltaY: 10, preciseScrolling: true) + 0.05) < 0.0001)
     }
 
     @Test func testVideoScrollAdjustmentsAreClamped() {

@@ -70,6 +70,23 @@
         }
       }
     },
+    "Related Image": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related Image"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关联图片"
+          }
+        }
+      }
+    },
     "PDF Document": {
       "extractionState": "manual",
       "localizations": {
@@ -83,6 +100,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF 文档"
+          }
+        }
+      }
+    },
+    "Audio": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频"
           }
         }
       }

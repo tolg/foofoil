@@ -91,13 +91,13 @@ public class FloatingWindow: NSWindow {
             }
         }
 
-        // 视频模式使用窗口级空格键切换播放/暂停；忽略按住空格产生的重复事件。
+        // 音视频模式使用窗口级空格键切换播放/暂停；忽略按住空格产生的重复事件。
         if event.type == .keyDown,
            modifiers.isEmpty,
            event.keyCode == 49,
            !event.isARepeat,
            let controller = self.windowController as? FloatingWindowController,
-           controller.appState.isVideoDocument {
+           controller.appState.isExternalMediaDocument {
             NotificationCenter.default.post(
                 name: .shouldToggleVideoPlayback,
                 object: nil,
@@ -142,7 +142,7 @@ public class FloatingWindow: NSWindow {
                 let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 0.003 : 0.03
                 let factor = 1.0 + delta * multiplier
 
-                if appState.imageURL != nil && appState.webURL == nil && !(appState.isVideoDocument && appState.showBorder) {
+                if appState.imageURL != nil && appState.webURL == nil && !appState.isAudioDocument && !(appState.isVideoDocument && appState.showBorder) {
                     // 有边框 PDF 保留 PDFViewer 的原生缩放与滚动响应。
                     if appState.isPDFDocument && appState.showBorder {
                         super.sendEvent(event)
@@ -161,7 +161,7 @@ public class FloatingWindow: NSWindow {
                     }
                     appState.saveState()
                 } else {
-                    // 非图片模式（网页、文本、Markdown、有边框视频）：缩放窗口
+                    // 非图片模式（网页、文本、Markdown、音频、有边框视频）：缩放窗口
                     let currentSize = self.frame.size
                     let targetSize = NSSize(
                         width: currentSize.width * factor,
@@ -177,7 +177,7 @@ public class FloatingWindow: NSWindow {
         // 处理手势捏合（仅非图片模式拦截；视频画面随窗口自适应，因此按窗口缩放处理）
         if event.type == .magnify {
             if let controller = self.windowController as? FloatingWindowController,
-               (controller.appState.imageURL == nil || controller.appState.isVideoDocument || controller.appState.webURL != nil) {
+               (controller.appState.imageURL == nil || controller.appState.isExternalMediaDocument || controller.appState.webURL != nil) {
 
                 let phase = event.phase
                 if phase.contains(.began) {
@@ -222,7 +222,7 @@ public class FloatingWindow: NSWindow {
             } else {
                 pdfView.copyCurrentPageToPasteboard()
             }
-        } else if !controller.appState.isVideoDocument {
+        } else if !controller.appState.isExternalMediaDocument {
             controller.appState.copyCurrentImageToPasteboard()
         }
     }
@@ -230,7 +230,7 @@ public class FloatingWindow: NSWindow {
     public override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(FloatingWindow.copy(_:)) {
             guard let controller = windowController as? FloatingWindowController else { return false }
-            return controller.appState.imageURL != nil && controller.appState.webURL == nil && !controller.appState.isVideoDocument
+            return controller.appState.imageURL != nil && controller.appState.webURL == nil && !controller.appState.isExternalMediaDocument
         }
         return super.validateMenuItem(menuItem)
     }

@@ -557,8 +557,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         menu.removeAllItems()
 
         if activeAppState?.imageURL != nil, activeAppState?.webURL == nil {
-            // 视频没有“拷贝图片”能力，不提供该菜单项。
-            if activeAppState?.isVideoDocument != true {
+            // 视频/音频没有“拷贝图片”能力，不提供该菜单项。
+            if activeAppState?.isExternalMediaDocument != true {
                 // 不设 target，让 Cmd+C 经由 responder chain 到当前图片窗口；文本编辑器仍可优先处理复制。
                 let copyImageItem = NSMenuItem(
                     title: NSLocalizedString("Copy Image", comment: ""),
@@ -908,7 +908,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
-        var types: [UTType] = [.image, .pdf, .html, .text, .movie]
+        var types: [UTType] = [.image, .pdf, .html, .text, .movie, .audio]
         if let webarchiveType = UTType("com.apple.webarchive") {
             types.append(webarchiveType)
         }
@@ -1305,14 +1305,15 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         guard let config = HistoryRepository.shared.config(id: id) else { return }
         let requiredPaths = [config.imagePath, config.textPath].compactMap { $0 }
         if requiredPaths.contains(where: { !FileManager.default.fileExists(atPath: $0) }) {
-            // 视频经安全范围书签仍可访问时放行（沙盒重启后路径直接不可达但授权可恢复）。
-            let isVideo = (config.contentKind ?? HistoryContentKind.infer(from: config)) == .video
-            if isVideo, let bookmark = config.videoBookmark, AppState.resolveVideoBookmark(bookmark) != nil {
+            // 音视频经安全范围书签仍可访问时放行（沙盒重启后路径直接不可达但授权可恢复）。
+            let kind = config.contentKind ?? HistoryContentKind.infer(from: config)
+            let isExternalMedia = kind == .video || kind == .audio
+            if isExternalMedia, let bookmark = config.videoBookmark, AppState.resolveVideoBookmark(bookmark) != nil {
                 openHistoryConfig(config: config, id: id)
                 return
             }
-            // 视频源文件缺失时直接移除历史记录，不再提示。
-            if isVideo {
+            // 音视频源文件缺失时直接移除历史记录，不再提示。
+            if isExternalMedia {
                 HistoryRepository.shared.remove(id: config.id)
                 HistoryManager.shared.refresh()
                 HistorySearchWindowController.shared.dismiss()

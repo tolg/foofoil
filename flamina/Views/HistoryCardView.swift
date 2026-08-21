@@ -86,6 +86,13 @@ struct HistoryCardView: View {
         return name.hasSuffix(".svg")
     }
 
+    private var historyKind: HistoryContentKind {
+        config.contentKind ?? HistoryContentKind.infer(from: config)
+    }
+
+    private var isAudioHistory: Bool { historyKind == .audio }
+    private var isVideoHistory: Bool { historyKind == .video }
+
     @ViewBuilder
     private var shortcutOverlay: some View {
         if let shortcutText = shortcutText {
@@ -107,6 +114,34 @@ struct HistoryCardView: View {
         }
     }
 
+    private var audioPlaceholder: some View {
+        mediaPlaceholder(systemName: "music.note")
+    }
+
+    private var videoPlaceholder: some View {
+        mediaPlaceholder(systemName: "play.fill")
+    }
+
+    private func mediaPlaceholder(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 24, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: 60, height: 60)
+            .accessibilityHidden(true)
+    }
+
+    /// 叠在封面缩略图上的半透明类型标记，避免音频封面被当成普通图片。
+    @ViewBuilder
+    private var mediaKindOverlay: some View {
+        if isAudioHistory || isVideoHistory {
+            Image(systemName: isAudioHistory ? "music.note" : "play.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.82))
+                .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+                .accessibilityHidden(true)
+        }
+    }
+
     @ViewBuilder
     private func renderCardImage(for nsImage: NSImage) -> some View {
         let baseImage = Image(nsImage: nsImage).resizable()
@@ -125,7 +160,8 @@ struct HistoryCardView: View {
         let path: String
         if let thumbnailPath = config.thumbnailPath, FileManager.default.fileExists(atPath: thumbnailPath) {
             path = thumbnailPath
-        } else if let imagePath = config.imagePath, FileManager.default.fileExists(atPath: imagePath) {
+        } else if !isAudioHistory, !isVideoHistory, let imagePath = config.imagePath, FileManager.default.fileExists(atPath: imagePath) {
+            // 音视频原文件不是图片；无封面/首帧时保持空缩略图，由卡片显示类型图标。
             path = imagePath
         } else {
             return
@@ -147,10 +183,19 @@ struct HistoryCardView: View {
         Group {
             if config.imagePath != nil {
                 if let nsImage = cardImage {
-                    renderCardImage(for: nsImage)
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 60, height: 60)
-                        .clipped()
+                    ZStack {
+                        renderCardImage(for: nsImage)
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 60, height: 60)
+                            .clipped()
+                        mediaKindOverlay
+                    }
+                    .frame(width: 60, height: 60)
+                    .clipped()
+                } else if isAudioHistory {
+                    audioPlaceholder
+                } else if isVideoHistory {
+                    videoPlaceholder
                 } else {
                     Color(NSColor.controlBackgroundColor)
                         .frame(width: 60, height: 60)

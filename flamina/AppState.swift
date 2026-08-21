@@ -61,6 +61,17 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         return Self.isVideoFileName(name)
     }
 
+    /// 当前内容是否为音频文档（复用图片内容通道，但不经缓存）。
+    public var isAudioDocument: Bool {
+        guard let name = originalImageName else { return false }
+        return Self.isAudioFileName(name)
+    }
+
+    /// 视频或音频：均引用原始文件并依赖安全范围书签。
+    public var isExternalMediaDocument: Bool {
+        isVideoDocument || isAudioDocument
+    }
+
     /// 按扩展名判断是否属于视频类型；仅作快速预筛，实际能否播放需在打开时验证。
     public static func isVideoFileName(_ name: String) -> Bool {
         let ext = (name as NSString).pathExtension.lowercased()
@@ -72,7 +83,27 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         isVideoFileName(url.lastPathComponent)
     }
 
-    /// 为视频原始文件创建安全范围书签，用于跨进程生命周期保留沙盒访问授权。
+    /// 按扩展名判断是否属于系统音频类型；影片文件不视为音频。
+    public static func isAudioFileName(_ name: String) -> Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        if type.conforms(to: .movie) { return false }
+        return type.conforms(to: .audio)
+    }
+
+    public static func isAudioFile(url: URL) -> Bool {
+        isAudioFileName(url.lastPathComponent)
+    }
+
+    public static func isExternalMediaFileName(_ name: String) -> Bool {
+        isVideoFileName(name) || isAudioFileName(name)
+    }
+
+    public static func isExternalMediaFile(url: URL) -> Bool {
+        isExternalMediaFileName(url.lastPathComponent)
+    }
+
+    /// 为视频/音频原始文件创建安全范围书签，用于跨进程生命周期保留沙盒访问授权。
     public static func makeSecurityScopedBookmark(for url: URL) -> Data? {
         try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
     }
@@ -103,9 +134,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     @Published public var imageURL: URL? {
         didSet {
             if let url = imageURL {
-                // 视频不复制到应用缓存目录，仅记录原始文件路径。
-                if !Self.isVideoFile(url: url) {
-                    // 切到非视频内容时释放旧视频的安全范围访问授权
+                // 视频/音频不复制到应用缓存目录，仅记录原始文件路径。
+                if !Self.isExternalMediaFile(url: url) {
+                    // 切到非媒体内容时释放旧文件的安全范围访问授权
                     stopVideoAccess()
                     let cacheDir = getCachedImageURL()?.deletingLastPathComponent()
                     let isAlreadyCached = cacheDir.map { url.path.hasPrefix($0.path) } ?? false
@@ -247,16 +278,16 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
     }
 
-    /// 视频循环播放开关；仅视频模式生效，默认开启。
+    /// 视频/音频循环播放开关；仅媒体模式生效，默认开启。
     @Published public var isVideoLooping: Bool {
         didSet {
             saveState()
         }
     }
 
-    /// 视频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问。
+    /// 视频/音频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问。
     public var videoBookmarkData: Data?
-    /// 当前已通过书签持有访问授权的视频 URL，切换内容或销毁时需停止访问。
+    /// 当前已通过书签持有访问授权的媒体 URL，切换内容或销毁时需停止访问。
     private var accessingVideoURL: URL?
 
     private enum DroppedItem {
@@ -589,8 +620,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
-            // 视频经安全范围书签恢复沙盒访问（重启后路径直接不可达）
-            if Self.isVideoFileName(config.originalImageName ?? path) {
+            // 视频/音频经安全范围书签恢复沙盒访问（重启后路径直接不可达）
+            if Self.isExternalMediaFileName(config.originalImageName ?? path) {
                 if let restored = Self.restoreVideoAccess(config: config, fallbackURL: url) {
                     self.accessingVideoURL = restored.accessedURL
                     self.videoBookmarkData = restored.bookmark
@@ -632,7 +663,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                 saveState()
             }
         }
-        if Self.isVideoFileName(config.originalImageName ?? ""), videoBookmarkData != config.videoBookmark {
+        if Self.isExternalMediaFileName(config.originalImageName ?? ""), videoBookmarkData != config.videoBookmark {
             saveState()
         }
         updateRenderedMarkdown()
@@ -710,9 +741,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
-            // 视频经安全范围书签恢复沙盒访问（重启后路径直接不可达）
-            if Self.isVideoFileName(config.originalImageName ?? path) {
-                // 加载新配置前先释放旧的视频授权
+            // 视频/音频经安全范围书签恢复沙盒访问（重启后路径直接不可达）
+            if Self.isExternalMediaFileName(config.originalImageName ?? path) {
+                // 加载新配置前先释放旧的媒体授权
                 stopVideoAccess()
                 if let restored = Self.restoreVideoAccess(config: config, fallbackURL: url) {
                     self.accessingVideoURL = restored.accessedURL
@@ -822,6 +853,17 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
     /// 打开本地视频；与图片不同，视频不复制到缓存目录，仅记录原始路径。
     public func openVideo(url: URL) {
+        openExternalMedia(url: url, holdsSecurityAccess: false)
+    }
+
+    /// 打开本地音频；与视频相同，不复制到缓存目录，仅记录原始路径。
+    public func openAudio(url: URL) {
+        openExternalMedia(url: url, holdsSecurityAccess: false)
+    }
+
+    /// 打开本地音视频：引用原始文件并创建安全范围书签。
+    /// - Parameter holdsSecurityAccess: 调用方已对 `url` 调用过 `startAccessingSecurityScopedResource` 且交由本窗口持有。
+    private func openExternalMedia(url: URL, holdsSecurityAccess: Bool) {
         isBatchUpdating = true
         defer {
             isBatchUpdating = false
@@ -836,17 +878,23 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.imageSource = nil
         self.showBorder = false
         self.imageScale = 1.0
-        // 新打开的视频恢复默认的循环播放
+        // 新打开的媒体恢复默认的循环播放
         self.isVideoLooping = true
         self.createdAt = Date()
         self.webURL = nil
         self.actualWebURL = nil
+        // 窗口打开期间保持沙盒访问，同目录封面才能作为关联项读取
+        if holdsSecurityAccess {
+            accessingVideoURL = url
+        } else if url.startAccessingSecurityScopedResource() {
+            accessingVideoURL = url
+        }
         // 创建安全范围书签，保证 app 重启后仍能访问原始文件
         self.videoBookmarkData = Self.makeSecurityScopedBookmark(for: url)
         self.imageURL = url
     }
 
-    /// 停止当前视频文件的安全范围访问授权。
+    /// 停止当前媒体文件的安全范围访问授权。
     private func stopVideoAccess() {
         accessingVideoURL?.stopAccessingSecurityScopedResource()
         accessingVideoURL = nil
@@ -878,13 +926,17 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         return (fallbackURL, Self.makeSecurityScopedBookmark(for: fallbackURL), nil)
     }
 
-    /// UTType 对视频的声明较宽（MKV/AVI 等也归为 movie），需再确认 macOS 原生可播放后才打开。
-    private func openVideoIfPlayable(url: URL) {
+    /// UTType 对音视频的声明较宽（MKV/AVI 等也归为 movie），需再确认 macOS 原生可播放后才打开。
+    /// - Parameter holdsSecurityAccess: 已对 `url` 取得安全范围访问；不可播放时由本方法释放，可播放时转交窗口持有。
+    private func openExternalMediaIfPlayable(url: URL, holdsSecurityAccess: Bool = false) {
         let asset = AVURLAsset(url: url)
         Task { @MainActor [weak self] in
             let isPlayable = (try? await asset.load(.isPlayable)) ?? false
-            guard isPlayable, let self else { return }
-            self.openVideo(url: url)
+            guard isPlayable, let self else {
+                if holdsSecurityAccess { url.stopAccessingSecurityScopedResource() }
+                return
+            }
+            self.openExternalMedia(url: url, holdsSecurityAccess: holdsSecurityAccess)
         }
     }
 
@@ -1019,7 +1071,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         if ["html", "htm", "webarchive", "xhtml"].contains(ext) || isTextFile(url: url) {
             return true
         }
-        if Self.isVideoFile(url: url) {
+        if Self.isExternalMediaFile(url: url) {
             return true
         }
         return NSImage(contentsOf: url) != nil
@@ -1033,8 +1085,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             openWeb(url: url)
         } else if isTextFile(url: url) {
             openTextFile(url: url)
-        } else if Self.isVideoFile(url: url) {
-            openVideoIfPlayable(url: url)
+        } else if Self.isExternalMediaFile(url: url) {
+            let accessed = url.startAccessingSecurityScopedResource()
+            openExternalMediaIfPlayable(url: url, holdsSecurityAccess: accessed)
         } else {
             openImage(url: url)
         }
@@ -1634,9 +1687,15 @@ public class AppState: NSObject, ObservableObject, Identifiable {
                         completion(false)
                         return
                     }
-                    let accessed = url.startAccessingSecurityScopedResource()
-                    self.openFile(url: url)
-                    if accessed { url.stopAccessingSecurityScopedResource() }
+                    if Self.isExternalMediaFile(url: url) {
+                        // 音视频异步验证可播性；保持安全范围访问直到打开完成或失败，以便读取同目录封面。
+                        let accessed = url.startAccessingSecurityScopedResource()
+                        self.openExternalMediaIfPlayable(url: url, holdsSecurityAccess: accessed)
+                    } else {
+                        let accessed = url.startAccessingSecurityScopedResource()
+                        self.openFile(url: url)
+                        if accessed { url.stopAccessingSecurityScopedResource() }
+                    }
                     completion(true)
                 }
             } else {

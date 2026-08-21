@@ -13,6 +13,57 @@
         }
       }
     },
+    "%@ kbps": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kbps"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kbps"
+          }
+        }
+      }
+    },
+    "%@ kHz": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kHz"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kHz"
+          }
+        }
+      }
+    },
+    "%d Channels": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Channels"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 声道"
+          }
+        }
+      }
+    },
     "About %@": {
       "extractionState": "manual",
       "localizations": {
@@ -846,6 +897,23 @@
         }
       }
     },
+    "Loop Playback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loop Playback"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "循环播放"
+          }
+        }
+      }
+    },
     "Markdown Preview": {
       "extractionState": "manual",
       "localizations": {
@@ -910,6 +978,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "静音"
+          }
+        }
+      }
+    },
+    "Mono": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mono"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "单声道"
           }
         }
       }
@@ -1635,13 +1720,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Drop images, PDF, or Markdown"
+            "value": "Drop images, audio, PDF, or Markdown"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "拖入图片、PDF 或 Markdown"
+            "value": "拖入图片、音频、PDF 或 Markdown"
           }
         }
       }
@@ -1897,6 +1982,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "音量"
+          }
+        }
+      }
+    },
+    "Stereo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stereo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立体声"
+          }
+        }
+      }
+    },
+    "Track %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "曲目 %@"
           }
         }
       }
