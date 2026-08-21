@@ -1,12 +1,16 @@
-# Flofoil
+# Flamina 浮箔
 
 [简体中文](README.zh-CN.md)
 
-Flofoil is a lightweight floating reference app for macOS. It keeps images, documents, notes, and web content visible in minimal windows while you work.
+Flamina is a lightweight reference app for macOS that keeps images, videos, documents, notes, and web content visible in minimal floating windows while you work.
 
-Built with SwiftUI and AppKit, Flofoil favors native macOS capabilities, fast interaction, and a small dependency footprint.
+The name Flamina comes from *floating lamina*: a thin layer of content that can rest anywhere in your workspace, without the visual weight of a traditional window.
 
-Flofoil is published by Beijing Memory Vision Technology Co., Ltd. and distributed as open-source software under the MIT License.
+In Chinese, Flamina is called 浮箔 (Fú Bó), evoking the same idea of a lightweight, paper-thin layer that stays close at hand without getting in the way.
+
+Built with SwiftUI and AppKit, Flamina favors native macOS capabilities, fast interaction, and a small dependency footprint.
+
+Flamina is published by Beijing Memory Vision Technology Co., Ltd. and distributed as open-source software under the MIT License.
 
 ## Features
 
@@ -24,9 +28,9 @@ Flofoil is published by Beijing Memory Vision Technology Co., Ltd. and distribut
 
 ## Quick Start
 
-Launch Flofoil and then use any of these methods:
+Launch Flamina and then use any of these methods:
 
-- Drag a supported file, image, or text onto a Flofoil window.
+- Drag a supported file, image, or text onto a Flamina window.
 - Choose **File > Open** (<kbd>⌘ O</kbd>) to open a local file.
 - Choose **File > Open URL** (<kbd>⌘ L</kbd>) to display a web page.
 - Choose **File > Open Clipboard Image** (<kbd>⇧ ⌘ V</kbd>) to create a reference from the clipboard.
@@ -38,7 +42,7 @@ Right-click a window to access the most relevant actions for its current content
 
 | Action | Shortcut |
 | --- | --- |
-| New Flofoil window | <kbd>⌘ N</kbd> |
+| New Flamina window | <kbd>⌘ N</kbd> |
 | Open a file | <kbd>⌘ O</kbd> |
 | Open a URL | <kbd>⌘ L</kbd> |
 | Open clipboard image | <kbd>⇧ ⌘ V</kbd> |
@@ -60,8 +64,8 @@ Additional content-specific and window-position shortcuts are available from the
 
 ## Build from Source
 
-1. Open `flofoil.xcodeproj` in Xcode.
-2. Select the `flofoil` scheme and the **My Mac** destination.
+1. Open `flamina.xcodeproj` in Xcode.
+2. Select the `flamina` scheme and the **My Mac** destination.
 3. Configure a development signing team if Xcode requests one.
 4. Build and run the project.
 
@@ -69,8 +73,8 @@ To build from the command line:
 
 ```sh
 xcodebuild build \
-  -project flofoil.xcodeproj \
-  -scheme flofoil \
+  -project flamina.xcodeproj \
+  -scheme flamina \
   -configuration Debug \
   -destination 'platform=macOS'
 ```
@@ -79,16 +83,16 @@ To run the test suite:
 
 ```sh
 xcodebuild test \
-  -project flofoil.xcodeproj \
-  -scheme flofoil \
+  -project flamina.xcodeproj \
+  -scheme flamina \
   -destination 'platform=macOS'
 ```
 
 ## Technology
 
-Flofoil is implemented primarily with SwiftUI and uses AppKit for native floating-window, menu, text-control, and visual-effect behavior. Its content and search features use Apple frameworks including WebKit, PDFKit, Vision, ImageIO, Uniform Type Identifiers, and SQLite3. Markdown rendering uses the existing vendored cmark library.
+Flamina is implemented primarily with SwiftUI and uses AppKit for native floating-window, menu, text-control, and visual-effect behavior. Its content and search features use Apple frameworks including WebKit, PDFKit, Vision, ImageIO, Uniform Type Identifiers, and SQLite3. Markdown rendering uses the existing vendored cmark library.
 
-History and cached content are stored locally in the user's Application Support directory. OCR and indexing run on the device; Flofoil only requires network access when displaying remote web content.
+History and cached content are stored locally in the user's Application Support directory. OCR and indexing run on the device; Flamina only requires network access when displaying remote web content.
 
 ## Development Principles
 
@@ -106,6 +110,6 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 ## License
 
-Flofoil is licensed under the [MIT License](LICENSE), copyright © 2026 Beijing Memory Vision Technology Co., Ltd.
+Flamina is licensed under the [MIT License](LICENSE), copyright © 2026 Beijing Memory Vision Technology Co., Ltd.
 
 The bundled cmark library is distributed under its own permissive licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the required notices.

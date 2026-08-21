@@ -1,12 +1,12 @@
-# Flofoil
+# Flamina
 
 [English](README.md)
 
-Flofoil 是一款轻量级 macOS 悬浮参考应用。它可以把图片、文档、笔记和网页内容放在极简悬浮窗口中，让参考资料在工作时始终触手可及。
+Flamina 是一款轻量级 macOS 悬浮参考应用。它可以把图片、文档、笔记和网页内容放在极简悬浮窗口中，让参考资料在工作时始终触手可及。
 
-Flofoil 使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
+Flamina 使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
 
-Flofoil 由北京记忆视界科技有限公司发布，并采用 MIT 许可证作为开源软件分发。
+Flamina 由北京记忆视界科技有限公司发布，并采用 MIT 许可证作为开源软件分发。
 
 ## 功能特性
 
@@ -24,9 +24,9 @@ Flofoil 由北京记忆视界科技有限公司发布，并采用 MIT 许可证�
 
 ## 快速开始
 
-启动 Flofoil 后，可以通过以下任一方式添加内容：
+启动 Flamina 后，可以通过以下任一方式添加内容：
 
-- 将支持的文件、图片或文本拖放到 Flofoil 窗口。
+- 将支持的文件、图片或文本拖放到 Flamina 窗口。
 - 选择“文件 > 打开”（<kbd>⌘ O</kbd>）来打开本地文件。
 - 选择“文件 > 打开 URL”（<kbd>⌘ L</kbd>）来显示网页。
 - 选择“文件 > 打开剪贴板图片”（<kbd>⇧ ⌘ V</kbd>）来创建图片参考窗口。
@@ -38,7 +38,7 @@ Flofoil 由北京记忆视界科技有限公司发布，并采用 MIT 许可证�
 
 | 操作 | 快捷键 |
 | --- | --- |
-| 新建 Flofoil 窗口 | <kbd>⌘ N</kbd> |
+| 新建 Flamina 窗口 | <kbd>⌘ N</kbd> |
 | 打开文件 | <kbd>⌘ O</kbd> |
 | 打开 URL | <kbd>⌘ L</kbd> |
 | 打开剪贴板图片 | <kbd>⇧ ⌘ V</kbd> |
@@ -60,8 +60,8 @@ Flofoil 由北京记忆视界科技有限公司发布，并采用 MIT 许可证�
 
 ## 从源码构建
 
-1. 使用 Xcode 打开 `flofoil.xcodeproj`。
-2. 选择 `flofoil` Scheme 和 **My Mac** 运行目标。
+1. 使用 Xcode 打开 `flamina.xcodeproj`。
+2. 选择 `flamina` Scheme 和 **My Mac** 运行目标。
 3. 如果 Xcode 提示签名问题，请配置开发者签名团队。
 4. 构建并运行项目。
 
@@ -69,8 +69,8 @@ Flofoil 由北京记忆视界科技有限公司发布，并采用 MIT 许可证�
 
 ```sh
 xcodebuild build \
-  -project flofoil.xcodeproj \
-  -scheme flofoil \
+  -project flamina.xcodeproj \
+  -scheme flamina \
   -configuration Debug \
   -destination 'platform=macOS'
 ```
@@ -79,16 +79,16 @@ xcodebuild build \
 
 ```sh
 xcodebuild test \
-  -project flofoil.xcodeproj \
-  -scheme flofoil \
+  -project flamina.xcodeproj \
+  -scheme flamina \
   -destination 'platform=macOS'
 ```
 
 ## 技术实现
 
-Flofoil 主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮窗口、菜单、文本控件和视觉效果。内容展示与搜索功能使用了 WebKit、PDFKit、Vision、ImageIO、Uniform Type Identifiers 和 SQLite3 等 Apple 框架。Markdown 渲染使用项目现有的内置 cmark 库。
+Flamina 主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮窗口、菜单、文本控件和视觉效果。内容展示与搜索功能使用了 WebKit、PDFKit、Vision、ImageIO、Uniform Type Identifiers 和 SQLite3 等 Apple 框架。Markdown 渲染使用项目现有的内置 cmark 库。
 
-历史记录和缓存内容保存在用户的 Application Support 目录中。OCR 与内容索引均在本机完成；只有在显示远程网页时，Flofoil 才需要使用网络连接。
+历史记录和缓存内容保存在用户的 Application Support 目录中。OCR 与内容索引均在本机完成；只有在显示远程网页时，Flamina 才需要使用网络连接。
 
 ## 开发原则
 
@@ -102,10 +102,10 @@ Flofoil 主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮�
 
 ## 参与贡献
 
-欢迎参与 Flofoil 的开发。提交更改前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+欢迎参与 Flamina 的开发。提交更改前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 
-Flofoil 使用 [MIT License](LICENSE)，版权所有 © 2026 北京记忆视界科技有限公司。
+Flamina 使用 [MIT License](LICENSE)，版权所有 © 2026 北京记忆视界科技有限公司。
 
 应用内置的 cmark 库使用其自身的宽松开源许可证，所需声明请参阅 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

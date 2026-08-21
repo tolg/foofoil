@@ -1,6 +1,6 @@
-# Contributing to Flofoil
+# Contributing to Flamina
 
-Thank you for contributing to Flofoil.
+Thank you for contributing to Flamina.
 
 ## Before You Start
 
@@ -19,8 +19,8 @@ Thank you for contributing to Flofoil.
 
    ```sh
    xcodebuild test \
-     -project flofoil.xcodeproj \
-     -scheme flofoil \
+     -project flamina.xcodeproj \
+     -scheme flamina \
      -destination 'platform=macOS'
    ```
 
@@ -28,7 +28,7 @@ Thank you for contributing to Flofoil.
 
 ## Licensing of Contributions
 
-Flofoil is licensed under the [MIT License](LICENSE). By submitting a contribution, you agree that your contribution is provided under the same MIT License and that you have the right to grant that license.
+Flamina is licensed under the [MIT License](LICENSE). By submitting a contribution, you agree that your contribution is provided under the same MIT License and that you have the right to grant that license.
 
 Contributors retain attribution through Git history. File headers must identify the human contributor using the active `git config user.name`; agent, model, assistant, and tool names must not be used as authors.
 
