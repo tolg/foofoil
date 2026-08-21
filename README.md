@@ -10,14 +10,12 @@ In Chinese, Flamina is called 浮箔 (Fú Bó), evoking the same idea of a light
 
 Built with SwiftUI and AppKit, Flamina favors native macOS capabilities, fast interaction, and a small dependency footprint.
 
-Flamina is published by Beijing Memory Vision Technology Co., Ltd. and distributed as open-source software under the MIT License.
-
 ## Features
 
 - Open multiple independent floating windows.
 - Pin a window above other apps, adjust its opacity, and show or hide its border.
 - Drag, resize, zoom, and position windows across multiple displays.
-- Open images, PDFs, plain text, Markdown, CSV, HTML, web archives, and web URLs.
+- Open images, videos, PDFs, plain text, Markdown, CSV, HTML, and web URLs.
 - Paste or open an image directly from the clipboard.
 - Preview Markdown, browse CSV data as a table, and navigate PDF pages.
 - Zoom images and web content, fit images to a window, and customize SVG or window background colors.

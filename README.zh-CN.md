@@ -1,32 +1,34 @@
-# Flamina
+# 浮箔 Flamina
 
 [English](README.md)
 
-Flamina 是一款轻量级 macOS 悬浮参考应用。它可以把图片、文档、笔记和网页内容放在极简悬浮窗口中，让参考资料在工作时始终触手可及。
+浮箔是一款轻量级 macOS 悬浮参考应用。它可以把图片、视频、文档、笔记和网页内容放在极简悬浮窗口中，让参考资料在工作时始终触手可及。
 
-Flamina 使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
+「浮箔」之名取自悬浮的薄片：一层可以停放在工作区任意位置的轻量内容，没有传统窗口的视觉负担。
 
-Flamina 由北京记忆视界科技有限公司发布，并采用 MIT 许可证作为开源软件分发。
+其英文名 Flamina 源自 *floating lamina*，同样传达薄如纸片、触手可及又不碍事的轻盈之意。
+
+浮箔使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
 
 ## 功能特性
 
 - 打开多个相互独立的悬浮窗口。
-- 将窗口置于其他应用之上，调整透明度，并显示或隐藏边框。
-- 拖动、缩放窗口和内容，并在多显示器间快速定位窗口。
-- 打开图片、PDF、纯文本、Markdown、CSV、HTML、Web Archive 和网页 URL。
+- 将窗口置于其他应用之上，调整其透明度，并显示或隐藏边框。
+- 在多显示器间拖动、调整大小、缩放和定位窗口。
+- 打开图片、视频、PDF、纯文本、Markdown、CSV、HTML 和网站。
 - 直接从剪贴板粘贴或打开图片。
-- 预览 Markdown、以表格方式浏览 CSV，并快速跳转 PDF 页面。
-- 缩放图片和网页内容、让图片适应窗口，以及自定义 SVG 颜色或窗口背景色。
-- 使用 macOS 原生能力保存、复制、分享或截取当前内容。
+- 预览 Markdown、以表格方式浏览 CSV 数据，并导航 PDF 页面。
+- 缩放图片和网页内容、让图片适应窗口，以及自定义 SVG 或窗口背景色。
+- 使用 macOS 原生工作流保存、复制、分享或截取显示的内容。
 - 恢复窗口状态，并在本地保存内容历史。
 - 按标题和内容搜索历史记录，包括使用设备端 OCR 识别图片，以及提取 PDF 和网页文本。
 - 完整支持英文与简体中文界面。
 
 ## 快速开始
 
-启动 Flamina 后，可以通过以下任一方式添加内容：
+启动浮箔后，可以通过以下任一方式添加内容：
 
-- 将支持的文件、图片或文本拖放到 Flamina 窗口。
+- 将支持的文件、图片或文本拖放到浮箔窗口。
 - 选择“文件 > 打开”（<kbd>⌘ O</kbd>）来打开本地文件。
 - 选择“文件 > 打开 URL”（<kbd>⌘ L</kbd>）来显示网页。
 - 选择“文件 > 打开剪贴板图片”（<kbd>⇧ ⌘ V</kbd>）来创建图片参考窗口。
@@ -38,7 +40,7 @@ Flamina 由北京记忆视界科技有限公司发布，并采用 MIT 许可证�
 
 | 操作 | 快捷键 |
 | --- | --- |
-| 新建 Flamina 窗口 | <kbd>⌘ N</kbd> |
+| 新建浮箔窗口 | <kbd>⌘ N</kbd> |
 | 打开文件 | <kbd>⌘ O</kbd> |
 | 打开 URL | <kbd>⌘ L</kbd> |
 | 打开剪贴板图片 | <kbd>⇧ ⌘ V</kbd> |
@@ -86,9 +88,9 @@ xcodebuild test \
 
 ## 技术实现
 
-Flamina 主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮窗口、菜单、文本控件和视觉效果。内容展示与搜索功能使用了 WebKit、PDFKit、Vision、ImageIO、Uniform Type Identifiers 和 SQLite3 等 Apple 框架。Markdown 渲染使用项目现有的内置 cmark 库。
+浮箔主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮窗口、菜单、文本控件和视觉效果。内容展示与搜索功能使用了 WebKit、PDFKit、Vision、ImageIO、Uniform Type Identifiers 和 SQLite3 等 Apple 框架。Markdown 渲染使用项目现有的内置 cmark 库。
 
-历史记录和缓存内容保存在用户的 Application Support 目录中。OCR 与内容索引均在本机完成；只有在显示远程网页时，Flamina 才需要使用网络连接。
+历史记录和缓存内容保存在用户的 Application Support 目录中。OCR 与内容索引均在本机完成；只有在显示远程网页时，浮箔才需要使用网络连接。
 
 ## 开发原则
 
@@ -102,10 +104,10 @@ Flamina 主要使用 SwiftUI 实现界面，并通过 AppKit 实现原生悬浮�
 
 ## 参与贡献
 
-欢迎参与 Flamina 的开发。提交更改前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+欢迎参与浮箔的开发。提交更改前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 
-Flamina 使用 [MIT License](LICENSE)，版权所有 © 2026 北京记忆视界科技有限公司。
+浮箔使用 [MIT License](LICENSE)，版权所有 © 2026 北京记忆视界科技有限公司。
 
 应用内置的 cmark 库使用其自身的宽松开源许可证，所需声明请参阅 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
