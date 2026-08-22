@@ -31,6 +31,19 @@ nonisolated struct AudioTrackInfo {
 
     /// 无封面时的默认窗口内容尺寸，接近竖版专辑卡片。
     static let fallbackPresentationSize = NSSize(width: 400, height: 500)
+    /// 初次打开音频时，窗口宽、高均不超过该值。
+    static let initialWindowMaxLength: CGFloat = 500
+
+    /// 按封面比例缩放，使窗口（含边框留白）宽高都不超过 `initialWindowMaxLength`。
+    static func initialWindowSize(for contentSize: NSSize, inset: CGFloat) -> NSSize {
+        guard contentSize.width > 0, contentSize.height > 0 else { return fallbackPresentationSize }
+        let maxContent = max(1, initialWindowMaxLength - inset)
+        let scale = min(1, maxContent / contentSize.width, maxContent / contentSize.height)
+        return NSSize(
+            width: contentSize.width * scale + inset,
+            height: contentSize.height * scale + inset
+        )
+    }
 }
 
 nonisolated enum AudioMetadataLoader {
@@ -76,10 +89,22 @@ nonisolated enum AudioMetadataLoader {
     }
 
     static func presentationSize(for info: AudioTrackInfo) -> NSSize {
-        if let artwork = info.artwork, artwork.size.width > 0, artwork.size.height > 0 {
-            return artwork.size
+        if let artwork = info.artwork, let size = reliableImageSize(artwork) {
+            return size
         }
         return AudioTrackInfo.fallbackPresentationSize
+    }
+
+    /// 优先用像素尺寸，避免内嵌封面 NSImage.size 尚未就绪或被 DPI 压成 0/1。
+    static func reliableImageSize(_ image: NSImage) -> NSSize? {
+        if let rep = image.representations.max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+           rep.pixelsWide > 0, rep.pixelsHigh > 0 {
+            return NSSize(width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh))
+        }
+        if image.size.width > 0, image.size.height > 0 {
+            return image.size
+        }
+        return nil
     }
 
     static func sidecarCoverCandidates(for audioURL: URL) -> [URL] {

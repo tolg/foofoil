@@ -27,6 +27,11 @@ public struct ContentView: View {
         // 网页即使同时保留了截图缓存，也不能套用图片无边框模式的最小尺寸规则。
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
         let usesCompactMinimumSize = isImageMode && !appState.showBorder
+        let minimumLength: CGFloat = usesCompactMinimumSize ? 80 : 150
+        // 音视频窗口再抬高最小宽度，保证底部播放条单行能放下。
+        let minimumWidth = appState.isExternalMediaDocument
+            ? max(minimumLength, MediaPlaybackBar.minimumWindowWidth)
+            : minimumLength
         // PDF 显示边框时，四周保留 12pt 的边框区域。
         let contentPadding: CGFloat = appState.isPDFDocument && appState.showBorder ? 12 : (shouldHideBorder ? 0 : 4)
         let backgroundColor = appState.backgroundColorHex.flatMap(NSColor.init(hex:)) ?? .windowBackgroundColor
@@ -92,7 +97,7 @@ public struct ContentView: View {
                 .opacity(flashOpacity)
                 .allowsHitTesting(false)
         }
-        .frame(minWidth: usesCompactMinimumSize ? 80 : 150, minHeight: usesCompactMinimumSize ? 80 : 150)
+        .frame(minWidth: minimumWidth, minHeight: minimumLength)
         // 直接在最外层容器上处理拖放逻辑，避免使用覆盖整窗的透明交互层拦截正常点击事件
         .onDrop(of: [.image, .fileURL, .url, .text], isTargeted: $isDropTargeted) { providers in
             self.appState.handleDrop(providers: providers)

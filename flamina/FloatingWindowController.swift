@@ -58,10 +58,9 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: contentView)
         window.contentView = hostingView
 
+        applyWindowSizeLimits()
+
         // 预先缓存可能已有的图片/视频/音频展示尺寸
-        if appState.isAudioDocument {
-            window.aspectRatio = .zero
-        }
         if let url = appState.imageURL {
             if appState.isExternalMediaDocument {
                 fetchMediaPresentationSize(for: url) { [weak self] size in
@@ -94,9 +93,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                         self.currentMediaSize = nil
                         return
                     }
-                    if self.appState.isAudioDocument {
-                        self.window?.aspectRatio = .zero
-                    }
+                    self.applyWindowSizeLimits()
                     if self.appState.isExternalMediaDocument {
                         self.currentImageSize = nil
                         self.fetchMediaPresentationSize(for: url) { size in
@@ -141,19 +138,28 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                     if self.isRestoringFrame {
                         return
                     }
-                    if isFirst && self.isRestoringSavedImageFrame {
-                        return
-                    }
-
                     if self.appState.isExternalMediaDocument {
-                        // 视频尺寸或音频封面需异步读取，确认窗口内容未再变化后才调整布局
+                        // 视频尺寸或音频封面需异步读取；先写入 currentMediaSize，避免随后 setFrame 时仍按默认 400×400 锁比例。
                         self.fetchMediaPresentationSize(for: url) { size in
                             guard self.appState.imageURL == url, let size else { return }
-                            if self.isRestoringFrame { return }
+                            self.currentMediaSize = size
+                            if self.isRestoringFrame || self.isLiveResizing { return }
+                            if isFirst && self.isRestoringSavedImageFrame {
+                                // 音频恢复上次大小时仍校正为封面比例，避免封面与控件被裁切。
+                                if self.appState.isAudioDocument {
+                                    self.matchWindowAspectToContent(size)
+                                }
+                                return
+                            }
                             self.initializeImageLayout(imageSize: size, animated: !isFirst)
                         }
-                    } else if let nsImage = self.appState.loadImage(from: url) {
-                        self.initializeImageLayout(imageSize: nsImage.size, animated: !isFirst)
+                    } else {
+                        if isFirst && self.isRestoringSavedImageFrame {
+                            return
+                        }
+                        if let nsImage = self.appState.loadImage(from: url) {
+                            self.initializeImageLayout(imageSize: nsImage.size, animated: !isFirst)
+                        }
                     }
                 }
             }
@@ -193,6 +199,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 if showBorder {
                     self.window?.resizeIncrements = NSSize(width: 1.0, height: 1.0)
                 }
+                self.applyWindowSizeLimits()
                 // 同步调整窗口大小，使窗口物理尺寸调整与 SwiftUI 视图的最新状态在同一 RunLoop 内同步渲染完成
                 self.fitWindowToCurrentImageSize(showBorderOverride: showBorder, animated: false)
             }
@@ -507,15 +514,17 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func initialImageWindowSize(imageSize: NSSize, inset: CGFloat) -> (size: NSSize, scale: CGFloat) {
-        guard let screenFrame = (window?.screen ?? NSScreen.main)?.visibleFrame else {
-            return (
-                NSSize(width: imageSize.width + inset, height: imageSize.height + inset),
-                1.0
-            )
+        var maximumContentWidth = imageSize.width
+        var maximumContentHeight = imageSize.height
+        if let screenFrame = (window?.screen ?? NSScreen.main)?.visibleFrame {
+            maximumContentWidth = max(1, screenFrame.width * initialImageScreenLimit - inset)
+            maximumContentHeight = max(1, screenFrame.height * initialImageScreenLimit - inset)
         }
-
-        let maximumContentWidth = max(1, screenFrame.width * initialImageScreenLimit - inset)
-        let maximumContentHeight = max(1, screenFrame.height * initialImageScreenLimit - inset)
+        if appState.isAudioDocument {
+            let audioContentMax = max(1, AudioTrackInfo.initialWindowMaxLength - inset)
+            maximumContentWidth = min(maximumContentWidth, audioContentMax)
+            maximumContentHeight = min(maximumContentHeight, audioContentMax)
+        }
         let scale = min(1, maximumContentWidth / imageSize.width, maximumContentHeight / imageSize.height)
 
         return (
@@ -528,18 +537,17 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         guard let window = window else { return }
         var newWidth = size.width
         var newHeight = size.height
-
-        if let screen = window.screen {
-            let screenFrame = screen.visibleFrame
-            newWidth = min(newWidth, screenFrame.width * 0.85)
-            newHeight = min(newHeight, screenFrame.height * 0.85)
+        let minSize = minimumWindowSize(showBorderOverride: showBorderOverride)
+        let maxSize: NSSize? = window.screen.map {
+            NSSize(width: $0.visibleFrame.width * 0.85, height: $0.visibleFrame.height * 0.85)
         }
-
-        let showBorder = showBorderOverride ?? appState.showBorder
-        let shouldHideBorder = isImageMode && !showBorder
-        let minLimit: CGFloat = shouldHideBorder ? 80 : 150
-        newWidth = max(minLimit, newWidth)
-        newHeight = max(minLimit, newHeight)
+        let clamped = clampedSizePreservingAspect(
+            NSSize(width: newWidth, height: newHeight),
+            minSize: minSize,
+            maxSize: maxSize
+        )
+        newWidth = clamped.width
+        newHeight = clamped.height
 
         let currentFrame = window.frame
         if keepWidth {
@@ -667,31 +675,47 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     public func windowWillStartLiveResize(_ notification: Notification) {
         isLiveResizing = true
         guard let window = window else { return }
+        // 不要在 live resize 开始时把 aspectRatio 设为 .zero：无边框透明窗口自由拉伸会在
+        // `_adjustNeedsDisplayRegionForNewFrame` 里因空脏区触发 AppKit 断言崩溃。
+        if let ratioSize = constrainedContentAspectSize() {
+            window.aspectRatio = ratioSize
+        }
+    }
 
-        // 音频封面只是背景，窗口应可自由改变宽高比。
-        if appState.isAudioDocument {
-            window.aspectRatio = .zero
-            return
+    public func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        var size = sanitizedWindowSize(frameSize, fallback: sender.frame.size)
+        let minSize = minimumWindowSize()
+        let maxSize = sender.screen.map {
+            NSSize(width: $0.visibleFrame.width, height: $0.visibleFrame.height)
         }
 
-        // 无边框图片/视频模式下，拖拽窗口边缘等同于整体缩放内容窗口。
-        guard isImageMode,
-              !appState.showBorder,
-              let contentSize = currentContentSize() else {
-            window.aspectRatio = .zero
-            return
+        // 程序化 setFrame（例如按封面初始化）不要用当前窗口比例去改目标尺寸。
+        if isLiveResizing, let ratioSize = constrainedContentAspectSize(), ratioSize.width > 0, ratioSize.height > 0 {
+            let ratio = ratioSize.width / ratioSize.height
+            let dw = abs(size.width - sender.frame.width)
+            let dh = abs(size.height - sender.frame.height)
+            if dw >= dh {
+                size.height = size.width / ratio
+            } else {
+                size.width = size.height * ratio
+            }
+            return clampedSizePreservingAspect(size, minSize: minSize, maxSize: maxSize)
         }
-        let contentRatio = contentSize.width / contentSize.height
-        if contentRatio > 0 {
-            window.aspectRatio = contentSize
+
+        if let maxSize, maxSize.width > 0, maxSize.height > 0 {
+            size.width = min(size.width, maxSize.width)
+            size.height = min(size.height, maxSize.height)
         }
+        size.width = max(minSize.width, size.width)
+        size.height = max(minSize.height, size.height)
+        return sanitizedWindowSize(size, fallback: sender.frame.size)
     }
 
     public func windowDidEndLiveResize(_ notification: Notification) {
         // 用户松开鼠标结束缩放时，通过重置 resizeIncrements 来解除宽高比锁定，为其余代码主动 setFrame 预留通路，根治死锁
         window?.resizeIncrements = NSSize(width: 1.0, height: 1.0)
         window?.aspectRatio = .zero
-        if isImageMode, !appState.isAudioDocument, !appState.showBorder, let window = window, let contentSize = currentContentSize(), contentSize.width > 0 {
+        if isImageMode, !appState.showBorder || appState.isAudioDocument, let window = window, let contentSize = currentContentSize(), contentSize.width > 0 {
             appState.imageScale = Double(window.frame.width / contentSize.width)
         }
         isLiveResizing = false
@@ -732,6 +756,107 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
     private var isImageMode: Bool {
         appState.imageURL != nil && appState.webURL == nil
+    }
+
+    /// 音频始终锁定封面/卡片比例；无边框图片与视频拖拽时同样整体等比缩放。
+    private func constrainedContentAspectSize() -> NSSize? {
+        if appState.isAudioDocument {
+            if let contentSize = currentContentSize(), contentSize.width > 0, contentSize.height > 0 {
+                return contentSize
+            }
+            // 封面尚未读到时，拖拽先按当前窗口比例锁住，避免再次自由拉扁。
+            guard isLiveResizing else { return nil }
+            let size = window?.frame.size ?? .zero
+            return (size.width > 0 && size.height > 0) ? size : nil
+        }
+        guard isImageMode, !appState.showBorder, let contentSize = currentContentSize(),
+              contentSize.width > 0, contentSize.height > 0 else {
+            return nil
+        }
+        return contentSize
+    }
+
+    /// 保持内容宽高比的前提下，把窗口校正到当前尺寸附近。
+    private func matchWindowAspectToContent(_ contentSize: NSSize) {
+        guard let window = window,
+              contentSize.width > 0,
+              contentSize.height > 0 else { return }
+
+        let contentRatio = contentSize.width / contentSize.height
+        let currentSize = window.frame.size
+        guard currentSize.width > 0, currentSize.height > 0 else { return }
+        guard abs(currentSize.width / currentSize.height - contentRatio) > 0.001 else { return }
+
+        let sizeKeepingWidth = NSSize(width: currentSize.width, height: currentSize.width / contentRatio)
+        let sizeKeepingHeight = NSSize(width: currentSize.height * contentRatio, height: currentSize.height)
+        // 取面积更大的一侧，避免把窗口压得更小导致封面和控件显示不全。
+        let targetSize = sizeKeepingWidth.width * sizeKeepingWidth.height
+            >= sizeKeepingHeight.width * sizeKeepingHeight.height
+            ? sizeKeepingWidth
+            : sizeKeepingHeight
+        setWindowSize(targetSize, keepWidth: false, animated: false)
+    }
+
+    /// 等比缩放，避免分别夹紧宽高把封面比例拉扁。
+    private func clampedSizePreservingAspect(_ size: NSSize, minSize: NSSize, maxSize: NSSize?) -> NSSize {
+        var width = size.width
+        var height = size.height
+        if !width.isFinite || width < 1 { width = minSize.width }
+        if !height.isFinite || height < 1 { height = minSize.height }
+
+        if let maxSize, maxSize.width > 0, maxSize.height > 0, width > 0, height > 0 {
+            let scale = min(1, maxSize.width / width, maxSize.height / height)
+            if scale < 1 {
+                width *= scale
+                height *= scale
+            }
+        }
+
+        if width < minSize.width || height < minSize.height, width > 0, height > 0 {
+            let scale = max(minSize.width / width, minSize.height / height)
+            width *= scale
+            height *= scale
+        } else {
+            width = max(minSize.width, width)
+            height = max(minSize.height, height)
+        }
+        return sanitizedWindowSize(NSSize(width: width, height: height), fallback: minSize)
+    }
+
+    private func minimumWindowLength(showBorderOverride: Bool? = nil) -> CGFloat {
+        let showBorder = showBorderOverride ?? appState.showBorder
+        let usesCompactMinimum = (isImageMode && !showBorder) || appState.isAudioDocument
+        return usesCompactMinimum ? 80 : 150
+    }
+
+    /// 音视频额外限制最小宽度，保证播放控件单行可完整显示。
+    private func minimumWindowSize(showBorderOverride: Bool? = nil) -> NSSize {
+        let length = minimumWindowLength(showBorderOverride: showBorderOverride)
+        let width = appState.isExternalMediaDocument
+            ? max(length, MediaPlaybackBar.minimumWindowWidth)
+            : length
+        return NSSize(width: width, height: length)
+    }
+
+    private func applyWindowSizeLimits() {
+        guard let window = window else { return }
+        let minSize = minimumWindowSize()
+        window.minSize = minSize
+        if window.frame.width + 0.5 < minSize.width || window.frame.height + 0.5 < minSize.height {
+            setWindowSize(window.frame.size, keepWidth: false, animated: false)
+        }
+    }
+
+    /// 滤掉 0 / NaN / Inf，避免无边框窗口在 AppKit 计算脏区时崩溃。
+    private func sanitizedWindowSize(_ size: NSSize, fallback: NSSize) -> NSSize {
+        var result = size
+        if !result.width.isFinite || result.width < 1 {
+            result.width = fallback.width.isFinite && fallback.width >= 1 ? fallback.width : 80
+        }
+        if !result.height.isFinite || result.height < 1 {
+            result.height = fallback.height.isFinite && fallback.height >= 1 ? fallback.height : 80
+        }
+        return result
     }
 
     public func moveWindow(to position: WindowPosition) {

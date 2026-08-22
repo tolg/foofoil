@@ -29,18 +29,20 @@ struct AudioModeView: View {
         ZStack {
             backgroundLayer
 
-            VStack(spacing: 0) {
-                Spacer(minLength: 12)
-                metadataBlock
-                    .padding(.horizontal, shouldHideBorder ? 20 : 16)
-                Spacer(minLength: 8)
+            // 元数据随窗口压缩裁剪，避免矮窗口时与播放条抢高度导致布局崩溃。
+            metadataBlock
+                .padding(.horizontal, shouldHideBorder ? 20 : 16)
+                .padding(.top, 12)
+                .padding(.bottom, isHovering ? MediaPlaybackBar.overlayBottomInset : 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: info.artwork == nil ? .center : .bottomLeading)
+                .clipped()
 
-                if isHovering {
+            if isHovering {
+                VStack {
+                    Spacer(minLength: 0)
                     MediaPlaybackBar(appState: appState, controller: controller)
-                        .transition(.opacity)
-                } else {
-                    Color.clear.frame(height: 10)
                 }
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,6 +78,7 @@ struct AudioModeView: View {
                     .aspectRatio(contentMode: shouldHideBorder ? .fill : .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
+                    .allowsHitTesting(false)
 
                 LinearGradient(
                     stops: [

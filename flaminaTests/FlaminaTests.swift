@@ -326,6 +326,39 @@ struct FlaminaTests {
         #expect(AudioMetadataLoader.sidecarCoverImage(for: audioURL) != nil)
     }
 
+    @Test func testAudioPresentationSizeUsesArtworkAspect() {
+        let image = NSImage(size: NSSize(width: 600, height: 400))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+        image.unlockFocus()
+
+        var info = AudioTrackInfo.fallback(fileName: "song.mp3")
+        info.artwork = image
+        let size = AudioMetadataLoader.presentationSize(for: info)
+        #expect(abs(size.width / size.height - 1.5) < 0.001)
+
+        let empty = AudioTrackInfo.fallback(fileName: "plain.wav")
+        #expect(AudioMetadataLoader.presentationSize(for: empty) == AudioTrackInfo.fallbackPresentationSize)
+    }
+
+    @Test func testAudioInitialWindowSizeDoesNotExceed500() {
+        let square = AudioTrackInfo.initialWindowSize(for: NSSize(width: 2000, height: 2000), inset: 0)
+        #expect(square.width == AudioTrackInfo.initialWindowMaxLength)
+        #expect(square.height == AudioTrackInfo.initialWindowMaxLength)
+
+        let wide = AudioTrackInfo.initialWindowSize(for: NSSize(width: 1600, height: 900), inset: 0)
+        #expect(wide.width == AudioTrackInfo.initialWindowMaxLength)
+        #expect(abs(wide.height - AudioTrackInfo.initialWindowMaxLength * 900 / 1600) < 0.001)
+
+        let bordered = AudioTrackInfo.initialWindowSize(for: NSSize(width: 2000, height: 2000), inset: 24)
+        #expect(bordered.width <= AudioTrackInfo.initialWindowMaxLength)
+        #expect(bordered.height <= AudioTrackInfo.initialWindowMaxLength)
+
+        let fallback = AudioTrackInfo.initialWindowSize(for: AudioTrackInfo.fallbackPresentationSize, inset: 0)
+        #expect(fallback == AudioTrackInfo.fallbackPresentationSize)
+    }
+
     @Test func testAudioMetadataFormatters() {
         #expect(AudioMetadataLoader.formatSampleRate(44100) == String(format: NSLocalizedString("%@ kHz", comment: ""), "44.1"))
         #expect(AudioMetadataLoader.formatSampleRate(48000) == String(format: NSLocalizedString("%@ kHz", comment: ""), "48"))
@@ -395,6 +428,16 @@ struct FlaminaTests {
         // 音量为零时图标显示为静音
         controller.setVolume(0)
         #expect(controller.volumeIconName == "speaker.slash.fill")
+    }
+
+    @Test func testVideoPlaybackTimeFormatting() {
+        #expect(VideoPlayerController.formatPlaybackTime(0) == "0:00")
+        #expect(VideoPlayerController.formatPlaybackTime(-1) == "0:00")
+        #expect(VideoPlayerController.formatPlaybackTime(.nan) == "0:00")
+        #expect(VideoPlayerController.formatPlaybackTime(185) == "3:05")
+        #expect(VideoPlayerController.formatPlaybackTime(3723) == "1:02:03")
+        #expect(VideoPlayerController.formatPlaybackTime(12, includeHours: true) == "0:00:12")
+        #expect(MediaPlaybackBar.minimumWindowWidth >= 360)
     }
 
     @Test func testVideoScrollWheelStepCalculation() {

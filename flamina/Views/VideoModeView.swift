@@ -45,7 +45,7 @@ struct VideoModeView: View {
             PlayerView(player: controller.player)
 
             if isHovering {
-                // 底部单行控制条：播放/暂停 + 进度条 + 静音 + 循环开关；
+                // 底部控制条：播放/暂停 + 时间 + 进度条 + 静音 + 循环。
                 // 整个控制条区域不触发窗口拖动，控制条以外区域拖拽仍可移动窗口。
                 VStack {
                     Spacer(minLength: 0)

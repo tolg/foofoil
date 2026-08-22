@@ -148,6 +148,19 @@ final class VideoPlayerController: ObservableObject {
         event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY
     }
 
+    /// 播放时间标签：始终输出可读字符串；片长达到小时时，当前时间同样补齐时:分:秒。
+    static func formatPlaybackTime(_ seconds: Double, includeHours: Bool = false) -> String {
+        let clamped = seconds.isFinite ? max(0, seconds) : 0
+        let total = Int(clamped.rounded())
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let remainder = total % 60
+        if includeHours || hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, remainder)
+        }
+        return String(format: "%d:%02d", minutes, remainder)
+    }
+
     /// 同一窗口内换片时替换播放内容并自动开始播放。
     func load(url: URL) {
         guard (player.currentItem?.asset as? AVURLAsset)?.url != url else { return }
@@ -272,10 +285,11 @@ struct WheelIconButton: NSViewRepresentable {
         button.scrollHandler = { [weak coordinator = context.coordinator] event in
             coordinator?.parent.onScroll(event)
         }
-        // 不同音量档位的图标宽度不同；固定占位宽度，避免切换图标时控制条布局跳动
-        button.widthAnchor.constraint(equalToConstant: 20).isActive = true
-        button.setContentHuggingPriority(.required, for: .horizontal)
-        button.setContentHuggingPriority(.required, for: .vertical)
+        // 不同音量档位的图标宽度由 SwiftUI 固定，避免额外 Auto Layout 约束在窗口缩放时冲突。
+        button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        button.setContentHuggingPriority(.defaultLow, for: .vertical)
+        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        button.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         return button
     }
 
@@ -300,108 +314,25 @@ struct WheelIconButton: NSViewRepresentable {
     }
 }
 
-/// 底部单行播放控制条：播放/暂停 + 进度 + 音量 + 循环；视频与音频共用。
+/// 底部播放控制条：播放/暂停 + 当前时间 + 进度 + 总时长 + 音量 + 循环；视频与音频共用。
 struct MediaPlaybackBar: View {
+    /// 单行播放条所需的最小窗口宽度，含时间标签、滑块与按钮，避免音视频窗口缩到控件放不下。
+    static let minimumWindowWidth: CGFloat = 380
+    /// 悬浮控制条占用的底部空间，供音频元数据避让。
+    static let overlayBottomInset: CGFloat = 56
+
     @ObservedObject var appState: AppState
     @ObservedObject var controller: VideoPlayerController
     @State private var isVolumeHovering = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                controller.togglePlayPause()
-            } label: {
-                Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 20)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(NSLocalizedString(controller.isPlaying ? "Pause" : "Play", comment: ""))
-
-            // 进度条：可拖动，滚轮前后滚动调节播放进度
-            WheelSliderView(
-                value: Binding(
-                    get: { controller.currentTime },
-                    set: { controller.seek(to: $0) }
-                ),
-                range: 0...max(controller.duration, 0.01),
-                controlSize: .small,
-                onScroll: { event in
-                    controller.adjustTime(by: VideoPlayerController.timeScrollStep(
-                        deltaY: VideoPlayerController.scrollDeltaY(for: event),
-                        preciseScrolling: event.hasPreciseScrollingDeltas
-                    ))
-                },
-                onEditingChanged: { editing in
-                    controller.isScrubbing = editing
-                }
-            )
-
-            // 音量控制：点击图标切换静音，图标上滚滚轮调节音量；
-            // hover 图标时纵向音量滑轨从图标上方向上弹出（占位视图保持控制条布局不变）。
-            Color.clear
-                .frame(width: 24, height: 20)
-                .overlay(alignment: .bottom) {
-                    VStack(spacing: 8) {
-                        if isVolumeHovering {
-                            WheelSliderView(
-                                value: Binding(
-                                    get: { Double(controller.volume) },
-                                    set: { controller.setVolume(Float($0)) }
-                                ),
-                                range: 0...1,
-                                controlSize: .mini,
-                                isVertical: true,
-                                onScroll: { event in
-                                    controller.adjustVolume(by: VideoPlayerController.volumeScrollStep(
-                                        deltaY: VideoPlayerController.scrollDeltaY(for: event),
-                                        preciseScrolling: event.hasPreciseScrollingDeltas
-                                    ))
-                                }
-                            )
-                            .frame(width: 20, height: 84)
-                            .padding(6)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
-                            .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
-                        }
-
-                        WheelIconButton(
-                            iconName: controller.volumeIconName,
-                            accessibilityTitle: NSLocalizedString(controller.isMuted ? "Unmute" : "Mute", comment: ""),
-                            onClick: {
-                                controller.toggleMute()
-                            },
-                            onScroll: { event in
-                                controller.adjustVolume(by: VideoPlayerController.volumeScrollStep(
-                                    deltaY: VideoPlayerController.scrollDeltaY(for: event),
-                                    preciseScrolling: event.hasPreciseScrollingDeltas
-                                ))
-                            }
-                        )
-                        .frame(height: 20)
-                    }
-                    // hover 覆盖滑轨、间隙与图标，鼠标上下移动不闪烁
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.12)) {
-                            isVolumeHovering = hovering
-                        }
-                    }
-                }
-
-            Button {
-                appState.isVideoLooping.toggle()
-            } label: {
-                Image(systemName: "repeat")
-                    .font(.system(size: 13))
-                    .frame(width: 20)
-                    // 循环开启时用强调色高亮，关闭时置灰
-                    .foregroundStyle(appState.isVideoLooping ? Color.accentColor : Color.secondary)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(NSLocalizedString("Loop Playback", comment: ""))
+        HStack(spacing: 8) {
+            playPauseButton
+            elapsedTimeLabel
+            progressSlider
+            durationLabel
+            volumeControl
+            loopButton
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -409,5 +340,137 @@ struct MediaPlaybackBar: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
         .background(NonMovableBackground())
+    }
+
+    private var includeHours: Bool {
+        max(controller.duration, controller.currentTime) >= 3600
+    }
+
+    private var elapsedTimeLabel: some View {
+        playbackTimeLabel(
+            controller.currentTime,
+            accessibilityKey: "Elapsed Time"
+        )
+    }
+
+    private var durationLabel: some View {
+        playbackTimeLabel(
+            controller.duration,
+            accessibilityKey: "Duration"
+        )
+    }
+
+    private func playbackTimeLabel(_ seconds: Double, accessibilityKey: String) -> some View {
+        Text(VideoPlayerController.formatPlaybackTime(seconds, includeHours: includeHours))
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel(NSLocalizedString(accessibilityKey, comment: ""))
+            .accessibilityValue(VideoPlayerController.formatPlaybackTime(seconds, includeHours: includeHours))
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            controller.togglePlayPause()
+        } label: {
+            Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(NSLocalizedString(controller.isPlaying ? "Pause" : "Play", comment: ""))
+    }
+
+    private var progressSlider: some View {
+        WheelSliderView(
+            value: Binding(
+                get: { controller.currentTime },
+                set: { controller.seek(to: $0) }
+            ),
+            range: 0...max(controller.duration, controller.currentTime, 0.01),
+            controlSize: .small,
+            onScroll: { event in
+                controller.adjustTime(by: VideoPlayerController.timeScrollStep(
+                    deltaY: VideoPlayerController.scrollDeltaY(for: event),
+                    preciseScrolling: event.hasPreciseScrollingDeltas
+                ))
+            },
+            onEditingChanged: { editing in
+                controller.isScrubbing = editing
+            }
+        )
+        .accessibilityLabel(NSLocalizedString("Playback Progress", comment: ""))
+    }
+
+    private var volumeControl: some View {
+        // 点击图标切换静音，图标上滚滚轮调节音量；
+        // hover 图标时纵向音量滑轨从图标上方向上弹出（占位视图保持控制条布局不变）。
+        Color.clear
+            .frame(width: 24, height: 20)
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 8) {
+                    if isVolumeHovering {
+                        WheelSliderView(
+                            value: Binding(
+                                get: { Double(controller.volume) },
+                                set: { controller.setVolume(Float($0)) }
+                            ),
+                            range: 0...1,
+                            controlSize: .mini,
+                            isVertical: true,
+                            onScroll: { event in
+                                controller.adjustVolume(by: VideoPlayerController.volumeScrollStep(
+                                    deltaY: VideoPlayerController.scrollDeltaY(for: event),
+                                    preciseScrolling: event.hasPreciseScrollingDeltas
+                                ))
+                            }
+                        )
+                        .frame(width: 20, height: 84)
+                        .padding(6)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .accessibilityLabel(NSLocalizedString("Volume", comment: ""))
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
+                    }
+
+                    WheelIconButton(
+                        iconName: controller.volumeIconName,
+                        accessibilityTitle: NSLocalizedString(controller.isMuted ? "Unmute" : "Mute", comment: ""),
+                        onClick: {
+                            controller.toggleMute()
+                        },
+                        onScroll: { event in
+                            controller.adjustVolume(by: VideoPlayerController.volumeScrollStep(
+                                deltaY: VideoPlayerController.scrollDeltaY(for: event),
+                                preciseScrolling: event.hasPreciseScrollingDeltas
+                            ))
+                        }
+                    )
+                    .frame(width: 20, height: 20)
+                }
+                // hover 覆盖滑轨、间隙与图标，鼠标上下移动不闪烁
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        isVolumeHovering = hovering
+                    }
+                }
+            }
+    }
+
+    private var loopButton: some View {
+        Button {
+            appState.isVideoLooping.toggle()
+        } label: {
+            Image(systemName: "repeat")
+                .font(.system(size: 13))
+                .frame(width: 20)
+                // 循环开启时用强调色高亮，关闭时置灰
+                .foregroundStyle(appState.isVideoLooping ? Color.accentColor : Color.secondary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(NSLocalizedString("Loop Playback", comment: ""))
     }
 }
