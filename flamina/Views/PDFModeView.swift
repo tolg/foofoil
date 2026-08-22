@@ -115,7 +115,6 @@ struct PDFModeView: NSViewRepresentable {
             let fittedScale = pdfView.scaleFactorForSizeToFit
             pdfView.scaleFactor = fittedScale
             appState.imageScale = Double(fittedScale)
-            appState.saveState()
         }
 
         private func handlePageChange(_ notification: Notification) {

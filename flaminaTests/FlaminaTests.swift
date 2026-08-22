@@ -359,6 +359,43 @@ struct FlaminaTests {
         #expect(fallback == AudioTrackInfo.fallbackPresentationSize)
     }
 
+    @Test func testHistoryMediaWindowMatchesContentAspect() {
+        // 已保存的 16:9 窗口应原样保留，不能按初始规则重算大小
+        let saved = FloatingWindowController.sizeMatchingContentAspect(
+            current: NSSize(width: 960, height: 540),
+            content: NSSize(width: 1920, height: 1080)
+        )
+        #expect(saved.width == 960)
+        #expect(saved.height == 540)
+
+        // 比例不对时沿更接近已保存尺寸的一边校正
+        let wide = FloatingWindowController.sizeMatchingContentAspect(
+            current: NSSize(width: 400, height: 400),
+            content: NSSize(width: 1920, height: 1080)
+        )
+        #expect(abs(wide.width / wide.height - 16.0 / 9.0) < 0.001)
+        #expect(abs(wide.width - 400) < 0.001)
+
+        let tall = FloatingWindowController.sizeMatchingContentAspect(
+            current: NSSize(width: 400, height: 400),
+            content: NSSize(width: 400, height: 500)
+        )
+        #expect(abs(tall.width / tall.height - 0.8) < 0.001)
+
+        let alreadyMatching = FloatingWindowController.sizeMatchingContentAspect(
+            current: NSSize(width: 640, height: 360),
+            content: NSSize(width: 1920, height: 1080)
+        )
+        #expect(alreadyMatching.width == 640)
+        #expect(alreadyMatching.height == 360)
+
+        let photo = FloatingWindowController.sizeMatchingContentAspect(
+            current: NSSize(width: 400, height: 400),
+            content: NSSize(width: 3000, height: 2000)
+        )
+        #expect(abs(photo.width / photo.height - 1.5) < 0.001)
+    }
+
     @Test func testAudioMetadataFormatters() {
         #expect(AudioMetadataLoader.formatSampleRate(44100) == String(format: NSLocalizedString("%@ kHz", comment: ""), "44.1"))
         #expect(AudioMetadataLoader.formatSampleRate(48000) == String(format: NSLocalizedString("%@ kHz", comment: ""), "48"))

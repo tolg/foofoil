@@ -148,18 +148,8 @@ public class FloatingWindow: NSWindow {
                         super.sendEvent(event)
                         return
                     }
-                    // 图片/无边框视频模式：缩放内容大小
-                    let newScale = appState.imageScale * Double(factor)
-                    appState.imageScale = AppState.clampImageScale(newScale)
-
-                    if !appState.showBorder {
-                        NotificationCenter.default.post(
-                            name: .shouldFitWindowToImage,
-                            object: nil,
-                            userInfo: ["id": appState.id, "animated": false]
-                        )
-                    }
-                    appState.saveState()
+                    // 图片/无边框视频：只改缩放与窗口，结束后再写入历史（与音频窗口缩放一致）。
+                    controller.applyInteractiveImageZoom(factor: factor)
                 } else {
                     // 非图片模式（网页、文本、Markdown、音频、有边框视频）：缩放窗口
                     let currentSize = self.frame.size
@@ -168,33 +158,49 @@ public class FloatingWindow: NSWindow {
                         height: currentSize.height * factor
                     )
                     controller.setWindowSize(targetSize, keepWidth: false, animated: false)
-                    controller.scheduleWindowFrameSave()
+                    controller.scheduleInteractiveZoomCommit()
                 }
             }
             return
         }
 
-        // 处理手势捏合（仅非图片模式拦截；视频画面随窗口自适应，因此按窗口缩放处理）
-        if event.type == .magnify {
-            if let controller = self.windowController as? FloatingWindowController,
-               (controller.appState.imageURL == nil || controller.appState.isExternalMediaDocument || controller.appState.webURL != nil) {
+        // 触摸板捏合：图片改内容缩放（无边框时同步窗口）；其余模式只改窗口大小。过程中不写历史。
+        if event.type == .magnify, let controller = self.windowController as? FloatingWindowController {
+            let appState = controller.appState
+            let isImageMagnify = appState.imageURL != nil
+                && appState.webURL == nil
+                && !appState.isExternalMediaDocument
+                && !appState.isPDFDocument
+            let isWindowMagnify = appState.imageURL == nil
+                || appState.isExternalMediaDocument
+                || appState.webURL != nil
+                || (appState.isPDFDocument && !appState.showBorder)
 
+            if isImageMagnify || isWindowMagnify {
                 let phase = event.phase
                 if phase.contains(.began) {
                     currentAccumulatedMagnification = 1.0
-                } else if phase.contains(.changed) {
+                } else if phase.contains(.changed) || phase.isEmpty {
                     currentAccumulatedMagnification += event.magnification
-                    NotificationCenter.default.post(
-                        name: .shouldResizeWindowWithPinch,
-                        object: nil,
-                        userInfo: ["id": controller.appState.id, "magnification": currentAccumulatedMagnification]
-                    )
+                    if isImageMagnify {
+                        controller.applyInteractiveImageMagnification(currentAccumulatedMagnification)
+                    } else {
+                        NotificationCenter.default.post(
+                            name: .shouldResizeWindowWithPinch,
+                            object: nil,
+                            userInfo: ["id": appState.id, "magnification": currentAccumulatedMagnification]
+                        )
+                    }
                 } else if phase.contains(.ended) || phase.contains(.cancelled) {
-                    NotificationCenter.default.post(
-                        name: .shouldEndWindowPinchResize,
-                        object: nil,
-                        userInfo: ["id": controller.appState.id]
-                    )
+                    if isImageMagnify {
+                        controller.finishInteractiveImageMagnification()
+                    } else {
+                        NotificationCenter.default.post(
+                            name: .shouldEndWindowPinchResize,
+                            object: nil,
+                            userInfo: ["id": appState.id]
+                        )
+                    }
                     currentAccumulatedMagnification = 1.0
                 }
                 return

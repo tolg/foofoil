@@ -17,6 +17,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private var isRestoringFrame = false
     private var isLiveResizing = false
     private var pendingFrameSave: DispatchWorkItem?
+    private var pendingZoomCommit: DispatchWorkItem?
     private var currentImageSize: NSSize? // 缓存当前加载的图片原始尺寸
     private var currentMediaSize: NSSize? // 缓存视频原始尺寸或音频封面/默认卡片尺寸
     private let borderedImageInset: CGFloat = 24
@@ -24,9 +25,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private let initialImageScreenLimit: CGFloat = 0.8
     private var isFirstImageURLChange = true
     private var isRestoringSavedImageFrame = false
+    /// 正在恢复历史窗口框：跳过初始自适应，保留已保存的位置与大小。
+    private var pendingSavedFrameRestore = false
     private var isFirstWebURLChange = true
     private var isRestoringSavedWebFrame = false
     private var pinchResizeInitialSize: NSSize?
+    /// 图片捏合开始时的缩放，手势结束前相对此值计算。
+    private var pinchImageBaseScale: Double?
     private var pdfResizeInitialSize: NSSize?
     private var pendingPDFFitWorkItem: DispatchWorkItem?
     private var currentPDFPageSize: NSSize?
@@ -35,6 +40,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         self.appState = appState
         self.isRestoringSavedImageFrame = (appState.windowFrame != nil && appState.imageURL != nil)
         self.isRestoringSavedWebFrame = (appState.windowFrame != nil && appState.webURL != nil)
+        self.pendingSavedFrameRestore = self.isRestoringSavedImageFrame
 
         // 初始大小默认 400x400，如果是网页模式则默认 512x512
         let width: CGFloat = appState.webURL != nil ? 512 : 400
@@ -68,7 +74,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                     self.currentMediaSize = size
                 }
             } else if let nsImage = appState.loadImage(from: url) {
-                self.currentImageSize = nsImage.size
+                self.currentImageSize = AudioMetadataLoader.reliableImageSize(nsImage) ?? nsImage.size
             }
         }
 
@@ -102,7 +108,11 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                         }
                     } else {
                         self.currentMediaSize = nil
-                        self.currentImageSize = self.appState.loadImage(from: url)?.size
+                        if let image = self.appState.loadImage(from: url) {
+                            self.currentImageSize = AudioMetadataLoader.reliableImageSize(image) ?? image.size
+                        } else {
+                            self.currentImageSize = nil
+                        }
                     }
                 }
             }
@@ -134,32 +144,25 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 self.isFirstImageURLChange = false
 
                 DispatchQueue.main.async {
-                    // 如果是正在从历史记录恢复窗口大小，或者是初次启动恢复保存的窗口大小，我们都不执行自适应大小调整，以保留关闭时的大小
-                    if self.isRestoringFrame {
-                        return
-                    }
                     if self.appState.isExternalMediaDocument {
-                        // 视频尺寸或音频封面需异步读取；先写入 currentMediaSize，避免随后 setFrame 时仍按默认 400×400 锁比例。
                         self.fetchMediaPresentationSize(for: url) { size in
                             guard self.appState.imageURL == url, let size else { return }
-                            self.currentMediaSize = size
-                            if self.isRestoringFrame || self.isLiveResizing { return }
-                            if isFirst && self.isRestoringSavedImageFrame {
-                                // 音频恢复上次大小时仍校正为封面比例，避免封面与控件被裁切。
-                                if self.appState.isAudioDocument {
-                                    self.matchWindowAspectToContent(size)
-                                }
-                                return
+                            self.applyMediaPresentationSize(size, animated: !isFirst)
+                        }
+                        return
+                    }
+                    // 恢复历史窗口框时不要按图片原始尺寸重算大小，但仍要按图片校正比例。
+                    if self.isRestoringFrame || self.pendingSavedFrameRestore || (isFirst && self.isRestoringSavedImageFrame) {
+                        if !self.isRestoringFrame {
+                            self.pendingSavedFrameRestore = false
+                            if let size = self.imageContentSize(at: url) {
+                                self.restoreSavedMediaFrameIfNeeded(contentSize: size)
                             }
-                            self.initializeImageLayout(imageSize: size, animated: !isFirst)
                         }
-                    } else {
-                        if isFirst && self.isRestoringSavedImageFrame {
-                            return
-                        }
-                        if let nsImage = self.appState.loadImage(from: url) {
-                            self.initializeImageLayout(imageSize: nsImage.size, animated: !isFirst)
-                        }
+                        return
+                    }
+                    if let size = self.imageContentSize(at: url) {
+                        self.initializeImageLayout(imageSize: size, animated: !isFirst)
                     }
                 }
             }
@@ -248,11 +251,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                    targetId == self.appState.id,
                    let frameString = notification.userInfo?["frame"] as? String {
                     self.isRestoringFrame = true
+                    self.pendingSavedFrameRestore = true
                     DispatchQueue.main.async {
                         self.window?.setFrame(from: frameString)
                         // 在主线程下一个循环中重置标志位，确保只屏蔽本次因历史记录载入触发的 imageURL 自动大小调整
                         DispatchQueue.main.async {
                             self.isRestoringFrame = false
+                            self.correctRestoredContentWindowAspect()
                         }
                     }
                 }
@@ -331,7 +336,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                       targetId == self.appState.id else { return }
 
                 self.pinchResizeInitialSize = nil
-                self.scheduleWindowFrameSave()
+                self.commitInteractiveZoom()
             }
             .store(in: &cancellables)
 
@@ -418,6 +423,59 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Cmd+滚轮缩放图片：过程中不写历史，停手后再落盘。
+    func applyInteractiveImageZoom(factor: CGFloat) {
+        pinchImageBaseScale = nil
+        beginInteractiveZoom()
+        appState.imageScale = AppState.clampImageScale(appState.imageScale * Double(factor))
+        if !appState.showBorder {
+            fitWindowToCurrentImageSize(animated: false)
+        }
+        scheduleInteractiveZoomCommit()
+    }
+
+    /// 触摸板捏合：magnification 相对手势起点，1 为开始时的大小。
+    func applyInteractiveImageMagnification(_ magnification: CGFloat) {
+        beginInteractiveZoom()
+        if pinchImageBaseScale == nil {
+            pinchImageBaseScale = appState.imageScale
+        }
+        appState.imageScale = AppState.clampImageScale((pinchImageBaseScale ?? 1) * Double(magnification))
+        if !appState.showBorder {
+            fitWindowToCurrentImageSize(animated: false)
+        }
+        scheduleInteractiveZoomCommit()
+    }
+
+    func finishInteractiveImageMagnification() {
+        pinchImageBaseScale = nil
+        commitInteractiveZoom()
+    }
+
+    private func beginInteractiveZoom() {
+        appState.isInteractiveZooming = true
+    }
+
+    func commitInteractiveZoom() {
+        pendingZoomCommit?.cancel()
+        pendingZoomCommit = nil
+        pinchImageBaseScale = nil
+        appState.isInteractiveZooming = false
+        if let window = window {
+            appState.windowFrame = window.frameDescriptor
+        }
+        appState.saveState()
+    }
+
+    func scheduleInteractiveZoomCommit() {
+        pendingZoomCommit?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.commitInteractiveZoom()
+        }
+        pendingZoomCommit = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
+    }
+
     public func fitWindowToCurrentImageSize(showBorderOverride: Bool? = nil, animated: Bool = true) {
         guard let contentSize = currentContentSize() else { return }
         let displaySize = displaySize(for: contentSize, scale: appState.imageScale)
@@ -470,7 +528,19 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         if appState.isExternalMediaDocument {
             return currentMediaSize
         }
-        return currentImage()?.size
+        if let cached = currentImageSize, cached.width > 0, cached.height > 0 {
+            return cached
+        }
+        guard let image = currentImage() else { return nil }
+        return AudioMetadataLoader.reliableImageSize(image) ?? image.size
+    }
+
+    private func imageContentSize(at url: URL) -> NSSize? {
+        guard let image = appState.loadImage(from: url) else { return nil }
+        let size = AudioMetadataLoader.reliableImageSize(image) ?? image.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        currentImageSize = size
+        return size
     }
 
     /// 异步读取媒体展示尺寸：视频用画面尺寸，音频用封面或默认卡片尺寸。
@@ -689,7 +759,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             NSSize(width: $0.visibleFrame.width, height: $0.visibleFrame.height)
         }
 
-        // 程序化 setFrame（例如按封面初始化）不要用当前窗口比例去改目标尺寸。
+        // 用户拖拽且内容锁定比例时，按画面/封面改目标尺寸。
         if isLiveResizing, let ratioSize = constrainedContentAspectSize(), ratioSize.width > 0, ratioSize.height > 0 {
             let ratio = ratioSize.width / ratioSize.height
             let dw = abs(size.width - sender.frame.width)
@@ -699,16 +769,10 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             } else {
                 size.width = size.height * ratio
             }
-            return clampedSizePreservingAspect(size, minSize: minSize, maxSize: maxSize)
         }
 
-        if let maxSize, maxSize.width > 0, maxSize.height > 0 {
-            size.width = min(size.width, maxSize.width)
-            size.height = min(size.height, maxSize.height)
-        }
-        size.width = max(minSize.width, size.width)
-        size.height = max(minSize.height, size.height)
-        return sanitizedWindowSize(size, fallback: sender.frame.size)
+        // 程序化 setFrame（恢复历史、按内容初始化）保持目标自身比例，避免分别夹紧宽高把图片拉扁。
+        return clampedSizePreservingAspect(size, minSize: minSize, maxSize: maxSize)
     }
 
     public func windowDidEndLiveResize(_ notification: Notification) {
@@ -733,6 +797,11 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
     public func windowWillClose(_ notification: Notification) {
         pendingFrameSave?.cancel()
+        pendingZoomCommit?.cancel()
+        pinchImageBaseScale = nil
+        if appState.isInteractiveZooming {
+            appState.isInteractiveZooming = false
+        }
         if let window = window {
             appState.windowFrame = window.frameDescriptor
         }
@@ -776,25 +845,60 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         return contentSize
     }
 
-    /// 保持内容宽高比的前提下，把窗口校正到当前尺寸附近。
-    private func matchWindowAspectToContent(_ contentSize: NSSize) {
-        guard let window = window,
-              contentSize.width > 0,
-              contentSize.height > 0 else { return }
+    /// 把已读取的媒体尺寸套到当前窗口：恢复历史时保留已保存大小，新打开则按初始规则适配。
+    private func applyMediaPresentationSize(_ size: NSSize, animated: Bool) {
+        currentMediaSize = size
+        guard !isLiveResizing else { return }
+        if isRestoringFrame {
+            return
+        }
+        if pendingSavedFrameRestore {
+            pendingSavedFrameRestore = false
+            restoreSavedMediaFrameIfNeeded(contentSize: size)
+            return
+        }
+        initializeImageLayout(imageSize: size, animated: animated)
+    }
 
-        let contentRatio = contentSize.width / contentSize.height
+    /// 历史窗口框已经 setFrame 之后，仅在比例明显不对时按已保存尺寸就近校正。
+    private func correctRestoredContentWindowAspect() {
+        if appState.isExternalMediaDocument {
+            if let size = currentMediaSize {
+                pendingSavedFrameRestore = false
+                restoreSavedMediaFrameIfNeeded(contentSize: size)
+            }
+            return
+        }
+        guard isImageMode, !appState.isPDFDocument, let url = appState.imageURL,
+              let size = imageContentSize(at: url) else { return }
+        pendingSavedFrameRestore = false
+        restoreSavedMediaFrameIfNeeded(contentSize: size)
+    }
+
+    /// 保留已保存窗口大小；仅当宽高比与画面/封面差得太多时，沿更接近的一边改比例。
+    private func restoreSavedMediaFrameIfNeeded(contentSize: NSSize) {
+        guard let window = window else { return }
         let currentSize = window.frame.size
-        guard currentSize.width > 0, currentSize.height > 0 else { return }
-        guard abs(currentSize.width / currentSize.height - contentRatio) > 0.001 else { return }
-
-        let sizeKeepingWidth = NSSize(width: currentSize.width, height: currentSize.width / contentRatio)
-        let sizeKeepingHeight = NSSize(width: currentSize.height * contentRatio, height: currentSize.height)
-        // 取面积更大的一侧，避免把窗口压得更小导致封面和控件显示不全。
-        let targetSize = sizeKeepingWidth.width * sizeKeepingWidth.height
-            >= sizeKeepingHeight.width * sizeKeepingHeight.height
-            ? sizeKeepingWidth
-            : sizeKeepingHeight
+        let targetSize = Self.sizeMatchingContentAspect(current: currentSize, content: contentSize)
+        guard abs(targetSize.width - currentSize.width) > 0.5 || abs(targetSize.height - currentSize.height) > 0.5 else { return }
         setWindowSize(targetSize, keepWidth: false, animated: false)
+    }
+
+    /// 已保存尺寸比例足够接近内容时原样返回；否则改成内容比例，并选择偏离当前宽高更小的一侧。
+    static func sizeMatchingContentAspect(current: NSSize, content: NSSize) -> NSSize {
+        guard content.width > 0, content.height > 0, current.width > 0, current.height > 0 else {
+            return current
+        }
+        let contentRatio = content.width / content.height
+        let currentRatio = current.width / current.height
+        if abs(currentRatio - contentRatio) / contentRatio <= 0.02 {
+            return current
+        }
+        let keepWidth = NSSize(width: current.width, height: current.width / contentRatio)
+        let keepHeight = NSSize(width: current.height * contentRatio, height: current.height)
+        let widthDelta = abs(keepWidth.height - current.height)
+        let heightDelta = abs(keepHeight.width - current.width)
+        return widthDelta <= heightDelta ? keepWidth : keepHeight
     }
 
     /// 等比缩放，避免分别夹紧宽高把封面比例拉扁。

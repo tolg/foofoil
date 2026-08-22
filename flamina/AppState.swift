@@ -260,8 +260,10 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             let clamped = Self.clampTextFontSize(textFontSize)
             if clamped != textFontSize {
                 textFontSize = clamped
-            } else {
+            } else if !isInteractiveZooming {
                 saveState()
+                updateRenderedMarkdown()
+            } else {
                 updateRenderedMarkdown()
             }
         }
@@ -272,7 +274,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             let clamped = Self.clampWebZoom(webZoom)
             if clamped != webZoom {
                 webZoom = clamped
-            } else {
+            } else if !isInteractiveZooming {
                 saveState()
             }
         }

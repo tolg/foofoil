@@ -12,9 +12,6 @@ struct ImageModeView: View {
     let nsImage: NSImage
     let shouldHideBorder: Bool
 
-    @State private var isPinching = false
-    @State private var baseScale: Double = 1.0
-
     var body: some View {
         Group {
             if shouldHideBorder {
@@ -29,35 +26,11 @@ struct ImageModeView: View {
                         width: nsImage.size.width * CGFloat(appState.imageScale),
                         height: nsImage.size.height * CGFloat(appState.imageScale)
                     )
+                    .transaction { $0.animation = nil }
                 }
                 .padding(8) // 移至 ScrollView 外部，确保在滚动时边框始终保持同样粗细（12 像素）。
             }
         }
-        .simultaneousGesture(
-            MagnificationGesture()
-                .onChanged { value in
-                    if !isPinching {
-                        isPinching = true
-                        baseScale = appState.imageScale
-                    }
-                    let newScale = baseScale * Double(value)
-                    appState.isInteractiveZooming = true
-                    appState.imageScale = AppState.clampImageScale(newScale)
-
-                    if !appState.showBorder {
-                        NotificationCenter.default.post(
-                            name: .shouldFitWindowToImage,
-                            object: nil,
-                            userInfo: ["id": appState.id, "animated": false]
-                        )
-                    }
-                }
-                .onEnded { _ in
-                    appState.isInteractiveZooming = false
-                    appState.saveState()
-                    isPinching = false
-                }
-        )
     }
 
     @ViewBuilder
