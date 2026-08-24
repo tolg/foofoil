@@ -165,10 +165,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.markonce.flamina</string>
+			<string>com.markonce.foofoil</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>flamina</string>
+				<string>foofoil</string>
 			</array>
 		</dict>
 	</array>

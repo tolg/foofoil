@@ -1,13 +1,13 @@
 #!/bin/zsh
 #
-# run - 构建并启动 Flamina，替代 Xcode 的 Run 按钮。
+# run - 构建并启动 foofoil，替代 Xcode 的 Run 按钮。
 # 如果已有正在运行的实例，会先终止所有实例再重新启动。
 
 set -euo pipefail
 
-PROJECT="flamina.xcodeproj"
-SCHEME="flamina"
-APP_NAME="Flamina"
+PROJECT="foofoil.xcodeproj"
+SCHEME="foofoil"
+APP_NAME="foofoil"
 DESTINATION='platform=macOS'
 
 SCRIPT_DIR="${0:A:h}"

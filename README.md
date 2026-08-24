@@ -1,14 +1,15 @@
-# Flamina 浮箔
+# foofoil 浮箔
+
+**Anything, right where you need it.**
+**给你的桌面降维。**
 
 [简体中文](README.zh-CN.md)
 
-Flamina is a lightweight reference app for macOS that keeps images, videos, audio, documents, notes, and web content visible in minimal floating windows while you work.
+foofoil is a lightweight reference app for macOS that keeps images, videos, audio, documents, notes, and web content visible in minimal floating windows — called foils — while you work.
 
-The name Flamina comes from *floating lamina*: a thin layer of content that can rest anywhere in your workspace, without the visual weight of a traditional window.
+The name **foofoil** combines *foo* — the familiar placeholder for anything or arbitrary content — with *foil*, a thin sheet that carries whatever you put on it. It reflects a simple idea: whatever the content is, keep it lightweight and right where you need it.
 
-In Chinese, Flamina is called 浮箔 (Fú Bó), evoking the same idea of a lightweight, paper-thin layer that stays close at hand without getting in the way.
-
-Built with SwiftUI and AppKit, Flamina favors native macOS capabilities, fast interaction, and a small dependency footprint.
+Built with SwiftUI and AppKit, foofoil favors native macOS capabilities, fast interaction, and a small dependency footprint.
 
 ## Features
 
@@ -26,9 +27,9 @@ Built with SwiftUI and AppKit, Flamina favors native macOS capabilities, fast in
 
 ## Quick Start
 
-Launch Flamina and then use any of these methods:
+Launch foofoil and then use any of these methods:
 
-- Drag a supported file, image, or text onto a Flamina window.
+- Drag a supported file, image, or text onto a foofoil window.
 - Choose **File > Open** (<kbd>⌘ O</kbd>) to open a local file.
 - Choose **File > Open URL** (<kbd>⌘ L</kbd>) to display a web page.
 - Choose **File > Open Clipboard Image** (<kbd>⇧ ⌘ V</kbd>) to create a reference from the clipboard.
@@ -40,7 +41,7 @@ Right-click a window to access the most relevant actions for its current content
 
 | Action | Shortcut |
 | --- | --- |
-| New Flamina window | <kbd>⌘ N</kbd> |
+| New foofoil window | <kbd>⌘ N</kbd> |
 | Open a file | <kbd>⌘ O</kbd> |
 | Open a URL | <kbd>⌘ L</kbd> |
 | Open clipboard image | <kbd>⇧ ⌘ V</kbd> |
@@ -62,8 +63,8 @@ Additional content-specific and window-position shortcuts are available from the
 
 ## Build from Source
 
-1. Open `flamina.xcodeproj` in Xcode.
-2. Select the `flamina` scheme and the **My Mac** destination.
+1. Open `foofoil.xcodeproj` in Xcode.
+2. Select the `foofoil` scheme and the **My Mac** destination.
 3. Configure a development signing team if Xcode requests one.
 4. Build and run the project.
 
@@ -71,8 +72,8 @@ To build from the command line:
 
 ```sh
 xcodebuild build \
-  -project flamina.xcodeproj \
-  -scheme flamina \
+  -project foofoil.xcodeproj \
+  -scheme foofoil \
   -configuration Debug \
   -destination 'platform=macOS'
 ```
@@ -81,16 +82,16 @@ To run the test suite:
 
 ```sh
 xcodebuild test \
-  -project flamina.xcodeproj \
-  -scheme flamina \
+  -project foofoil.xcodeproj \
+  -scheme foofoil \
   -destination 'platform=macOS'
 ```
 
 ## Technology
 
-Flamina is implemented primarily with SwiftUI and uses AppKit for native floating-window, menu, text-control, and visual-effect behavior. Its content and search features use Apple frameworks including WebKit, PDFKit, Vision, ImageIO, Uniform Type Identifiers, and SQLite3. Markdown rendering uses the existing vendored cmark library.
+foofoil is implemented primarily with SwiftUI and uses AppKit for native floating-window, menu, text-control, and visual-effect behavior. Its content and search features use Apple frameworks including WebKit, PDFKit, Vision, ImageIO, Uniform Type Identifiers, and SQLite3. Markdown rendering uses the existing vendored cmark library.
 
-History and cached content are stored locally in the user's Application Support directory. OCR and indexing run on the device; Flamina only requires network access when displaying remote web content.
+History and cached content are stored locally in the user's Application Support directory. OCR and indexing run on the device; foofoil only requires network access when displaying remote web content.
 
 ## Development Principles
 
@@ -108,6 +109,6 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 ## License
 
-Flamina is licensed under the [MIT License](LICENSE), copyright © 2026 Beijing Memory Vision Technology Co., Ltd.
+foofoil is licensed under the [MIT License](LICENSE), copyright © 2026 Beijing Memory Vision Technology Co., Ltd.
 
 The bundled cmark library is distributed under its own permissive licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the required notices.

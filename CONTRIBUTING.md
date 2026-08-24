@@ -1,6 +1,6 @@
-# Contributing to Flamina
+# Contributing to foofoil
 
-Thank you for contributing to Flamina.
+Thank you for contributing to foofoil.
 
 ## Before You Start
 
@@ -19,8 +19,8 @@ Thank you for contributing to Flamina.
 
    ```sh
    xcodebuild test \
-     -project flamina.xcodeproj \
-     -scheme flamina \
+     -project foofoil.xcodeproj \
+     -scheme foofoil \
      -destination 'platform=macOS'
    ```
 
@@ -28,7 +28,7 @@ Thank you for contributing to Flamina.
 
 ## Licensing of Contributions
 
-Flamina is licensed under the [MIT License](LICENSE). By submitting a contribution, you agree that your contribution is provided under the same MIT License and that you have the right to grant that license.
+foofoil is licensed under the [MIT License](LICENSE). By submitting a contribution, you agree that your contribution is provided under the same MIT License and that you have the right to grant that license.
 
 Contributors retain attribution through Git history. File headers must identify the human contributor using the active `git config user.name`; agent, model, assistant, and tool names must not be used as authors.
 

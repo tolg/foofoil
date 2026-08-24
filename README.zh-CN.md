@@ -1,12 +1,15 @@
-# 浮箔 Flamina
+# 浮箔 foofoil
+
+**给你的桌面降维。**
+**Anything, right where you need it.**
 
 [English](README.md)
 
 浮箔是一款轻量级 macOS 悬浮参考应用。它可以把图片、视频、音频、文档、笔记和网页内容放在极简悬浮窗口中，让参考资料在工作时始终触手可及。
 
-「浮箔」之名取自悬浮的薄片：一层可以停放在工作区任意位置的轻量内容，没有传统窗口的视觉负担。
+「浮箔」之名取自内容在桌面上的存在方式：它们像一张张轻薄的箔片，浮在工作区中，需要时触手可及，又尽可能不带来传统窗口的视觉负担及复杂的操作逻辑。
 
-其英文名 Flamina 源自 *floating lamina*，同样传达薄如纸片、触手可及又不碍事的轻盈之意。
+“箔”的意象也来自刘慈欣《三体》中的“二向箔”——将复杂的世界压成轻薄的一层。于是有了浮箔的 slogan：**给你的桌面降维。**
 
 浮箔使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
 
@@ -62,8 +65,8 @@
 
 ## 从源码构建
 
-1. 使用 Xcode 打开 `flamina.xcodeproj`。
-2. 选择 `flamina` Scheme 和 **My Mac** 运行目标。
+1. 使用 Xcode 打开 `foofoil.xcodeproj`。
+2. 选择 `foofoil` Scheme 和 **My Mac** 运行目标。
 3. 如果 Xcode 提示签名问题，请配置开发者签名团队。
 4. 构建并运行项目。
 
@@ -71,8 +74,8 @@
 
 ```sh
 xcodebuild build \
-  -project flamina.xcodeproj \
-  -scheme flamina \
+  -project foofoil.xcodeproj \
+  -scheme foofoil \
   -configuration Debug \
   -destination 'platform=macOS'
 ```
@@ -81,8 +84,8 @@ xcodebuild build \
 
 ```sh
 xcodebuild test \
-  -project flamina.xcodeproj \
-  -scheme flamina \
+  -project foofoil.xcodeproj \
+  -scheme foofoil \
   -destination 'platform=macOS'
 ```
 

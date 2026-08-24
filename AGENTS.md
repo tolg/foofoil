@@ -1,26 +1,26 @@
-# Agent Instructions for Flamina
+# Agent Instructions for foofoil
 
 ## Project Overview
 
-Flamina is a lightweight macOS reference app built for keeping useful content visible while working. It presents content in minimal floating windows that can be borderless, resizable, draggable, translucent, and pinned above other windows.
+foofoil is a lightweight macOS reference app built for keeping useful content visible while working. It presents content in minimal floating windows that can be borderless, resizable, draggable, translucent, and pinned above other windows.
 
 The app is written in Swift and uses SwiftUI for most interface code, with AppKit where direct macOS window, menu, text, or visual-effect control is required. It also uses native Apple frameworks for web content, PDFs, OCR, images, file types, and persistence.
 
 ## Core Product Principles
 
-1. **Keep Flamina lightweight.** Favor small, focused implementations with low runtime, memory, launch-time, and binary-size costs. Do not add infrastructure that is disproportionate to the feature.
+1. **Keep foofoil lightweight.** Favor small, focused implementations with low runtime, memory, launch-time, and binary-size costs. Do not add infrastructure that is disproportionate to the feature.
 2. **Use macOS capabilities first.** Prefer SwiftUI, AppKit, Foundation, WebKit, PDFKit, Vision, ImageIO, Uniform Type Identifiers, SQLite3, and other system APIs before considering custom or third-party solutions.
 3. **Avoid heavyweight dependencies.** Do not add a package, framework, service, build tool, or generated abstraction unless native APIs cannot reasonably meet the requirement. Any new dependency must have a clear benefit, a narrow scope, and an acceptable maintenance and distribution cost.
-4. **Preserve the native macOS experience.** Follow platform conventions for menus, keyboard shortcuts, focus, file opening, window behavior, accessibility, appearance, and input handling, while retaining Flamina's minimal borderless design.
+4. **Preserve the native macOS experience.** Follow platform conventions for menus, keyboard shortcuts, focus, file opening, window behavior, accessibility, appearance, and input handling, while retaining foofoil's minimal borderless design.
 5. **Prefer incremental change.** Reuse existing components and patterns, keep diffs focused, and avoid unrelated refactors.
 
 ## Architecture and Implementation Guidelines
 
-- Use SwiftUI for declarative views and ordinary state-driven UI. Bridge to AppKit only when SwiftUI does not provide the windowing or control behavior Flamina needs.
+- Use SwiftUI for declarative views and ordinary state-driven UI. Bridge to AppKit only when SwiftUI does not provide the windowing or control behavior foofoil needs.
 - Keep window behavior in the existing floating-window/controller layer and content state in `AppState`; avoid duplicating window lifecycle or content-mode state inside individual views.
 - Use `SettingsStore` or `UserDefaults` for simple user preferences and restorable window state. Use the existing history repository and SQLite database for searchable history data; do not introduce another persistence layer for the same domain.
 - Maintain backward-compatible decoding and sensible defaults when adding fields to persisted models such as `WindowConfig`. Existing user data must continue to load.
-- Keep file and cache ownership explicit. Store app-managed files in the established Application Support or cache locations, and remove only files Flamina owns.
+- Keep file and cache ownership explicit. Store app-managed files in the established Application Support or cache locations, and remove only files foofoil owns.
 - Keep expensive I/O, indexing, OCR, PDF processing, and database work off the main thread. UI and AppKit mutations must remain on the main actor/thread.
 - Respect Swift concurrency isolation. Prefer structured concurrency and existing queues over detached or unbounded background work.
 - Avoid premature abstractions. Introduce a type or protocol when it clarifies an actual boundary or enables testing, not merely to wrap a native API.
@@ -38,13 +38,13 @@ The app is written in Swift and uses SwiftUI for most interface code, with AppKi
 ## Localization
 
 - All user-facing strings must be localizable. Do not hard-code visible text in Swift.
-- When adding or changing UI text, update `flamina/Localizable.xcstrings` and keep the English and Simplified Chinese translations complete.
-- Update `flamina/InfoPlist.xcstrings` when changing localized metadata from the property list.
+- When adding or changing UI text, update `foofoil/Localizable.xcstrings` and keep the English and Simplified Chinese translations complete.
+- Update `foofoil/InfoPlist.xcstrings` when changing localized metadata from the property list.
 - Avoid assembling translated sentences from fragments. Use format placeholders and translator-friendly context where needed.
 
 ## Dependencies and Assets
 
-- Flamina source code is distributed under the MIT License. Ensure new code and assets can legally be distributed under that license, and preserve all required third-party notices.
+- foofoil source code is distributed under the MIT License. Ensure new code and assets can legally be distributed under that license, and preserve all required third-party notices.
 - The default decision for a new third-party dependency is **no**. First document why Apple frameworks or a small local implementation are insufficient.
 - Prefer dependencies that can be removed cleanly and that do not require a separate runtime, background service, or broad transitive dependency graph.
 - Do not replace or expand the existing vendored cmark integration casually; evaluate binary size, licensing, security, and maintenance impact before changing it.
@@ -54,11 +54,11 @@ The app is written in Swift and uses SwiftUI for most interface code, with AppKi
 ## Testing and Verification
 
 - Add or update focused tests for behavior changes, persistence migrations, parsing, history/search behavior, and regressions.
-- Prefer the Swift Testing framework for unit tests already under `flaminaTests`; use XCTest for UI tests under `flaminaUITests`.
+- Prefer the Swift Testing framework for unit tests already under `foofoilTests`; use XCTest for UI tests under `foofoilUITests`.
 - Build the app and run the relevant tests before considering a change complete. A typical full verification command is:
 
   ```sh
-  xcodebuild test -project flamina.xcodeproj -scheme flamina -destination 'platform=macOS'
+  xcodebuild test -project foofoil.xcodeproj -scheme foofoil -destination 'platform=macOS'
   ```
 
 - For window interaction, menus, drag and drop, keyboard handling, or visual changes that are impractical to cover with unit tests, perform a focused manual check and report what was verified.

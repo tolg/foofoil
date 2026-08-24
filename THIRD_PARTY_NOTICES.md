@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Flamina includes the following third-party software. These notices are provided for attribution and do not change the MIT License that applies to Flamina's original source code.
+foofoil includes the following third-party software. These notices are provided for attribution and do not change the MIT License that applies to foofoil's original source code.
 
 ## cmark 0.31.2
 
