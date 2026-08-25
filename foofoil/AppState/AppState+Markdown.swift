@@ -13,6 +13,25 @@ import UniformTypeIdentifiers
 import ImageIO
 import SwiftUI
 
+extension NSAttributedString.Key {
+    /// 由 MarkdownTextView 绘制无底色圆角代码框，并在框内显示语言标签。
+    static let markdownCodeBlockLanguage = NSAttributedString.Key("foofoil.markdownCodeBlockLanguage")
+    /// 精确绘制行内代码背景，避免 AppKit 把背景扩张到整行或列表项目符号。
+    static let markdownInlineCodeBackground = NSAttributedString.Key("foofoil.markdownInlineCodeBackground")
+}
+
+private enum MarkdownRenderMarker {
+    nonisolated static let inlineCodeStart = "\u{F0010}"
+    nonisolated static let inlineCodeEnd = "\u{F0011}"
+    nonisolated static let codeBlockStart = "\u{F0012}"
+    nonisolated static let codeBlockLanguageEnd = "\u{F0013}"
+    nonisolated static let codeBlockEnd = "\u{F0014}"
+    nonisolated static let paragraphStart = "\u{F0015}"
+    nonisolated static let paragraphEnd = "\u{F0016}"
+    nonisolated static let quoteStart = "\u{F0017}"
+    nonisolated static let quoteEnd = "\u{F0018}"
+}
+
 
 extension AppState {
 
@@ -50,103 +69,170 @@ extension AppState {
                 if Task.isCancelled { return }
 
                 // 根据当前明暗外观显式生成对应配色的 CSS，避免依赖 @media 查询导致 NSAttributedString 在后台解析时颜色固化
-                let textColor = isDark ? "#ffffff" : "#000000"
-                let borderColor = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"
-                let codeBg = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.06)"
-                let preBg = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.04)"
-                let blockquoteColor = isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.6)"
-                let blockquoteBorder = isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.2)"
-                let tableBorder = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)"
-                let thBg = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"
-                let trEvenBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)"
+                let textColor = isDark ? "#F0F3F6" : "#24292F"
+                let secondaryTextColor = isDark ? "#AAB4C0" : "#57606A"
+                let accentColor = isDark ? "#58A6FF" : "#0969DA"
+                let borderColor = isDark ? "#3D444D" : "#D0D7DE"
+                let inlineCodeColor = isDark ? "#E6EDF3" : "#1F2328"
+                let inlineCodeBackground = isDark ? "#2A3038" : "#EFF1F3"
+                let quoteBackground = isDark ? "#1C232C" : "#F6F8FA"
+                let tableHeaderBackground = isDark ? "#212830" : "#F0F3F6"
+                let tableStripeBackground = isDark ? "#1B2129" : "#FAFBFC"
+                // AppKit 会把 blockquote 的 CSS 背景错误转换为逐行文字底色；单列表格能稳定生成有边界的原生富文本块。
+                var styledHTMLBody = Self.markCodeRanges(in: htmlBody)
+                styledHTMLBody = styledHTMLBody
+                    .replacingOccurrences(
+                        of: "<blockquote>",
+                        with: "<table class=\"markdown-quote\"><tr><td>\(MarkdownRenderMarker.quoteStart)"
+                    )
+                    .replacingOccurrences(
+                        of: "</blockquote>",
+                        with: "\(MarkdownRenderMarker.quoteEnd)</td></tr></table>"
+                    )
+                    .replacingOccurrences(of: "<p>", with: "<p>\(MarkdownRenderMarker.paragraphStart)")
+                    .replacingOccurrences(of: "</p>", with: "\(MarkdownRenderMarker.paragraphEnd)</p>")
 
                 // 构建包含 CSS 的完整 HTML，支持自适应系统明暗主题与字号大小缩放
                 let htmlContent = """
                 <html>
                 <head>
                 <style>
-                body, p, li, blockquote {
+                html, body {
                     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
                     font-size: \(fontSize)px;
-                    line-height: 1.8;
+                    line-height: 1.45;
                     color: \(textColor);
                     background-color: transparent;
                 }
                 body {
                     margin: 0;
                     padding: 0;
+                    overflow-wrap: break-word;
+                }
+                a {
+                    color: \(accentColor);
+                    text-decoration: none;
                 }
                 p {
                     margin-top: 0;
-                    margin-bottom: 14px;
+                    margin-bottom: 0.8em;
                 }
                 h1, h2, h3, h4, h5, h6 {
-                    font-weight: 600;
-                    margin-top: 24px;
-                    margin-bottom: 16px;
-                    line-height: 1.25;
+                    color: \(textColor);
+                    font-weight: 650;
+                    margin-top: 1.35em;
+                    margin-bottom: 0.55em;
+                    line-height: 1.22;
                 }
-                h1 { font-size: 1.6em; border-bottom: 1px solid \(borderColor); padding-bottom: 0.3em; }
-                h2 { font-size: 1.4em; border-bottom: 1px solid \(borderColor); padding-bottom: 0.3em; }
-                h3 { font-size: 1.25em; }
-                h4 { font-size: 1.15em; }
+                h1 { font-size: 1.72em; border-bottom: 1px solid \(borderColor); padding-bottom: 0.32em; }
+                h2 { font-size: 1.42em; }
+                h3 { font-size: 1.2em; }
+                h4 { font-size: 1.08em; }
+                h5, h6 { font-size: 1em; color: \(secondaryTextColor); }
                 code {
-                    padding: 0.2em 0.4em;
+                    padding: 0;
                     margin: 0;
-                    font-size: 85%;
-                    background-color: \(codeBg);
-                    border-radius: 6px;
-                    font-family: Menlo, Consolas, monospace;
+                    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+                    font-size: 0.88em;
+                    color: \(inlineCodeColor);
+                    background-color: transparent;
+                    white-space: pre-wrap;
+                    overflow-wrap: anywhere;
+                    word-break: break-word;
                 }
                 pre {
-                    padding: 16px;
-                    overflow: auto;
-                    font-size: 85%;
-                    line-height: 1.45;
-                    background-color: \(preBg);
-                    border-radius: 6px;
+                    box-sizing: border-box;
+                    max-width: 100%;
+                    margin: 0;
+                    padding: 0 14px;
+                    overflow: hidden;
+                    white-space: pre-wrap;
+                    overflow-wrap: anywhere;
+                    word-break: break-word;
+                    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+                    font-size: 0.86em;
+                    line-height: 1.18;
+                    color: \(inlineCodeColor);
+                    background-color: transparent;
+                    border: 0;
                 }
                 pre code {
                     background-color: transparent;
+                    color: inherit;
                     padding: 0;
+                    margin: 0;
                     border-radius: 0;
-                }
-                blockquote {
-                    padding: 0 1em;
-                    color: \(blockquoteColor);
-                    border-left: 0.25em solid \(blockquoteBorder);
-                    margin: 0 0 16px 0;
+                    white-space: inherit;
+                    overflow-wrap: inherit;
+                    word-break: inherit;
                 }
                 ul, ol {
-                    padding-left: 2em;
-                    margin-top: 0;
-                    margin-bottom: 16px;
-                }
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 16px 0;
-                    font-size: 0.9em;
+                    padding-left: 1.65em;
+                    margin: 0 0 0.9em 0;
                     line-height: 1.5;
                 }
+                li {
+                    margin: 0.18em 0;
+                }
+                li::marker {
+                    color: \(secondaryTextColor);
+                }
+                hr {
+                    height: 0;
+                    margin: 1.5em 0;
+                    background-color: transparent;
+                    border: 0;
+                    border-top: 1px solid \(borderColor);
+                }
+                img {
+                    max-width: 100%;
+                    height: auto;
+                }
+                table {
+                    box-sizing: border-box;
+                    max-width: 100%;
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 1em 0 1.15em 0;
+                    font-size: 0.9em;
+                    line-height: 1.4;
+                }
                 th, td {
-                    border: 1px solid \(tableBorder);
-                    padding: 6px 10px;
+                    border: 1px solid \(borderColor);
+                    padding: 8px 10px;
                     text-align: left;
                     vertical-align: top;
                     word-break: break-word;
                 }
                 th {
-                    background-color: \(thBg);
-                    font-weight: 600;
+                    color: \(textColor);
+                    background-color: \(tableHeaderBackground);
+                    font-weight: 650;
                 }
                 tr:nth-child(even) td {
-                    background-color: \(trEvenBg);
+                    background-color: \(tableStripeBackground);
+                }
+                table.markdown-quote {
+                    width: 100%;
+                    margin: 0.85em 0 1em 0;
+                    border-collapse: collapse;
+                    font-size: 1em;
+                    line-height: 1.55;
+                }
+                table.markdown-quote td {
+                    padding: 10px 14px;
+                    color: \(secondaryTextColor);
+                    background-color: \(quoteBackground);
+                    border: 0;
+                    border-left: 3px solid \(accentColor);
+                }
+                table.markdown-quote p:last-child {
+                    margin-bottom: 0;
                 }
                 </style>
                 </head>
                 <body>
-                \(htmlBody)
+                \(styledHTMLBody)
                 </body>
                 </html>
                 """
@@ -158,25 +244,287 @@ extension AppState {
                            options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue],
                            documentAttributes: nil
                        ) {
-                        // 后处理：直接遍历并修改富文本段落样式 (NSParagraphStyle) 以强制行高和段落间距生效
+                        // HTML 导入器不会稳定保留普通段落行高；仅修正常规段落，避免覆盖引用、代码块、列表和表格的独立布局。
                         let mutableAttr = NSMutableAttributedString(attributedString: attr)
-                        let fullRange = NSRange(location: 0, length: mutableAttr.length)
 
+                        let fullRange = NSRange(location: 0, length: mutableAttr.length)
                         mutableAttr.enumerateAttribute(.paragraphStyle, in: fullRange, options: []) { value, range, _ in
                             let paragraphStyle = (value as? NSParagraphStyle) ?? NSParagraphStyle.default
                             let mutableParagraphStyle = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
 
-                            // 强制注入 1.45 倍行高
-                            mutableParagraphStyle.lineHeightMultiple = 1.45
-                            // 强制注入 12pt 段落底部留白
-                            mutableParagraphStyle.paragraphSpacing = 12.0
+                            if !mutableParagraphStyle.textLists.isEmpty {
+                                mutableParagraphStyle.lineHeightMultiple = 1.5
+                                mutableParagraphStyle.paragraphSpacing = max(
+                                    mutableParagraphStyle.paragraphSpacing,
+                                    fontSize * 0.22
+                                )
+                            } else if mutableParagraphStyle.textBlocks.isEmpty {
+                                mutableParagraphStyle.lineHeightMultiple = 1.42
+                                mutableParagraphStyle.paragraphSpacing = max(mutableParagraphStyle.paragraphSpacing, fontSize * 0.7)
+                            }
 
                             mutableAttr.addAttribute(.paragraphStyle, value: mutableParagraphStyle, range: range)
                         }
+
+                        Self.applyParagraphRangeStyles(to: mutableAttr, fontSize: fontSize)
+
+                        // 最后处理代码样式，使原生缩进和紧凑行高不再被普通段落规则覆盖。
+                        Self.applyCodeRangeStyles(
+                            to: mutableAttr,
+                            inlineBackground: NSColor(hex: inlineCodeBackground) ?? .quaternaryLabelColor
+                        )
                         self.renderedMarkdown = mutableAttr
                     } else {
                         self.renderedMarkdown = NSAttributedString(string: textToRender)
                     }
+                }
+            }
+        }
+
+        /// 为正文和引用建立精确范围，避免两端对齐误用于标题、表格与代码块。
+        private static func applyParagraphRangeStyles(
+            to attributedString: NSMutableAttributedString,
+            fontSize: CGFloat
+        ) {
+            applyMarkedParagraphStyle(
+                to: attributedString,
+                startMarker: MarkdownRenderMarker.paragraphStart,
+                endMarker: MarkdownRenderMarker.paragraphEnd
+            ) { style in
+                style.alignment = .justified
+            }
+
+            applyMarkedParagraphStyle(
+                to: attributedString,
+                startMarker: MarkdownRenderMarker.quoteStart,
+                endMarker: MarkdownRenderMarker.quoteEnd
+            ) { style in
+                style.alignment = .justified
+                style.minimumLineHeight = 0
+                style.maximumLineHeight = 0
+                style.lineSpacing = 0
+                style.lineHeightMultiple = 1.55
+                style.paragraphSpacing = max(style.paragraphSpacing, fontSize * 0.65)
+            }
+        }
+
+        /// 删除隐藏标记，并在其包围的原生段落上应用样式。
+        private static func applyMarkedParagraphStyle(
+            to attributedString: NSMutableAttributedString,
+            startMarker: String,
+            endMarker: String,
+            update: (NSMutableParagraphStyle) -> Void
+        ) {
+            while let start = attributedString.string.range(of: startMarker),
+                  let end = attributedString.string.range(
+                      of: endMarker,
+                      range: start.upperBound..<attributedString.string.endIndex
+                  ) {
+                let startRange = NSRange(start, in: attributedString.string)
+                let endRange = NSRange(end, in: attributedString.string)
+                attributedString.deleteCharacters(in: endRange)
+                attributedString.deleteCharacters(in: startRange)
+
+                let contentLength = endRange.location - NSMaxRange(startRange)
+                guard contentLength > 0 else { continue }
+                let contentRange = NSRange(location: startRange.location, length: contentLength)
+                var styles: [(NSRange, NSMutableParagraphStyle)] = []
+                attributedString.enumerateAttribute(.paragraphStyle, in: contentRange) { value, range, _ in
+                    let style = ((value as? NSParagraphStyle) ?? .default).mutableCopy() as! NSMutableParagraphStyle
+                    update(style)
+                    styles.append((range, style))
+                }
+                for (range, style) in styles {
+                    attributedString.addAttribute(.paragraphStyle, value: style, range: range)
+                }
+            }
+        }
+
+        /// 隔离 fenced code 与 inline code，避免 AppKit 的 HTML 导入器扩大背景和边框范围。
+        nonisolated private static func markCodeRanges(in html: String) -> String {
+            let pattern = #"<pre><code(?: class="language-([^"]+)")?>([\s\S]*?)</code></pre>"#
+            guard let regularExpression = try? NSRegularExpression(pattern: pattern) else { return html }
+
+            var result = html
+            let original = html as NSString
+            let matches = regularExpression.matches(
+                in: html,
+                range: NSRange(location: 0, length: original.length)
+            )
+
+            for match in matches.reversed() {
+                let language: String
+                if match.range(at: 1).location == NSNotFound {
+                    language = "CODE"
+                } else {
+                    language = original.substring(with: match.range(at: 1)).uppercased()
+                }
+                let code = original.substring(with: match.range(at: 2))
+                let replacement = "<pre>\(MarkdownRenderMarker.codeBlockStart)\(language)\(MarkdownRenderMarker.codeBlockLanguageEnd)<span class=\"markdown-code-content\">\(code)</span>\(MarkdownRenderMarker.codeBlockEnd)</pre>"
+                guard let range = Range(match.range, in: result) else { continue }
+                result.replaceSubrange(range, with: replacement)
+            }
+
+            return result
+                .replacingOccurrences(of: "<code>", with: "\(MarkdownRenderMarker.inlineCodeStart)<code>")
+                .replacingOccurrences(of: "</code>", with: "</code>\(MarkdownRenderMarker.inlineCodeEnd)")
+        }
+
+        /// 移除渲染标记，并把精确范围交给原生富文本与 MarkdownTextView 处理。
+        private static func applyCodeRangeStyles(
+            to attributedString: NSMutableAttributedString,
+            inlineBackground: NSColor
+        ) {
+            while let start = attributedString.string.range(of: MarkdownRenderMarker.codeBlockStart),
+                  let languageEnd = attributedString.string.range(
+                      of: MarkdownRenderMarker.codeBlockLanguageEnd,
+                      range: start.upperBound..<attributedString.string.endIndex
+                  ),
+                  let end = attributedString.string.range(
+                      of: MarkdownRenderMarker.codeBlockEnd,
+                      range: languageEnd.upperBound..<attributedString.string.endIndex
+                  ) {
+                let language = String(attributedString.string[start.upperBound..<languageEnd.lowerBound])
+                let startRange = NSRange(start, in: attributedString.string)
+                let languageEndRange = NSRange(languageEnd, in: attributedString.string)
+                let endRange = NSRange(end, in: attributedString.string)
+                let prefixRange = NSRange(
+                    location: startRange.location,
+                    length: NSMaxRange(languageEndRange) - startRange.location
+                )
+
+                let originalCodeLength = endRange.location - NSMaxRange(languageEndRange)
+                let label = language.uppercased()
+                let blockSpacer = "\u{200B}\n"
+                let blockSpacerLength = (blockSpacer as NSString).length
+                let labelLine = "\(label)\n"
+                let labelLineLength = (labelLine as NSString).length
+
+                attributedString.deleteCharacters(in: endRange)
+                // 独立间隔行位于边框范围外，避免 paragraphSpacing 被 AppKit 算进代码块内部。
+                attributedString.replaceCharacters(in: prefixRange, with: blockSpacer + labelLine)
+
+                let blockLocation = prefixRange.location + blockSpacerLength
+                let codeLocation = blockLocation + labelLineLength
+                var codeLength = originalCodeLength
+                // cmark 会在 fenced code 末尾保留换行；不把它纳入边框范围，避免底部出现一整行空白。
+                let renderedString = attributedString.string as NSString
+                while codeLength > 0 {
+                    let finalCharacter = renderedString.character(at: codeLocation + codeLength - 1)
+                    guard finalCharacter == 0x0A || finalCharacter == 0x0D else { break }
+                    codeLength -= 1
+                }
+                let blockRange = NSRange(
+                    location: blockLocation,
+                    length: labelLineLength + codeLength
+                )
+                if blockRange.length > 0 {
+                    if let value = attributedString.attribute(
+                        .paragraphStyle,
+                        at: prefixRange.location,
+                        effectiveRange: nil
+                    ), let spacerStyle = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+                        spacerStyle.minimumLineHeight = 10
+                        spacerStyle.maximumLineHeight = 10
+                        spacerStyle.lineHeightMultiple = 1
+                        spacerStyle.lineSpacing = 0
+                        spacerStyle.paragraphSpacing = 0
+                        spacerStyle.paragraphSpacingBefore = 0
+                        let spacerParagraphRange = (attributedString.string as NSString).paragraphRange(
+                            for: NSRange(location: prefixRange.location, length: 0)
+                        )
+                        attributedString.addAttribute(
+                            .paragraphStyle,
+                            value: spacerStyle,
+                            range: spacerParagraphRange
+                        )
+                    }
+                    attributedString.addAttribute(
+                        .markdownCodeBlockLanguage,
+                        value: label,
+                        range: blockRange
+                    )
+                    attributedString.addAttributes(
+                        [
+                            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold),
+                            .foregroundColor: NSColor.secondaryLabelColor
+                        ],
+                        range: NSRange(location: blockLocation, length: (label as NSString).length)
+                    )
+
+                    // HTML 导入器会忽略 pre 的 padding；用原生缩进提供稳定的左右留白和紧凑行高。
+                    var paragraphStyles: [(NSRange, NSMutableParagraphStyle)] = []
+                    attributedString.enumerateAttribute(.paragraphStyle, in: blockRange) { value, range, _ in
+                        let style = ((value as? NSParagraphStyle) ?? .default).mutableCopy() as! NSMutableParagraphStyle
+                        style.minimumLineHeight = 0
+                        style.maximumLineHeight = 0
+                        style.lineSpacing = 0
+                        style.lineHeightMultiple = 1.08
+                        style.paragraphSpacing = 0
+                        style.paragraphSpacingBefore = 0
+                        style.firstLineHeadIndent = 14
+                        style.headIndent = 14
+                        style.tailIndent = -14
+                        paragraphStyles.append((range, style))
+                    }
+                    for (range, style) in paragraphStyles {
+                        attributedString.addAttribute(.paragraphStyle, value: style, range: range)
+                    }
+
+                    let currentString = attributedString.string as NSString
+                    let firstParagraphRange = currentString.paragraphRange(
+                        for: NSRange(location: blockRange.location, length: 0)
+                    )
+                    if let value = attributedString.attribute(.paragraphStyle, at: blockRange.location, effectiveRange: nil),
+                       let firstStyle = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+                        firstStyle.paragraphSpacingBefore = 0
+                        firstStyle.paragraphSpacing = 7
+                        attributedString.addAttribute(.paragraphStyle, value: firstStyle, range: firstParagraphRange)
+                    }
+
+                    let lastLocation = NSMaxRange(blockRange) - 1
+                    let lastParagraphRange = currentString.paragraphRange(
+                        for: NSRange(location: lastLocation, length: 0)
+                    )
+                    if let value = attributedString.attribute(.paragraphStyle, at: lastLocation, effectiveRange: nil),
+                       let lastStyle = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+                        lastStyle.paragraphSpacing = 0
+                        attributedString.addAttribute(.paragraphStyle, value: lastStyle, range: lastParagraphRange)
+                    }
+                }
+            }
+
+            while let start = attributedString.string.range(of: MarkdownRenderMarker.inlineCodeStart),
+                  let end = attributedString.string.range(
+                      of: MarkdownRenderMarker.inlineCodeEnd,
+                      range: start.upperBound..<attributedString.string.endIndex
+                  ) {
+                let startRange = NSRange(start, in: attributedString.string)
+                let endRange = NSRange(end, in: attributedString.string)
+                attributedString.deleteCharacters(in: endRange)
+                attributedString.deleteCharacters(in: startRange)
+
+                let codeLength = endRange.location - NSMaxRange(startRange)
+                if codeLength > 0 {
+                    let codeRange = NSRange(location: startRange.location, length: codeLength)
+                    attributedString.addAttribute(
+                        .markdownInlineCodeBackground,
+                        value: inlineBackground,
+                        range: codeRange
+                    )
+                    // kern 为自绘背景预留真实的左右空间，不向富文本中插入会影响复制的空格字符。
+                    if codeRange.location > 0 {
+                        attributedString.addAttribute(
+                            .kern,
+                            value: 3.0,
+                            range: NSRange(location: codeRange.location - 1, length: 1)
+                        )
+                    }
+                    attributedString.addAttribute(
+                        .kern,
+                        value: 3.0,
+                        range: NSRange(location: NSMaxRange(codeRange) - 1, length: 1)
+                    )
                 }
             }
         }

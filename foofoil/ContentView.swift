@@ -33,7 +33,8 @@ public struct ContentView: View {
             ? max(minimumLength, MediaPlaybackBar.minimumWindowWidth)
             : minimumLength
         // PDF 显示边框时，四周保留 12pt 的边框区域。
-        let contentPadding: CGFloat = appState.isPDFDocument && appState.showBorder ? 12 : (shouldHideBorder ? 0 : 4)
+        let isMarkdownPreview = appState.isMarkdownPreview && appState.isMarkdownDocument
+        let contentPadding: CGFloat = isMarkdownPreview ? 0 : (appState.isPDFDocument && appState.showBorder ? 12 : (shouldHideBorder ? 0 : 4))
         let backgroundColor = appState.backgroundColorHex.flatMap(NSColor.init(hex:)) ?? .windowBackgroundColor
 
         ZStack {

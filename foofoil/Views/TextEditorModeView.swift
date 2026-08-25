@@ -32,7 +32,6 @@ struct TextEditorModeView: View {
 
                         if appState.isMarkdownPreview && appState.isMarkdownDocument && !appState.text.isEmpty {
                             MarkdownTextView(attributedText: appState.renderedMarkdown, calculatedHeight: $textHeight)
-                                .padding(8)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else if appState.textURL != nil && !appState.isMarkdownDocument {
                             ReadOnlyTextView(text: appState.text, fontSize: appState.textFontSize)
