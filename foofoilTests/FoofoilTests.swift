@@ -396,6 +396,58 @@ struct FoofoilTests {
         #expect(abs(photo.width / photo.height - 1.5) < 0.001)
     }
 
+    @Test func testWindowEdgeResizeChangesHeightAndKeepsOppositeEdgeFixed() {
+        let initialFrame = NSRect(x: 100, y: 200, width: 400, height: 300)
+
+        let topSize = FloatingWindow.edgeResizeSize(
+            initialFrame: initialFrame,
+            offset: NSPoint(x: 0, y: 60),
+            edges: [.top]
+        )
+        #expect(topSize == NSSize(width: 400, height: 360))
+        let topFrame = FloatingWindow.edgeResizeFrame(
+            initialFrame: initialFrame,
+            constrainedSize: topSize,
+            edges: [.top]
+        )
+        #expect(topFrame.minY == initialFrame.minY)
+        #expect(topFrame.maxY == initialFrame.maxY + 60)
+
+        let bottomSize = FloatingWindow.edgeResizeSize(
+            initialFrame: initialFrame,
+            offset: NSPoint(x: 0, y: 50),
+            edges: [.bottom]
+        )
+        #expect(bottomSize == NSSize(width: 400, height: 250))
+        let bottomFrame = FloatingWindow.edgeResizeFrame(
+            initialFrame: initialFrame,
+            constrainedSize: bottomSize,
+            edges: [.bottom]
+        )
+        #expect(bottomFrame.minY == initialFrame.minY + 50)
+        #expect(bottomFrame.maxY == initialFrame.maxY)
+    }
+
+    @Test func testWindowResizeCornerUsesBothAxesAcrossExpandedHitArea() {
+        let size = NSSize(width: 400, height: 300)
+
+        let topRight = FloatingWindow.resizeEdges(at: NSPoint(x: 395, y: 285), in: size)
+        #expect(topRight?.contains(.right) == true)
+        #expect(topRight?.contains(.top) == true)
+        let cornerSize = FloatingWindow.edgeResizeSize(
+            initialFrame: NSRect(origin: .zero, size: size),
+            offset: NSPoint(x: 40, y: 30),
+            edges: topRight ?? []
+        )
+        #expect(cornerSize == NSSize(width: 440, height: 330))
+
+        let rightEdge = FloatingWindow.resizeEdges(at: NSPoint(x: 395, y: 150), in: size)
+        #expect(rightEdge == [.right])
+
+        let interior = FloatingWindow.resizeEdges(at: NSPoint(x: 200, y: 150), in: size)
+        #expect(interior == nil)
+    }
+
     @Test func testAudioMetadataFormatters() {
         #expect(AudioMetadataLoader.formatSampleRate(44100) == String(format: NSLocalizedString("%@ kHz", comment: ""), "44.1"))
         #expect(AudioMetadataLoader.formatSampleRate(48000) == String(format: NSLocalizedString("%@ kHz", comment: ""), "48"))

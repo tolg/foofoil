@@ -753,6 +753,27 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     public func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        constrainedLiveResizeSize(frameSize, sender: sender, referenceSize: sender.frame.size)
+    }
+
+    func beginManualLiveResize() {
+        isLiveResizing = true
+    }
+
+    func constrainedManualResizeSize(_ frameSize: NSSize, from initialSize: NSSize) -> NSSize {
+        guard let window else { return frameSize }
+        return constrainedLiveResizeSize(frameSize, sender: window, referenceSize: initialSize)
+    }
+
+    func endManualLiveResize() {
+        finishLiveResize()
+    }
+
+    private func constrainedLiveResizeSize(
+        _ frameSize: NSSize,
+        sender: NSWindow,
+        referenceSize: NSSize
+    ) -> NSSize {
         var size = sanitizedWindowSize(frameSize, fallback: sender.frame.size)
         let minSize = minimumWindowSize()
         let maxSize = sender.screen.map {
@@ -762,8 +783,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         // 用户拖拽且内容锁定比例时，按画面/封面改目标尺寸。
         if isLiveResizing, let ratioSize = constrainedContentAspectSize(), ratioSize.width > 0, ratioSize.height > 0 {
             let ratio = ratioSize.width / ratioSize.height
-            let dw = abs(size.width - sender.frame.width)
-            let dh = abs(size.height - sender.frame.height)
+            let dw = abs(size.width - referenceSize.width)
+            let dh = abs(size.height - referenceSize.height)
             if dw >= dh {
                 size.height = size.width / ratio
             } else {
@@ -776,6 +797,10 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     public func windowDidEndLiveResize(_ notification: Notification) {
+        finishLiveResize()
+    }
+
+    private func finishLiveResize() {
         // 用户松开鼠标结束缩放时，通过重置 resizeIncrements 来解除宽高比锁定，为其余代码主动 setFrame 预留通路，根治死锁
         window?.resizeIncrements = NSSize(width: 1.0, height: 1.0)
         window?.aspectRatio = .zero

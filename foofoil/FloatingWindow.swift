@@ -9,8 +9,20 @@ import Cocoa
 import PDFKit
 
 public class FloatingWindow: NSWindow {
+    struct ResizeEdges: OptionSet {
+        let rawValue: UInt8
+
+        static let left = ResizeEdges(rawValue: 1 << 0)
+        static let right = ResizeEdges(rawValue: 1 << 1)
+        static let bottom = ResizeEdges(rawValue: 1 << 2)
+        static let top = ResizeEdges(rawValue: 1 << 3)
+    }
+
     private var isCommandDragCursorVisible = false
+    private var isEdgeResizeCursorVisible = false
     private var currentAccumulatedMagnification: CGFloat = 1.0
+    private static let resizeHitThickness: CGFloat = 8
+    private static let resizeCornerExtent: CGFloat = 20
 
     public init(contentRect: NSRect, defer deferCreation: Bool) {
         super.init(
@@ -27,6 +39,7 @@ public class FloatingWindow: NSWindow {
 
         // 允许通过点击背景拖拽移动窗口
         self.isMovableByWindowBackground = true
+        self.acceptsMouseMovedEvents = true
 
         // 确保在多个 Space (虚拟桌面) 中都可见，且支持全屏辅助模式
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -57,6 +70,20 @@ public class FloatingWindow: NSWindow {
             if let controller = self.windowController as? FloatingWindowController {
                 controller.appState.isCommandKeyPressed = isCommandPressed
             }
+        }
+
+        if event.type == .mouseMoved || event.type == .cursorUpdate {
+            if !modifiers.contains(.command), updateEdgeResizeCursor(at: event.locationInWindow) {
+                return
+            }
+        }
+
+        // 透明全尺寸内容视图会让部分 macOS 版本的上下边缘命中落到内容层，窗口级处理可保证四边均可缩放。
+        if event.type == .leftMouseDown,
+           !modifiers.contains(.command),
+           let edges = resizeEdges(at: event.locationInWindow) {
+            performEdgeResize(with: event, edges: edges)
+            return
         }
 
         // Command + 拖拽始终交由 AppKit 移动整个窗口，并屏蔽内容视图的默认交互。
@@ -210,6 +237,112 @@ public class FloatingWindow: NSWindow {
         super.sendEvent(event)
     }
 
+    static func resizeEdges(at point: NSPoint, in size: NSSize) -> ResizeEdges? {
+        let bounds = NSRect(origin: .zero, size: size)
+        var edges: ResizeEdges = []
+        let nearLeft = point.x <= resizeHitThickness
+        let nearRight = point.x >= bounds.maxX - resizeHitThickness
+        let nearBottom = point.y <= resizeHitThickness
+        let nearTop = point.y >= bounds.maxY - resizeHitThickness
+
+        if nearLeft { edges.insert(.left) }
+        if nearRight { edges.insert(.right) }
+        if nearBottom { edges.insert(.bottom) }
+        if nearTop { edges.insert(.top) }
+
+        // 四角沿两条相邻边扩大命中范围，确保角拖拽始终同时改变宽高。
+        if nearLeft || nearRight {
+            if point.y <= resizeCornerExtent { edges.insert(.bottom) }
+            if point.y >= bounds.maxY - resizeCornerExtent { edges.insert(.top) }
+        }
+        if nearBottom || nearTop {
+            if point.x <= resizeCornerExtent { edges.insert(.left) }
+            if point.x >= bounds.maxX - resizeCornerExtent { edges.insert(.right) }
+        }
+        return edges.isEmpty ? nil : edges
+    }
+
+    private func resizeEdges(at point: NSPoint) -> ResizeEdges? {
+        Self.resizeEdges(at: point, in: frame.size)
+    }
+
+    private func updateEdgeResizeCursor(at point: NSPoint) -> Bool {
+        guard let edges = resizeEdges(at: point) else {
+            if isEdgeResizeCursorVisible {
+                NSCursor.arrow.set()
+                isEdgeResizeCursorVisible = false
+            }
+            return false
+        }
+
+        cursor(for: edges).set()
+        isEdgeResizeCursorVisible = true
+        return true
+    }
+
+    private func cursor(for edges: ResizeEdges) -> NSCursor {
+        let position: NSCursor.FrameResizePosition
+        switch (edges.contains(.left), edges.contains(.right), edges.contains(.bottom), edges.contains(.top)) {
+        case (true, false, false, true): position = .topLeft
+        case (false, true, false, true): position = .topRight
+        case (true, false, true, false): position = .bottomLeft
+        case (false, true, true, false): position = .bottomRight
+        case (true, false, false, false): position = .left
+        case (false, true, false, false): position = .right
+        case (false, false, true, false): position = .bottom
+        default: position = .top
+        }
+        return NSCursor.frameResize(position: position, directions: .all)
+    }
+
+    private func performEdgeResize(with event: NSEvent, edges: ResizeEdges) {
+        guard let controller = windowController as? FloatingWindowController else { return }
+
+        let initialFrame = frame
+        let initialMouseLocation = NSEvent.mouseLocation
+        controller.beginManualLiveResize()
+        defer { controller.endManualLiveResize() }
+
+        while let nextEvent = NSApp.nextEvent(
+            matching: [.leftMouseDragged, .leftMouseUp],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            if nextEvent.type == .leftMouseUp { break }
+
+            let mouseLocation = NSEvent.mouseLocation
+            let offset = NSPoint(
+                x: mouseLocation.x - initialMouseLocation.x,
+                y: mouseLocation.y - initialMouseLocation.y
+            )
+            let rawSize = Self.edgeResizeSize(initialFrame: initialFrame, offset: offset, edges: edges)
+            let constrainedSize = controller.constrainedManualResizeSize(rawSize, from: initialFrame.size)
+            let resizedFrame = Self.edgeResizeFrame(
+                initialFrame: initialFrame,
+                constrainedSize: constrainedSize,
+                edges: edges
+            )
+            setFrame(resizedFrame, display: true)
+        }
+    }
+
+    static func edgeResizeSize(initialFrame: NSRect, offset: NSPoint, edges: ResizeEdges) -> NSSize {
+        var width = initialFrame.width
+        var height = initialFrame.height
+        if edges.contains(.left) { width -= offset.x }
+        if edges.contains(.right) { width += offset.x }
+        if edges.contains(.bottom) { height -= offset.y }
+        if edges.contains(.top) { height += offset.y }
+        return NSSize(width: max(1, width), height: max(1, height))
+    }
+
+    static func edgeResizeFrame(initialFrame: NSRect, constrainedSize: NSSize, edges: ResizeEdges) -> NSRect {
+        let originX = edges.contains(.left) ? initialFrame.maxX - constrainedSize.width : initialFrame.minX
+        let originY = edges.contains(.bottom) ? initialFrame.maxY - constrainedSize.height : initialFrame.minY
+        return NSRect(origin: NSPoint(x: originX, y: originY), size: constrainedSize)
+    }
+
     private func updateCommandDragCursor(isCommandPressed: Bool) {
         guard isCommandDragCursorVisible != isCommandPressed else { return }
 
@@ -327,7 +460,7 @@ public class FloatingWindow: NSWindow {
     //   self.titleVisibility = .hidden
     //   self.titlebarAppearsTransparent = true
     // 这能在保留系统标准隐形边框缩放热区的同时，依然实现无标题栏的视觉效果。
-    // 当前 MVP 先采用纯 .borderless + .resizable 以满足完全无边框设计要求。
+    // 当前实现通过窗口级边缘拖拽保证四边缩放，因此继续保留纯 .borderless 外观。
 }
 
 extension NSView {
