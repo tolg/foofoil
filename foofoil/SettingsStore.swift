@@ -44,6 +44,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     public var isVideoLooping: Bool
     /// 视频/音频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问权限。
     public var videoBookmark: Data?
+    /// 扩展状态仅保存 namespace 与引用；实际 payload 由 ExtensionStateStore 原子管理。
+    public var extensionID: String?
+    public var extensionStateReference: String?
 
 
     public init(
@@ -71,7 +74,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         thumbnailPath: String? = nil,
         webZoom: Double = 1.0,
         isVideoLooping: Bool = true,
-        videoBookmark: Data? = nil
+        videoBookmark: Data? = nil,
+        extensionID: String? = nil,
+        extensionStateReference: String? = nil
     ) {
         self.id = id
         self.imagePath = imagePath
@@ -98,10 +103,12 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         self.webZoom = webZoom
         self.isVideoLooping = isVideoLooping
         self.videoBookmark = videoBookmark
+        self.extensionID = extensionID
+        self.extensionStateReference = extensionStateReference
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark
+        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark, extensionID, extensionStateReference
     }
 
     public init(from decoder: Decoder) throws {
@@ -132,6 +139,8 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         // 旧数据没有循环播放字段；解码时默认开启。
         isVideoLooping = try container.decodeIfPresent(Bool.self, forKey: .isVideoLooping) ?? true
         videoBookmark = try container.decodeIfPresent(Data.self, forKey: .videoBookmark)
+        extensionID = try container.decodeIfPresent(String.self, forKey: .extensionID)
+        extensionStateReference = try container.decodeIfPresent(String.self, forKey: .extensionStateReference)
     }
 
     public var historyMenuSymbolName: String {

@@ -18,6 +18,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     var goMenu: NSMenu?
     var goMenuItem: NSMenuItem?
     var viewMenu: NSMenu?
+    var extensionMenu: NSMenu?
+    var extensionMenuItem: NSMenuItem?
     var windowMenu: NSMenu?
     var contentModeCancellables = Set<AnyCancellable>()
     var didOpenFiles = false
@@ -44,6 +46,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         appState.imageURL == nil
             && appState.webURL == nil
             && appState.textURL == nil
+            && appState.extensionSession == nil
             && appState.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -60,7 +63,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             let fileURL = URL(fileURLWithPath: filename)
 
             // 如果当前存在活跃的空白窗口，则直接在其中加载
-            if let activeState = activeAppState, activeState.imageURL == nil && activeState.webURL == nil && activeState.text.isEmpty {
+            if let activeState = activeAppState, isBlank(activeState) {
                 activeState.openFile(url: fileURL)
                 activeWindowController?.window?.makeKeyAndOrderFront(nil)
             } else {
@@ -160,12 +163,20 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 self.updateGoMenuVisibility()
             }
             .store(in: &contentModeCancellables)
+
+        controller.appState.$extensionSession
+            .sink { [weak self, weak controller] _ in
+                guard let self, let controller, self.activeWindowController === controller else { return }
+                self.updateExtensionMenuVisibility()
+            }
+            .store(in: &contentModeCancellables)
     }
 
     @objc func handleKeyWindowChanged(_ notification: Notification) {
         // 交由下一轮事件循环执行，确保 AppKit 已更新 keyWindow。
         DispatchQueue.main.async { [weak self] in
             self?.updateGoMenuVisibility()
+            self?.updateExtensionMenuVisibility()
         }
     }
 }

@@ -32,6 +32,10 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     @Published public var isLoading: Bool = false
     /// 仅用于路由网页编辑控件的键盘快捷键，不需要持久化。
     @Published public var isWebEditableElementFocused: Bool = false
+    /// 扩展会话仅通过可序列化描述驱动宿主展示，不让扩展 View 穿过 ABI/XPC 边界。
+    @Published var extensionSession: ContentSession?
+    @Published var extensionFallbackProviderID: String?
+    var extensionStateReference: String?
 
     @Published public var svgColor: String? {
         didSet {
@@ -256,6 +260,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.svgColor = config.svgColor
         self.backgroundColorHex = config.backgroundColorHex
         self.isVideoLooping = config.isVideoLooping
+        self.extensionSession = nil
+        self.extensionFallbackProviderID = nil
+        self.extensionStateReference = config.extensionStateReference
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
@@ -296,6 +303,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             self.actualWebURL = nil
         }
         super.init()
+        restoreExtensionSession(from: config)
         // 在调用 saveState 时避免触发死循环；视频经书签恢复后可能重建了书签，也需要落盘
         if let path = config.imagePath, !FileManager.default.fileExists(atPath: path) {
             if Self.findCachedImageInDirectory(for: config.id) != nil || Self.findLegacyCachedImageInDirectory() != nil {
@@ -330,6 +338,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.svgColor = nil
         self.backgroundColorHex = nil
         self.isVideoLooping = true
+        self.extensionSession = nil
+        self.extensionFallbackProviderID = nil
+        self.extensionStateReference = nil
         super.init()
         updateRenderedMarkdown()
     }

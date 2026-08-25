@@ -36,6 +36,9 @@ extension AppState {
             self.svgColor = nil
             self.isVideoLooping = true
             self.videoBookmarkData = nil
+            self.extensionSession = nil
+            self.extensionFallbackProviderID = nil
+            self.extensionStateReference = nil
             isBatchUpdating = false
 
             NotificationCenter.default.post(

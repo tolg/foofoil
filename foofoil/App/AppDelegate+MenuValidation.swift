@@ -22,7 +22,13 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             updateGoMenu(goMenu)
         } else if let viewMenu, menu === viewMenu {
             updateViewMenu(menu)
+        } else if let extensionMenu, menu === extensionMenu {
+            rebuildExtensionMenu(menu)
         }
+    }
+
+    func updateExtensionMenuVisibility() {
+        extensionMenuItem?.isHidden = activeAppState?.extensionSession?.commands.isEmpty != false
     }
 
     func updateFileMenu(_ menu: NSMenu) {

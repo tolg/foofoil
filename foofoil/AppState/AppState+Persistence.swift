@@ -19,7 +19,7 @@ extension AppState {
             guard !isBatchUpdating else { return }
             let config = toConfig()
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if imageURL != nil || webURL != nil || textURL != nil || !trimmedText.isEmpty {
+            if imageURL != nil || webURL != nil || textURL != nil || extensionSession != nil || !trimmedText.isEmpty {
                 HistoryManager.shared.addToHistory(config)
             }
         }
@@ -49,6 +49,8 @@ extension AppState {
             self.svgColor = config.svgColor
             self.backgroundColorHex = config.backgroundColorHex
             self.isVideoLooping = config.isVideoLooping
+            self.extensionStateReference = config.extensionStateReference
+            restoreExtensionSession(from: config)
 
             // 载入历史记录时，一律尝试通知窗口控制器恢复当初保存的窗口位置与尺寸
             if let frameString = config.windowFrame {
@@ -144,8 +146,47 @@ extension AppState {
                 sourceFingerprint: sourceFingerprint,
                 webZoom: webZoom,
                 isVideoLooping: isVideoLooping,
-                videoBookmark: videoBookmarkData
+                videoBookmark: videoBookmarkData,
+                extensionID: extensionSession?.extensionID,
+                extensionStateReference: extensionStateReference
             )
+        }
+
+        /// 由 Core 保存完整的值类型 Session 快照；扩展缺失或状态损坏时保留可解释的占位展示。
+        func restoreExtensionSession(from config: WindowConfig) {
+            guard let extensionID = config.extensionID,
+                  let reference = config.extensionStateReference else {
+                extensionSession = nil
+                return
+            }
+            do {
+                if let envelope = try ExtensionHost.shared.stateStore.load(extensionID: extensionID, reference: reference),
+                   let session = try? JSONDecoder().decode(ContentSession.self, from: envelope.payload) {
+                    extensionSession = session
+                } else {
+                    extensionSession = ContentSession(
+                        extensionID: extensionID,
+                        providerID: "unavailable",
+                        request: .restoredSession(extensionID: extensionID, stateReference: reference),
+                        presentation: .unavailable(
+                            titleKey: "Extension Session Unavailable",
+                            messageKey: "Extension Session Restore Failed"
+                        ),
+                        stateReference: reference
+                    )
+                }
+            } catch {
+                extensionSession = ContentSession(
+                    extensionID: extensionID,
+                    providerID: "unavailable",
+                    request: .restoredSession(extensionID: extensionID, stateReference: reference),
+                    presentation: .unavailable(
+                        titleKey: "Extension Session Unavailable",
+                        messageKey: "Extension Session Restore Failed"
+                    ),
+                    stateReference: reference
+                )
+            }
         }
 
 }

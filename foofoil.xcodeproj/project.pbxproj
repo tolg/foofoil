@@ -7,11 +7,19 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F20F00013139000100F20F00 /* foofoilTestExtensionService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = F20F00033139000100F20F00 /* foofoilTestExtensionService.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		F10F011A3123000100F10F01 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = F10F011C3123000100F10F01 /* LICENSE */; };
 		F10F011B3123000100F10F01 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = F10F011D3123000100F10F01 /* THIRD_PARTY_NOTICES.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		F20F00023139000100F20F00 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AB7D0D032FFB8BC800ED4438 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F20F00063139000100F20F00;
+			remoteInfo = foofoilTestExtensionService;
+		};
 		AB7D0D192FFB8BCA00ED4438 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AB7D0D032FFB8BC800ED4438 /* Project object */;
@@ -28,7 +36,22 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		F20F00093139000100F20F00 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/XPCServices;
+			dstSubfolderSpec = 1;
+			files = (
+				F20F00013139000100F20F00 /* foofoilTestExtensionService.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		F20F00033139000100F20F00 /* foofoilTestExtensionService.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = foofoilTestExtensionService.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7D0D0B2FFB8BC800ED4438 /* foofoil.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = foofoil.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7D0D182FFB8BCA00ED4438 /* foofoilTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foofoilTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB7D0D222FFB8BCA00ED4438 /* foofoilUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foofoilUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,6 +60,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		F20F00043139000100F20F00 /* foofoilTestExtensionService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = foofoilTestExtensionService;
+			sourceTree = "<group>";
+		};
 		AB7D0D0D2FFB8BC800ED4438 /* foofoil */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = foofoil;
@@ -55,6 +83,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		F20F00053139000100F20F00 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB7D0D082FFB8BC800ED4438 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -87,6 +122,7 @@
 				AB7D0D0D2FFB8BC800ED4438 /* foofoil */,
 				AB7D0D1B2FFB8BCA00ED4438 /* foofoilTests */,
 				AB7D0D252FFB8BCA00ED4438 /* foofoilUITests */,
+				F20F00043139000100F20F00 /* foofoilTestExtensionService */,
 				AB7D0D0C2FFB8BC800ED4438 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -97,6 +133,7 @@
 				AB7D0D0B2FFB8BC800ED4438 /* foofoil.app */,
 				AB7D0D182FFB8BCA00ED4438 /* foofoilTests.xctest */,
 				AB7D0D222FFB8BCA00ED4438 /* foofoilUITests.xctest */,
+				F20F00033139000100F20F00 /* foofoilTestExtensionService.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,10 +148,12 @@
 				AB7D0D072FFB8BC800ED4438 /* Sources */,
 				AB7D0D082FFB8BC800ED4438 /* Frameworks */,
 				AB7D0D092FFB8BC800ED4438 /* Resources */,
+				F20F00093139000100F20F00 /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F20F000A3139000100F20F00 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AB7D0D0D2FFB8BC800ED4438 /* foofoil */,
@@ -172,6 +211,28 @@
 			productReference = AB7D0D222FFB8BCA00ED4438 /* foofoilUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		F20F00063139000100F20F00 /* foofoilTestExtensionService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F20F000D3139000100F20F00 /* Build configuration list for PBXNativeTarget "foofoilTestExtensionService" */;
+			buildPhases = (
+				F20F00073139000100F20F00 /* Sources */,
+				F20F00053139000100F20F00 /* Frameworks */,
+				F20F00083139000100F20F00 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F20F00043139000100F20F00 /* foofoilTestExtensionService */,
+			);
+			name = foofoilTestExtensionService;
+			packageProductDependencies = (
+			);
+			productName = foofoilTestExtensionService;
+			productReference = F20F00033139000100F20F00 /* foofoilTestExtensionService.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -193,6 +254,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = AB7D0D0A2FFB8BC800ED4438;
 					};
+					F20F00063139000100F20F00 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = AB7D0D062FFB8BC800ED4438 /* Build configuration list for PBXProject "foofoil" */;
@@ -213,11 +277,19 @@
 				AB7D0D0A2FFB8BC800ED4438 /* foofoil */,
 				AB7D0D172FFB8BCA00ED4438 /* foofoilTests */,
 				AB7D0D212FFB8BCA00ED4438 /* foofoilUITests */,
+				F20F00063139000100F20F00 /* foofoilTestExtensionService */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		F20F00083139000100F20F00 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB7D0D092FFB8BC800ED4438 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -244,6 +316,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		F20F00073139000100F20F00 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB7D0D072FFB8BC800ED4438 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -268,6 +347,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		F20F000A3139000100F20F00 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F20F00063139000100F20F00 /* foofoilTestExtensionService */;
+			targetProxy = F20F00023139000100F20F00 /* PBXContainerItemProxy */;
+		};
 		AB7D0D1A2FFB8BCA00ED4438 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AB7D0D0A2FFB8BC800ED4438 /* foofoil */;
@@ -281,6 +365,46 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		F20F000B3139000100F20F00 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/foofoilTestExtensionService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RFQ56XLHXJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/foofoilTestExtensionService-Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.markonce.foofoil.TestExtensionService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F20F000C3139000100F20F00 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/foofoilTestExtensionService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RFQ56XLHXJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/foofoilTestExtensionService-Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.markonce.foofoil.TestExtensionService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		AB7D0D2A2FFB8BCA00ED4438 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -566,6 +690,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		F20F000D3139000100F20F00 /* Build configuration list for PBXNativeTarget "foofoilTestExtensionService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F20F000B3139000100F20F00 /* Debug */,
+				F20F000C3139000100F20F00 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AB7D0D062FFB8BC800ED4438 /* Build configuration list for PBXProject "foofoil" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

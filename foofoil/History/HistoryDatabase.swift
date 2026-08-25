@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 nonisolated final class HistoryDatabase {
-    static let schemaVersion = 5
+    static let schemaVersion = 6
 
     private let queue = DispatchQueue(label: "com.foofoil.history.database", qos: .utility)
     private var connection: OpaquePointer?
@@ -95,8 +95,9 @@ nonisolated final class HistoryDatabase {
                         web_url, actual_web_url, image_source, inline_text, is_pinned, opacity,
                         window_frame, show_border, image_scale, text_font_size, is_markdown_preview,
                         svg_color, background_color_hex, created_at, updated_at, last_opened_at,
-                        source_fingerprint, index_status, index_version, video_looping, video_bookmark
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        source_fingerprint, index_status, index_version, video_looping, video_bookmark,
+                        extension_id, extension_state_reference
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
                         content_kind=excluded.content_kind, display_title=excluded.display_title,
                         original_filename=excluded.original_filename, image_path=excluded.image_path,
@@ -110,7 +111,9 @@ nonisolated final class HistoryDatabase {
                         background_color_hex=excluded.background_color_hex, updated_at=excluded.updated_at,
                         last_opened_at=excluded.last_opened_at,
                         source_fingerprint=excluded.source_fingerprint,
-                        video_looping=excluded.video_looping, video_bookmark=excluded.video_bookmark
+                        video_looping=excluded.video_looping, video_bookmark=excluded.video_bookmark,
+                        extension_id=excluded.extension_id,
+                        extension_state_reference=excluded.extension_state_reference
                     """, bindings: [
                         config.id.uuidString, kind.rawValue, title, config.originalImageName,
                         config.imagePath, config.textPath, config.webURLString, config.actualWebURLString,
@@ -118,7 +121,8 @@ nonisolated final class HistoryDatabase {
                         config.windowFrame, config.showBorder, config.imageScale, config.textFontSize,
                         config.isMarkdownPreview, config.svgColor, config.backgroundColorHex,
                         createdAt, now, now, config.sourceFingerprint, 0, 1, config.isVideoLooping,
-                        config.videoBookmark?.base64EncodedString()
+                        config.videoBookmark?.base64EncodedString(), config.extensionID,
+                        config.extensionStateReference
                     ])
 
                 let metadata = [config.webURLString, config.actualWebURLString].compactMap { $0 }.joined(separator: " ")
@@ -282,7 +286,8 @@ nonisolated final class HistoryDatabase {
                 created_at REAL NOT NULL, updated_at REAL NOT NULL, last_opened_at REAL NOT NULL,
                 source_fingerprint TEXT, index_status INTEGER NOT NULL DEFAULT 0,
                 index_version INTEGER NOT NULL DEFAULT 0, index_error TEXT, thumbnail_path TEXT,
-                video_looping INTEGER NOT NULL DEFAULT 1, video_bookmark TEXT
+                video_looping INTEGER NOT NULL DEFAULT 1, video_bookmark TEXT,
+                extension_id TEXT, extension_state_reference TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_history_last_opened ON history_items(last_opened_at DESC);
             CREATE INDEX IF NOT EXISTS idx_history_kind ON history_items(content_kind);
@@ -319,6 +324,10 @@ nonisolated final class HistoryDatabase {
         if previousVersion >= 1 && previousVersion < 5 {
             // v5 新增视频安全范围书签（Base64 文本）；沙盒授权仅随进程有效，靠它在重启后恢复访问。
             try execute("ALTER TABLE history_items ADD COLUMN video_bookmark TEXT")
+        }
+        if previousVersion >= 1 && previousVersion < 6 {
+            // v6 只保存扩展命名空间和状态引用，扩展 payload 仍由 ExtensionStateStore 管理。
+            try execute("ALTER TABLE history_items ADD COLUMN extension_id TEXT; ALTER TABLE history_items ADD COLUMN extension_state_reference TEXT")
         }
         try execute("PRAGMA user_version = \(Self.schemaVersion)")
         // 新库明确不读取旧历史；初始化成功后移除旧键，避免旧路径复活。
@@ -455,7 +464,9 @@ nonisolated final class HistoryDatabase {
                     storedDisplayTitle: text(statement, columns["display_title"]!),
                     thumbnailPath: optionalText(statement, columns["thumbnail_path"]!),
                     isVideoLooping: sqlite3_column_int(statement, columns["video_looping"]!) != 0,
-                    videoBookmark: optionalText(statement, columns["video_bookmark"]!).flatMap { Data(base64Encoded: $0) }
+                    videoBookmark: optionalText(statement, columns["video_bookmark"]!).flatMap { Data(base64Encoded: $0) },
+                    extensionID: optionalText(statement, columns["extension_id"]!),
+                    extensionStateReference: optionalText(statement, columns["extension_state_reference"]!)
                 ))
             }
         }

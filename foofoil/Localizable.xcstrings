@@ -2241,6 +2241,60 @@
         }
       }
     },
+    "Append Test Marker": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Append Test Marker"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "添加测试标记"}}
+      }
+    },
+    "Audio Enhancer": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Audio Enhancer"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "音频增强器"}}
+      }
+    },
+    "Built-in Audio Provider": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Built-in Audio Provider"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "内建音频提供者"}}
+      }
+    },
+    "Extension": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Extension"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "扩展"}}
+      }
+    },
+    "Extension Provider Fallback Notice": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "The selected extension failed. This session is using its fallback provider."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "所选扩展运行失败，此会话已改用回退提供者。"}}
+      }
+    },
+    "Extension Session Restore Failed": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "The extension is unavailable or its saved state is damaged."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "扩展当前不可用，或保存的状态已损坏。"}}
+      }
+    },
+    "Extension Session Unavailable": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Extension Session Unavailable"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "扩展会话不可用"}}
+      }
+    },
+    "Test Extension": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Test Extension"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "测试扩展"}}
+      }
+    },
+    "Toggle Audio Enhancement": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Toggle Audio Enhancement"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "切换音频增强"}}
+      }
+    },
     "Zoom Out Window": {
       "extractionState": "manual",
       "localizations": {

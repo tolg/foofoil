@@ -314,6 +314,15 @@ extension AppDelegate {
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
+        // 扩展只能贡献值类型命令描述，原生菜单、路由、校验和快捷键归宿主所有。
+        let extensionMenu = NSMenu(title: NSLocalizedString("Extension", comment: ""))
+        extensionMenu.delegate = self
+        self.extensionMenu = extensionMenu
+        let extensionMenuItem = NSMenuItem(title: NSLocalizedString("Extension", comment: ""), action: nil, keyEquivalent: "")
+        extensionMenuItem.submenu = extensionMenu
+        self.extensionMenuItem = extensionMenuItem
+        mainMenu.addItem(extensionMenuItem)
+
         // 4.5 Window 菜单
         let windowMenu = NSMenu(title: NSLocalizedString("Window", comment: ""))
         self.windowMenu = windowMenu
@@ -373,6 +382,28 @@ extension AppDelegate {
         mainMenu.delegate = self
         NSApplication.shared.mainMenu = mainMenu
         updateGoMenuVisibility()
+        updateExtensionMenuVisibility()
+    }
+
+    func rebuildExtensionMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        guard let commands = activeAppState?.extensionSession?.commands else { return }
+        for command in commands {
+            let item = NSMenuItem(
+                title: NSLocalizedString(command.titleLocalizationKey, comment: ""),
+                action: #selector(extensionCommandAction(_:)),
+                keyEquivalent: command.keyEquivalent ?? ""
+            )
+            item.target = self
+            item.representedObject = command.id
+            item.isEnabled = command.isEnabled
+            item.state = command.isChecked ? .on : .off
+            item.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: command.modifierFlags)
+            if let symbolName = command.symbolName {
+                item.withSymbol(symbolName)
+            }
+            menu.addItem(item)
+        }
     }
 
     func rebuildEditMenu(_ menu: NSMenu) {

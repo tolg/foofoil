@@ -254,6 +254,8 @@ extension AppState {
         public func canOpenFile(url: URL) -> Bool {
             guard url.isFileURL else { return false }
 
+            if ExtensionHost.shared.canOpen(url: url) { return true }
+
             let ext = url.pathExtension.lowercased()
             if ["html", "htm", "webarchive", "xhtml"].contains(ext) || isTextFile(url: url) {
                 return true
@@ -267,6 +269,15 @@ extension AppState {
         public func openFile(url: URL) {
             guard canOpenFile(url: url) else { return }
 
+            if ExtensionHost.shared.canOpen(url: url) {
+                openUsingExtension(url: url)
+                return
+            }
+
+            extensionSession = nil
+            extensionFallbackProviderID = nil
+            extensionStateReference = nil
+
             let ext = url.pathExtension.lowercased()
             if ["html", "htm", "webarchive", "xhtml"].contains(ext) {
                 openWeb(url: url)
@@ -277,6 +288,71 @@ extension AppState {
                 openExternalMediaIfPlayable(url: url, holdsSecurityAccess: accessed)
             } else {
                 openImage(url: url)
+            }
+        }
+
+        func openUsingExtension(url: URL) {
+            let targetID = (imageURL != nil || webURL != nil || textURL != nil || extensionSession != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                ? UUID()
+                : id
+            isLoading = true
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                defer { self.isLoading = false }
+                do {
+                    let outcome = try await ExtensionHost.shared.open(url: url)
+                    self.isBatchUpdating = true
+                    self.id = targetID
+                    self.stopVideoAccess()
+                    self.imageURL = nil
+                    self.webURL = nil
+                    self.actualWebURL = nil
+                    self.textURL = nil
+                    self.text = ""
+                    self.originalImageName = url.lastPathComponent
+                    self.sourceFingerprint = Self.localSourceFingerprint(for: url)
+                    self.extensionSession = outcome.session
+                    self.extensionFallbackProviderID = outcome.failures.first?.providerID
+                    self.extensionStateReference = nil
+                    if let extensionID = outcome.session.extensionID {
+                        let payload = try JSONEncoder().encode(outcome.session)
+                        self.extensionStateReference = try ExtensionHost.shared.stateStore.save(
+                            extensionID: extensionID,
+                            schemaVersion: 1,
+                            payload: payload,
+                            reference: outcome.session.id.uuidString.lowercased()
+                        )
+                    }
+                    self.isBatchUpdating = false
+                    self.saveState()
+                } catch {
+                    self.isBatchUpdating = false
+                    NSLog("Extension session failed: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        func performExtensionCommand(_ commandID: String) {
+            guard let session = extensionSession else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let updated = try await ExtensionHost.shared.perform(commandID: commandID, in: session)
+                    self.extensionSession = updated
+                    if let extensionID = updated.extensionID,
+                       let reference = self.extensionStateReference {
+                        let payload = try JSONEncoder().encode(updated)
+                        try ExtensionHost.shared.stateStore.save(
+                            extensionID: extensionID,
+                            schemaVersion: 1,
+                            payload: payload,
+                            reference: reference
+                        )
+                    }
+                    self.saveState()
+                } catch {
+                    NSLog("Extension command failed: \(error.localizedDescription)")
+                }
             }
         }
 

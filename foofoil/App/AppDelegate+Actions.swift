@@ -17,6 +17,11 @@ extension AppDelegate {
         showNewWindow(with: AppState())
     }
 
+    @objc func extensionCommandAction(_ sender: NSMenuItem) {
+        guard let commandID = sender.representedObject as? String else { return }
+        activeAppState?.performExtensionCommand(commandID)
+    }
+
     func showNewWindow(with state: AppState) {
         let controller = FloatingWindowController(appState: state)
 
@@ -305,6 +310,9 @@ extension AppDelegate {
         panel.canChooseFiles = true
 
         var types: [UTType] = [.image, .pdf, .html, .text, .movie, .audio]
+        if let testExtensionType = UTType("app.foofoil.test-document") {
+            types.append(testExtensionType)
+        }
         if let webarchiveType = UTType("com.apple.webarchive") {
             types.append(webarchiveType)
         }

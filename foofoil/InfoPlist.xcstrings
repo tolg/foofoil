@@ -121,6 +121,23 @@
         }
       }
     },
+    "foofoil Test Extension Document": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "foofoil Test Extension Document"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浮箔测试扩展文档"
+          }
+        }
+      }
+    },
     "Video": {
       "extractionState": "manual",
       "localizations": {

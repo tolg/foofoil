@@ -11,6 +11,7 @@ nonisolated public enum HistoryContentKind: Int, Codable, Sendable {
     case pdf = 6
     case video = 7
     case audio = 8
+    case extensionContent = 9
 
     public var symbolName: String {
         switch self {
@@ -21,11 +22,13 @@ nonisolated public enum HistoryContentKind: Int, Codable, Sendable {
         case .audio: return "music.note"
         case .markdown: return "arrow.down.document"
         case .csv: return "tablecells"
+        case .extensionContent: return "puzzlepiece.extension"
         case .note, .text: return "note.text"
         }
     }
 
     public static func infer(from config: WindowConfig) -> Self {
+        if config.extensionID != nil { return .extensionContent }
         if config.webURLString != nil { return .web }
         let name = (config.originalImageName ?? config.textPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "").lowercased()
         if name.hasSuffix(".pdf") { return .pdf }

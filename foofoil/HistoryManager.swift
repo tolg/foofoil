@@ -100,6 +100,6 @@ public final class HistoryManager: ObservableObject {
     }
 
     private func hasPersistableContent(_ config: WindowConfig) -> Bool {
-        config.imagePath != nil || config.webURLString != nil || config.textPath != nil || !config.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        config.extensionID != nil || config.imagePath != nil || config.webURLString != nil || config.textPath != nil || !config.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
