@@ -45,7 +45,22 @@ final class ExtensionHost {
         guard let provider = resolver.provider(id: session.providerID) else {
             throw ContentProviderError.unavailable(session.providerID)
         }
-        return try await provider.perform(commandID: commandID, session: session)
+        let updated = try await provider.perform(commandID: commandID, session: session)
+        try NavigatorContributionValidator.validate(updated)
+        return updated
+    }
+
+    func perform(navigatorAction: NavigatorAction, in session: ContentSession) async throws -> ContentSession {
+        guard let contribution = session.navigatorContributions.first(where: { $0.id == navigatorAction.contributionID }) else {
+            throw NavigatorContributionError.invalidAction(navigatorAction.contributionID)
+        }
+        try NavigatorContributionValidator.validate(navigatorAction, in: contribution)
+        guard let provider = resolver.provider(id: session.providerID) else {
+            throw ContentProviderError.unavailable(session.providerID)
+        }
+        let updated = try await provider.perform(navigatorAction: navigatorAction, session: session)
+        try NavigatorContributionValidator.validate(updated)
+        return updated
     }
 
     func setTestAudioEnhancerFailure(_ shouldFail: Bool) {

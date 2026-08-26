@@ -2283,6 +2283,78 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "扩展会话不可用"}}
       }
     },
+    "Always Show Navigator": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Always Show"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "始终显示"}}
+      }
+    },
+    "Hide Navigator": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Hide Navigator"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "隐藏导航面板"}}
+      }
+    },
+    "Navigator": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Navigator"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "导航面板"}}
+      }
+    },
+    "Navigator Empty": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "No Navigation Items"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "没有导航项目"}}
+      }
+    },
+    "Navigator on Left": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Place on Left"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "挂在左侧"}}
+      }
+    },
+    "Navigator on Right": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Place on Right"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "挂在右侧"}}
+      }
+    },
+    "Remove Navigator Item": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Remove"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "移除"}}
+      }
+    },
+    "Show Navigator on Hover": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Show on Hover"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "鼠标移入时显示"}}
+      }
+    },
+    "Test Items": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Test Items"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "测试列表"}}
+      }
+    },
+    "Test Outline": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Test Outline"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "测试目录"}}
+      }
+    },
+    "Toggle Navigator": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Toggle Navigator"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "显示或隐藏导航面板"}}
+      }
+    },
+    "Toggle Navigator Group": {
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Expand or Collapse Group"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "展开或折叠分组"}}
+      }
+    },
     "Test Extension": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "Test Extension"}},

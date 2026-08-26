@@ -18,6 +18,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     var goMenu: NSMenu?
     var goMenuItem: NSMenuItem?
     var viewMenu: NSMenu?
+    var navigatorMenuItem: NSMenuItem?
     var extensionMenu: NSMenu?
     var extensionMenuItem: NSMenuItem?
     var windowMenu: NSMenu?
@@ -27,7 +28,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     // 获取当前活跃（Key）窗口对应的 AppState
     var activeWindowController: FloatingWindowController? {
         guard let keyWindow = NSApplication.shared.keyWindow else { return nil }
-        return windowControllers.first { $0.window == keyWindow }
+        return windowControllers.first { $0.owns(keyWindow) }
     }
 
     var activeAppState: AppState? {
@@ -72,7 +73,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 state.openFile(url: fileURL)
 
                 let controller = FloatingWindowController(appState: state)
-                if let keyWindow = NSApplication.shared.keyWindow {
+                if let keyWindow = activeWindowController?.window ?? NSApplication.shared.keyWindow {
                     let keyFrame = keyWindow.frame
                     let size = controller.window?.frame.size ?? NSSize(width: 400, height: 400)
                     let offsetFrame = NSRect(

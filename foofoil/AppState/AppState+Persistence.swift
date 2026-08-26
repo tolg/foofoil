@@ -50,6 +50,14 @@ extension AppState {
             self.backgroundColorHex = config.backgroundColorHex
             self.isVideoLooping = config.isVideoLooping
             self.extensionStateReference = config.extensionStateReference
+            self.navigatorPanelSide = config.navigatorPanelSide
+            self.navigatorPanelVisibilityMode = config.navigatorPanelVisibilityMode
+            self.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(config.navigatorPanelWidth)
+            self.builtInNavigatorContributions = []
+            self.builtInNavigatorActionHandler = nil
+            self.isNavigatorPanelExplicitlyVisible = false
+            self.activeNavigatorContributionID = nil
+            self.expandedNavigatorItemIDs = []
             restoreExtensionSession(from: config)
 
             // 载入历史记录时，一律尝试通知窗口控制器恢复当初保存的窗口位置与尺寸
@@ -148,7 +156,10 @@ extension AppState {
                 isVideoLooping: isVideoLooping,
                 videoBookmark: videoBookmarkData,
                 extensionID: extensionSession?.extensionID,
-                extensionStateReference: extensionStateReference
+                extensionStateReference: extensionStateReference,
+                navigatorPanelSide: navigatorPanelSide,
+                navigatorPanelVisibilityMode: navigatorPanelVisibilityMode,
+                navigatorPanelWidth: navigatorPanelWidth
             )
         }
 
@@ -161,7 +172,8 @@ extension AppState {
             }
             do {
                 if let envelope = try ExtensionHost.shared.stateStore.load(extensionID: extensionID, reference: reference),
-                   let session = try? JSONDecoder().decode(ContentSession.self, from: envelope.payload) {
+                   let session = try? JSONDecoder().decode(ContentSession.self, from: envelope.payload),
+                   (try? NavigatorContributionValidator.validate(session)) != nil {
                     extensionSession = session
                 } else {
                     extensionSession = ContentSession(

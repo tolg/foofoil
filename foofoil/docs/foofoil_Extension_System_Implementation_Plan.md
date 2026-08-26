@@ -65,6 +65,7 @@ Hi-Fi 不可用时按声明回退 Built-in Audio Provider
 -   Content Request / Provider Resolver；
 -   Content Provider / Content Session 生命周期；
 -   扩展贡献点、命令和宿主 UI 协调；
+-   通用导航面板及其桌面伴随窗口、全屏覆盖层；
 -   Extension Manager；
 -   macOS 系统原生支持的内容能力；
 -   通用 UI 和状态管理。
@@ -91,7 +92,7 @@ Hi-Fi
 ├── SACD ISO / DST
 ├── APE / WavPack
 ├── 增强 MP3 / AAC / ALAC / FLAC 等已有音频
-├── 播放列表与播放队列
+├── 播放列表与播放队列语义（由 Core 通用导航面板呈现）
 ├── DoP
 ├── DSD → PCM fallback
 ├── 音效 / 可视化
@@ -152,7 +153,8 @@ Extension Contributions
 ├── ProviderOverride      增强或替换已有 Provider
 ├── SessionFeature        播放列表、音效、字幕、控制器等
 ├── ApplicationService    音频设备、后台任务等共享服务
-└── CommandContribution   菜单、快捷键和宿主 UI 命令
+├── CommandContribution   菜单、快捷键和宿主 UI 命令
+└── NavigatorContribution 列表/树形导航数据及动作，不携带自定义 View
 ```
 
 第一版不追求任意第三方扩展之间的自由组合。贡献点只覆盖已有真实需求，并由 Core 使用确定性
@@ -297,7 +299,7 @@ Application Scope
 
 Session Scope
 ├── Seekable?
-├── PlaybackQueue?
+├── MediaPlaybackQueue?
 ├── AudioEffects?
 ├── Visualization?
 ├── Subtitle?
@@ -306,6 +308,7 @@ Session Scope
 Presentation Scope
 ├── CommandProvider?
 ├── ControlContribution?
+├── NavigatorContribution?
 └── PresentationAdapter?
 ```
 
@@ -320,6 +323,11 @@ Presentation Scope
 主程序按 capability 和当前活动 Session 决定是否展示对应 UI。扩展通过 `CommandDescriptor`
 贡献命令，Core 负责构造原生菜单和控件，以统一处理本地化、快捷键冲突、菜单校验、活动窗口
 路由和辅助功能。
+
+`media.playback-queue` 与 `ui.navigator` 必须分开：前者定义队列顺序、当前项目、增删、重排、
+恢复和多文件授权等会话语义，后者只定义宿主如何取得可导航的列表/树快照以及如何把用户动作
+送回会话。PDF 目录只需要提供 `ui.navigator`；Hi-Fi 和视频会话可以同时提供两者。不要使用
+`audio.playback-queue` 作为长期通用标识，以免把视频队列错误限制在音频域。
 
 只有发生无法向后兼容的协议/ABI 改动时才升级 Extension API major
 version。
@@ -356,7 +364,7 @@ version。
   "capabilities": [
     "audio.dsd",
     "audio.dop",
-    "audio.playback-queue",
+    "media.playback-queue",
     "audio.effects",
     "audio.visualization",
     "audio.device-selection",
@@ -388,6 +396,52 @@ ContentRequest
 保存带 namespace、schema version 的可序列化 payload；扩展负责在兼容版本间迁移自己的
 payload，Core 负责大小限制、原子写入和损坏回退。扩展被禁用、撤销或卸载后，Core 仍应能
 展示可恢复的占位状态；其中普通 MP3 等内容可降级回 Built-in，扩展专属格式则给出明确提示。
+
+### 通用导航面板
+
+播放队列、PDF/EPUB 目录、多图浏览和视频列表拥有相近的容器交互，但领域状态并不相同。
+因此 Core 提供统一的 `Navigator Panel`，Built-in Provider 与扩展 Session 只贡献数据和动作：
+
+``` text
+Built-in PDF ──────── PDF 目录
+Built-in 图片 ─────── 图片集合
+Hi-Fi Extension ───── 播放队列
+EPUB Extension ────── 章节目录
+Video+ Extension ──── 视频队列 / 章节
+                         │
+                         ▼
+               NavigatorContribution
+                         │
+                         ▼
+                 Core Navigator Host
+                  ├── 桌面：箔片外侧伴随面板
+                  └── 全屏：箔片内部覆盖层
+```
+
+`NavigatorContribution` 是 versioned、可序列化的值类型 contract，第一版只覆盖实际需求：
+
+-   一维列表与树形目录；
+-   稳定的 contribution / item identifier 和 revision；
+-   内容标题、副标题、SF Symbol、badge、当前项和 enabled 状态；
+-   单选或多选状态；
+-   activate、remove、move 等明确声明的动作；
+-   使用 parent identifier 表达层级，并校验重复 ID、悬空父节点和环；
+-   允许一个 Session 提供多个 navigator，例如 PDF 的目录与缩略图、EPUB 的目录与书签；
+-   大列表后续可在同一 contract 的新版加入分页或增量 diff，v1 不传递任意 Swift 数据源对象。
+
+条目标题属于内容数据，不要求本地化；面板标题、空状态、菜单和其他宿主 chrome 使用本地化 key。
+图片必须使用 Host 管理的资源引用，不能传递 `NSImage`、`NSView` 或 SwiftUI `View`。扩展不能自绘
+列表行；Core 使用有限的声明式字段统一处理选择、键盘导航、辅助功能和外观。超出列表/树导航
+范畴的音效、属性检查器或控制器界面应使用独立贡献点，不能把 Navigator 演变成任意 UI 容器。
+
+桌面态使用独立伴随面板，不扩大 `FloatingWindow` 的内容 frame，以免改变图片/PDF 比例缩放、
+窗口恢复和拖拽行为。用户可按窗口选择左/右侧、鼠标移入/始终显示及宽度；新窗口采用全局默认，
+窗口覆盖值由 Core 持久化并向后兼容解码。伴随面板成为 key window 时，菜单和快捷键仍路由到
+所属箔片。主窗口移动、关闭、置顶、透明度、Space 和屏幕变化必须同步处理。
+
+全屏时隐藏外侧伴随面板，把同一个状态模型挂载为主内容之上的内侧覆盖层；从用户选择的一侧
+滑入，通过边缘 hover 或宿主快捷键触发。桌面与全屏不能维护两份选择、展开或当前项状态。
+所选外侧空间不足时可以临时退化为内侧覆盖，但不能静默修改用户的左右偏好。
 
 ### Provider Resolution
 
@@ -816,11 +870,11 @@ DSD 输出模式
 
 UI Contributions
 音乐专用菜单
-播放列表与音效入口
+播放队列数据与通用导航面板入口
 ```
 
 它能验证 Extension API 是否足够支持文件
-Provider、已有 Provider 增强、播放列表、Host Presentation、后台播放、命令与菜单、设置面板、
+Provider、已有 Provider 增强、播放队列及其 Navigator 投影、Host Presentation、后台播放、命令与菜单、设置面板、
 系统设备、native library、状态迁移、失败回退和独立升级。
 
 音乐专用菜单由 Core 根据活动窗口对应 Session 的 `CommandDescriptor` 构建。扩展提供本地化
@@ -905,6 +959,8 @@ PresentationAdapter
 -   ContentSession；
 -   capability negotiation；
 -   CommandDescriptor 与宿主菜单样机；
+-   `ui.navigator` v1 contract、校验、动作路由与宿主伴随面板样机；
+-   一维列表和树形目录 Test Extension fixture，证明扩展不传递自定义 View；
 -   namespaced、versioned extension state；
 -   Extension Loader；
 -   本地 Test Extension；
@@ -914,6 +970,7 @@ PresentationAdapter
 
 ``` text
 Test.foo → TestExtension → ContentSession → Host Presentation
+         → NavigatorContribution（flat + outline）→ Core Navigator Panel
 
 Test.mp3 → Built-in / AudioEnhancer 候选
          → 选择 AudioEnhancer
@@ -922,6 +979,8 @@ Test.mp3 → Built-in / AudioEnhancer 候选
 ```
 
 第二条验收必须存在，否则只能证明“新增文件类型”，不能证明扩展系统可以增强原有能力。
+Navigator 样机还必须验证旧 Session 缺少 contribution 字段时可正常解码、非法层级被拒绝、
+条目动作可沿既有值消息/XPC 边界路由，以及伴随面板获得焦点后活动窗口命令仍指向所属箔片。
 
 ### Phase 1：Extension Manager
 
@@ -952,7 +1011,8 @@ Test.mp3 → Built-in / AudioEnhancer 候选
 -   APE / WavPack；
 -   增强 MP3 / AAC / ALAC / FLAC 等已有音频；
 -   Built-in fallback 与默认 Provider 设置；
--   播放列表 / 播放队列及多文件授权恢复；
+-   `media.playback-queue` 播放列表 / 播放队列语义及多文件授权恢复；
+-   向 Core `Navigator Panel` 提供一维播放队列投影，不实现扩展私有侧栏；
 -   DoP；
 -   DSD → PCM fallback；
 -   音效 / 可视化；
@@ -966,6 +1026,7 @@ Test.mp3 → Built-in / AudioEnhancer 候选
 
 -   MP3 在 Built-in 与 Hi-Fi 间切换，失败时正确回退；
 -   播放列表重启后恢复，缺失文件和失效 bookmark 可解释、可重新授权；
+-   播放队列与 PDF 树形目录由同一个 Core Navigator Panel 呈现；
 -   活动窗口切换时音乐菜单、快捷键和 enabled 状态同步；
 -   输出设备拔插、默认设备变化和采样率变化不中断其他窗口；
 -   Hog Mode 获取失败、Session 关闭和进程异常退出时可靠释放设备；
@@ -974,11 +1035,13 @@ Test.mp3 → Built-in / AudioEnhancer 候选
 ### Phase 3：EPUB
 
 把 EPUB 重型依赖从 Core 迁出，验证 renderer/resource-heavy
-类型扩展和旧功能迁移。
+类型扩展和旧功能迁移。EPUB 扩展贡献树形目录数据与跳转动作，由 Core Navigator Panel 呈现，
+不携带扩展私有列表 View。
 
 ### Phase 4：Video+
 
 加入 FFmpeg / libav\*、MKV、RM/RMVB 等，并依据 Phase 0 结果将高风险解码放入独立进程。
+视频队列复用 `media.playback-queue`，列表与章节复用 `ui.navigator`。
 
 ### Phase 5：Retro
 
@@ -1030,6 +1093,7 @@ Extension
   Capability Negotiation          是
   增强 Built-in Provider          是，支持 override 与 fallback
   多文件 / 播放列表               ContentRequest 原生支持
+  列表 / 树形目录呈现              Core Navigator Panel + versioned contribution
   菜单与快捷键                    Core 根据 CommandDescriptor 构建
   持久化扩展状态                  namespaced + schema version
   Registry                        统一

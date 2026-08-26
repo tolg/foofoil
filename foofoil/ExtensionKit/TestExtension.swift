@@ -72,6 +72,13 @@ final class TestContentProvider: ContentProvider {
                         scope: .presentation
                     ),
                     state: .active
+                ),
+                NegotiatedCapability(
+                    declaration: ExtensionCapabilityDeclaration(
+                        id: ExtensionCapabilityIdentifier.navigator,
+                        scope: .presentation
+                    ),
+                    state: .active
                 )
             ],
             commands: [
@@ -79,6 +86,28 @@ final class TestContentProvider: ContentProvider {
                     id: "test.append-marker",
                     titleLocalizationKey: "Append Test Marker",
                     symbolName: "checkmark.seal"
+                )
+            ],
+            navigatorContributions: [
+                NavigatorContribution(
+                    id: "test.items",
+                    titleLocalizationKey: "Test Items",
+                    style: .flat,
+                    items: [
+                        NavigatorItem(id: "first", title: "First item", symbolName: "1.circle", isCurrent: true),
+                        NavigatorItem(id: "second", title: "Second item", symbolName: "2.circle")
+                    ],
+                    selectedItemIDs: ["first"]
+                ),
+                NavigatorContribution(
+                    id: "test.outline",
+                    titleLocalizationKey: "Test Outline",
+                    style: .outline,
+                    items: [
+                        NavigatorItem(id: "chapter", title: "Chapter", symbolName: "book.closed"),
+                        NavigatorItem(id: "section-a", parentID: "chapter", title: "Section A"),
+                        NavigatorItem(id: "section-b", parentID: "chapter", title: "Section B")
+                    ]
                 )
             ]
         )
@@ -90,6 +119,23 @@ final class TestContentProvider: ContentProvider {
         if case .text(let titleKey, let body) = updated.presentation {
             updated.presentation = .text(titleKey: titleKey, body: body + "\n✓ Extension command")
         }
+        return updated
+    }
+
+    func perform(navigatorAction: NavigatorAction, session: ContentSession) async throws -> ContentSession {
+        guard navigatorAction.kind == .activate,
+              let itemID = navigatorAction.itemIDs.first,
+              let contributionIndex = session.navigatorContributions.firstIndex(where: {
+                  $0.id == navigatorAction.contributionID
+              }) else { return session }
+        var updated = session
+        updated.navigatorContributions[contributionIndex].selectedItemIDs = [itemID]
+        updated.navigatorContributions[contributionIndex].items = updated.navigatorContributions[contributionIndex].items.map {
+            var item = $0
+            item.isCurrent = item.id == itemID
+            return item
+        }
+        updated.navigatorContributions[contributionIndex].revision += 1
         return updated
     }
 }
@@ -182,6 +228,10 @@ enum LocalTestExtension {
         capabilities: [
             ExtensionCapabilityDeclaration(
                 id: ExtensionCapabilityIdentifier.commandProvider,
+                scope: .presentation
+            ),
+            ExtensionCapabilityDeclaration(
+                id: ExtensionCapabilityIdentifier.navigator,
                 scope: .presentation
             )
         ]

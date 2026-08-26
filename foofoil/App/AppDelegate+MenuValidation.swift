@@ -62,11 +62,13 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             setMenuItem(withAction: #selector(fitImageToWindowWidthAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(zoomOutWindowAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(zoomInWindowAction), in: menu, isHidden: true)
+            navigatorMenuItem?.isHidden = true
             return
         }
 
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
         let isWebMode = appState.webURL != nil
+        navigatorMenuItem?.isHidden = appState.navigatorContributions.isEmpty
 
         // 1. 图片和网页模式均可切换视觉边框。
         setMenuItem(withAction: #selector(toggleShowBorderAction), in: menu, isHidden: !(isImageMode || isWebMode))
@@ -158,6 +160,40 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
                 return true
             }
             return false
+        }
+
+        if menuItem.action == #selector(toggleNavigatorPanelAction) {
+            guard let controller = activeWindowController,
+                  !controller.appState.navigatorContributions.isEmpty else {
+                menuItem.state = .off
+                return false
+            }
+            menuItem.state = controller.isNavigatorPanelVisible ? .on : .off
+            return true
+        }
+
+        if menuItem.action == #selector(placeNavigatorOnLeftAction) {
+            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
+            menuItem.state = appState.navigatorPanelSide == .left ? .on : .off
+            return true
+        }
+
+        if menuItem.action == #selector(placeNavigatorOnRightAction) {
+            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
+            menuItem.state = appState.navigatorPanelSide == .right ? .on : .off
+            return true
+        }
+
+        if menuItem.action == #selector(showNavigatorOnHoverAction) {
+            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
+            menuItem.state = appState.navigatorPanelVisibilityMode == .onHover ? .on : .off
+            return true
+        }
+
+        if menuItem.action == #selector(alwaysShowNavigatorAction) {
+            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
+            menuItem.state = appState.navigatorPanelVisibilityMode == .always ? .on : .off
+            return true
         }
 
         if menuItem.action == #selector(fitWindowToImageAction) ||

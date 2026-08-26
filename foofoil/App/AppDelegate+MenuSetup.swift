@@ -198,6 +198,59 @@ extension AppDelegate {
         toggleBorderItem.target = self
         viewMenu.addItem(toggleBorderItem)
 
+        let navigatorMenu = NSMenu(title: NSLocalizedString("Navigator", comment: ""))
+        let toggleNavigatorItem = NSMenuItem(
+            title: NSLocalizedString("Toggle Navigator", comment: ""),
+            action: #selector(toggleNavigatorPanelAction),
+            keyEquivalent: "s"
+        )
+        toggleNavigatorItem.withSymbol("sidebar.left")
+        toggleNavigatorItem.keyEquivalentModifierMask = [.command, .control]
+        toggleNavigatorItem.target = self
+        navigatorMenu.addItem(toggleNavigatorItem)
+        navigatorMenu.addItem(NSMenuItem.separator())
+
+        let navigatorLeftItem = NSMenuItem(
+            title: NSLocalizedString("Navigator on Left", comment: ""),
+            action: #selector(placeNavigatorOnLeftAction),
+            keyEquivalent: ""
+        )
+        navigatorLeftItem.withSymbol("sidebar.left")
+        navigatorLeftItem.target = self
+        navigatorMenu.addItem(navigatorLeftItem)
+
+        let navigatorRightItem = NSMenuItem(
+            title: NSLocalizedString("Navigator on Right", comment: ""),
+            action: #selector(placeNavigatorOnRightAction),
+            keyEquivalent: ""
+        )
+        navigatorRightItem.withSymbol("sidebar.right")
+        navigatorRightItem.target = self
+        navigatorMenu.addItem(navigatorRightItem)
+        navigatorMenu.addItem(NSMenuItem.separator())
+
+        let navigatorOnHoverItem = NSMenuItem(
+            title: NSLocalizedString("Show Navigator on Hover", comment: ""),
+            action: #selector(showNavigatorOnHoverAction),
+            keyEquivalent: ""
+        )
+        navigatorOnHoverItem.target = self
+        navigatorMenu.addItem(navigatorOnHoverItem)
+
+        let navigatorAlwaysItem = NSMenuItem(
+            title: NSLocalizedString("Always Show Navigator", comment: ""),
+            action: #selector(alwaysShowNavigatorAction),
+            keyEquivalent: ""
+        )
+        navigatorAlwaysItem.target = self
+        navigatorMenu.addItem(navigatorAlwaysItem)
+
+        let navigatorItem = NSMenuItem(title: NSLocalizedString("Navigator", comment: ""), action: nil, keyEquivalent: "")
+        navigatorItem.withSymbol("sidebar.left")
+        navigatorItem.submenu = navigatorMenu
+        self.navigatorMenuItem = navigatorItem
+        viewMenu.addItem(navigatorItem)
+
         // Reload Page - 快捷键 Command + R
         let reloadPageItem = NSMenuItem(title: NSLocalizedString("Reload Page", comment: ""), action: #selector(reloadPageAction), keyEquivalent: "r")
         reloadPageItem.withSymbol("arrow.clockwise")

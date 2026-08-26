@@ -47,6 +47,10 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     /// 扩展状态仅保存 namespace 与引用；实际 payload 由 ExtensionStateStore 原子管理。
     public var extensionID: String?
     public var extensionStateReference: String?
+    /// 导航面板属于窗口呈现状态，不进入扩展私有 payload。
+    public var navigatorPanelSide: NavigatorPanelSide
+    public var navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode
+    public var navigatorPanelWidth: Double
 
 
     public init(
@@ -76,7 +80,10 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         isVideoLooping: Bool = true,
         videoBookmark: Data? = nil,
         extensionID: String? = nil,
-        extensionStateReference: String? = nil
+        extensionStateReference: String? = nil,
+        navigatorPanelSide: NavigatorPanelSide = .right,
+        navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode = .onHover,
+        navigatorPanelWidth: Double = 260.0
     ) {
         self.id = id
         self.imagePath = imagePath
@@ -105,10 +112,13 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         self.videoBookmark = videoBookmark
         self.extensionID = extensionID
         self.extensionStateReference = extensionStateReference
+        self.navigatorPanelSide = navigatorPanelSide
+        self.navigatorPanelVisibilityMode = navigatorPanelVisibilityMode
+        self.navigatorPanelWidth = navigatorPanelWidth
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark, extensionID, extensionStateReference
+        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark, extensionID, extensionStateReference, navigatorPanelSide, navigatorPanelVisibilityMode, navigatorPanelWidth
     }
 
     public init(from decoder: Decoder) throws {
@@ -141,6 +151,14 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         videoBookmark = try container.decodeIfPresent(Data.self, forKey: .videoBookmark)
         extensionID = try container.decodeIfPresent(String.self, forKey: .extensionID)
         extensionStateReference = try container.decodeIfPresent(String.self, forKey: .extensionStateReference)
+        navigatorPanelSide = try container.decodeIfPresent(NavigatorPanelSide.self, forKey: .navigatorPanelSide) ?? .right
+        navigatorPanelVisibilityMode = try container.decodeIfPresent(
+            NavigatorPanelVisibilityMode.self,
+            forKey: .navigatorPanelVisibilityMode
+        ) ?? .onHover
+        navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(
+            try container.decodeIfPresent(Double.self, forKey: .navigatorPanelWidth) ?? NavigatorPanelMetrics.defaultWidth
+        )
     }
 
     public var historyMenuSymbolName: String {
@@ -222,7 +240,10 @@ public class SettingsStore {
         userDefaults.register(defaults: [
             Keys.opacity: 1.0,
             Keys.isPinned: false,
-            Keys.text: ""
+            Keys.text: "",
+            Keys.navigatorPanelSide: NavigatorPanelSide.right.rawValue,
+            Keys.navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode.onHover.rawValue,
+            Keys.navigatorPanelWidth: NavigatorPanelMetrics.defaultWidth
         ])
     }
 
@@ -234,6 +255,28 @@ public class SettingsStore {
         static let windowFrame = "windowFrame"
         static let windowConfigs = "windowConfigs"
         static let historyConfigs = "historyConfigs"
+        static let navigatorPanelSide = "navigatorPanelSide"
+        static let navigatorPanelVisibilityMode = "navigatorPanelVisibilityMode"
+        static let navigatorPanelWidth = "navigatorPanelWidth"
+    }
+
+    var navigatorPanelSide: NavigatorPanelSide {
+        get { NavigatorPanelSide(rawValue: userDefaults.string(forKey: Keys.navigatorPanelSide) ?? "") ?? .right }
+        set { userDefaults.set(newValue.rawValue, forKey: Keys.navigatorPanelSide) }
+    }
+
+    var navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode {
+        get {
+            NavigatorPanelVisibilityMode(
+                rawValue: userDefaults.string(forKey: Keys.navigatorPanelVisibilityMode) ?? ""
+            ) ?? .onHover
+        }
+        set { userDefaults.set(newValue.rawValue, forKey: Keys.navigatorPanelVisibilityMode) }
+    }
+
+    var navigatorPanelWidth: Double {
+        get { NavigatorPanelMetrics.clampWidth(userDefaults.double(forKey: Keys.navigatorPanelWidth)) }
+        set { userDefaults.set(NavigatorPanelMetrics.clampWidth(newValue), forKey: Keys.navigatorPanelWidth) }
     }
 
     public var windowConfigs: [WindowConfig] {

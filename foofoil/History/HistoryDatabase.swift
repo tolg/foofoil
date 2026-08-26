@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 nonisolated final class HistoryDatabase {
-    static let schemaVersion = 6
+    static let schemaVersion = 7
 
     private let queue = DispatchQueue(label: "com.foofoil.history.database", qos: .utility)
     private var connection: OpaquePointer?
@@ -96,8 +96,9 @@ nonisolated final class HistoryDatabase {
                         window_frame, show_border, image_scale, text_font_size, is_markdown_preview,
                         svg_color, background_color_hex, created_at, updated_at, last_opened_at,
                         source_fingerprint, index_status, index_version, video_looping, video_bookmark,
-                        extension_id, extension_state_reference
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        extension_id, extension_state_reference, navigator_panel_side,
+                        navigator_panel_visibility, navigator_panel_width
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
                         content_kind=excluded.content_kind, display_title=excluded.display_title,
                         original_filename=excluded.original_filename, image_path=excluded.image_path,
@@ -113,7 +114,10 @@ nonisolated final class HistoryDatabase {
                         source_fingerprint=excluded.source_fingerprint,
                         video_looping=excluded.video_looping, video_bookmark=excluded.video_bookmark,
                         extension_id=excluded.extension_id,
-                        extension_state_reference=excluded.extension_state_reference
+                        extension_state_reference=excluded.extension_state_reference,
+                        navigator_panel_side=excluded.navigator_panel_side,
+                        navigator_panel_visibility=excluded.navigator_panel_visibility,
+                        navigator_panel_width=excluded.navigator_panel_width
                     """, bindings: [
                         config.id.uuidString, kind.rawValue, title, config.originalImageName,
                         config.imagePath, config.textPath, config.webURLString, config.actualWebURLString,
@@ -122,7 +126,8 @@ nonisolated final class HistoryDatabase {
                         config.isMarkdownPreview, config.svgColor, config.backgroundColorHex,
                         createdAt, now, now, config.sourceFingerprint, 0, 1, config.isVideoLooping,
                         config.videoBookmark?.base64EncodedString(), config.extensionID,
-                        config.extensionStateReference
+                        config.extensionStateReference, config.navigatorPanelSide.rawValue,
+                        config.navigatorPanelVisibilityMode.rawValue, config.navigatorPanelWidth
                     ])
 
                 let metadata = [config.webURLString, config.actualWebURLString].compactMap { $0 }.joined(separator: " ")
@@ -287,7 +292,10 @@ nonisolated final class HistoryDatabase {
                 source_fingerprint TEXT, index_status INTEGER NOT NULL DEFAULT 0,
                 index_version INTEGER NOT NULL DEFAULT 0, index_error TEXT, thumbnail_path TEXT,
                 video_looping INTEGER NOT NULL DEFAULT 1, video_bookmark TEXT,
-                extension_id TEXT, extension_state_reference TEXT
+                extension_id TEXT, extension_state_reference TEXT,
+                navigator_panel_side TEXT NOT NULL DEFAULT 'right',
+                navigator_panel_visibility TEXT NOT NULL DEFAULT 'onHover',
+                navigator_panel_width REAL NOT NULL DEFAULT 260.0
             );
             CREATE INDEX IF NOT EXISTS idx_history_last_opened ON history_items(last_opened_at DESC);
             CREATE INDEX IF NOT EXISTS idx_history_kind ON history_items(content_kind);
@@ -328,6 +336,14 @@ nonisolated final class HistoryDatabase {
         if previousVersion >= 1 && previousVersion < 6 {
             // v6 只保存扩展命名空间和状态引用，扩展 payload 仍由 ExtensionStateStore 管理。
             try execute("ALTER TABLE history_items ADD COLUMN extension_id TEXT; ALTER TABLE history_items ADD COLUMN extension_state_reference TEXT")
+        }
+        if previousVersion >= 1 && previousVersion < 7 {
+            // v7 导航面板布局归 Core/窗口所有；旧记录采用不会改变箔片 frame 的默认值。
+            try execute("""
+                ALTER TABLE history_items ADD COLUMN navigator_panel_side TEXT NOT NULL DEFAULT 'right';
+                ALTER TABLE history_items ADD COLUMN navigator_panel_visibility TEXT NOT NULL DEFAULT 'onHover';
+                ALTER TABLE history_items ADD COLUMN navigator_panel_width REAL NOT NULL DEFAULT 260.0;
+                """)
         }
         try execute("PRAGMA user_version = \(Self.schemaVersion)")
         // 新库明确不读取旧历史；初始化成功后移除旧键，避免旧路径复活。
@@ -466,7 +482,14 @@ nonisolated final class HistoryDatabase {
                     isVideoLooping: sqlite3_column_int(statement, columns["video_looping"]!) != 0,
                     videoBookmark: optionalText(statement, columns["video_bookmark"]!).flatMap { Data(base64Encoded: $0) },
                     extensionID: optionalText(statement, columns["extension_id"]!),
-                    extensionStateReference: optionalText(statement, columns["extension_state_reference"]!)
+                    extensionStateReference: optionalText(statement, columns["extension_state_reference"]!),
+                    navigatorPanelSide: optionalText(statement, columns["navigator_panel_side"]!)
+                        .flatMap(NavigatorPanelSide.init(rawValue:)) ?? .right,
+                    navigatorPanelVisibilityMode: optionalText(statement, columns["navigator_panel_visibility"]!)
+                        .flatMap(NavigatorPanelVisibilityMode.init(rawValue:)) ?? .onHover,
+                    navigatorPanelWidth: NavigatorPanelMetrics.clampWidth(
+                        sqlite3_column_double(statement, columns["navigator_panel_width"]!)
+                    )
                 ))
             }
         }

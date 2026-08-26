@@ -37,6 +37,36 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     @Published var extensionFallbackProviderID: String?
     var extensionStateReference: String?
 
+    /// Built-in 与扩展统一投影到同一宿主导航模型；同一窗口只会有一个主内容来源。
+    @Published var builtInNavigatorContributions: [NavigatorContribution] = []
+    var navigatorContributions: [NavigatorContribution] {
+        if !builtInNavigatorContributions.isEmpty { return builtInNavigatorContributions }
+        return extensionSession?.navigatorContributions ?? []
+    }
+    var builtInNavigatorActionHandler: ((NavigatorAction) -> Void)?
+
+    @Published var navigatorPanelSide: NavigatorPanelSide {
+        didSet { saveState() }
+    }
+    @Published var navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode {
+        didSet { saveState() }
+    }
+    @Published var navigatorPanelWidth: Double {
+        didSet {
+            let clamped = NavigatorPanelMetrics.clampWidth(navigatorPanelWidth)
+            if clamped != navigatorPanelWidth {
+                navigatorPanelWidth = clamped
+            } else if !isAdjustingNavigatorPanelWidth {
+                saveState()
+            }
+        }
+    }
+    @Published var isNavigatorPanelExplicitlyVisible = false
+    @Published var isNavigatorPanelHovered = false
+    @Published var activeNavigatorContributionID: String?
+    @Published var expandedNavigatorItemIDs: Set<String> = []
+    var isAdjustingNavigatorPanelWidth = false
+
     @Published public var svgColor: String? {
         didSet {
             saveState()
@@ -263,6 +293,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.extensionSession = nil
         self.extensionFallbackProviderID = nil
         self.extensionStateReference = config.extensionStateReference
+        self.navigatorPanelSide = config.navigatorPanelSide
+        self.navigatorPanelVisibilityMode = config.navigatorPanelVisibilityMode
+        self.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(config.navigatorPanelWidth)
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
@@ -341,6 +374,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.extensionSession = nil
         self.extensionFallbackProviderID = nil
         self.extensionStateReference = nil
+        self.navigatorPanelSide = SettingsStore.shared.navigatorPanelSide
+        self.navigatorPanelVisibilityMode = SettingsStore.shared.navigatorPanelVisibilityMode
+        self.navigatorPanelWidth = SettingsStore.shared.navigatorPanelWidth
         super.init()
         updateRenderedMarkdown()
     }

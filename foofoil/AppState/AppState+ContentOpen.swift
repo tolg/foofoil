@@ -269,6 +269,12 @@ extension AppState {
         public func openFile(url: URL) {
             guard canOpenFile(url: url) else { return }
 
+            builtInNavigatorContributions = []
+            builtInNavigatorActionHandler = nil
+            isNavigatorPanelExplicitlyVisible = false
+            activeNavigatorContributionID = nil
+            expandedNavigatorItemIDs = []
+
             if ExtensionHost.shared.canOpen(url: url) {
                 openUsingExtension(url: url)
                 return
@@ -353,6 +359,44 @@ extension AppState {
                 } catch {
                     NSLog("Extension command failed: \(error.localizedDescription)")
                 }
+            }
+        }
+
+        func performNavigatorAction(_ action: NavigatorAction) {
+            if let session = extensionSession {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        let updated = try await ExtensionHost.shared.perform(
+                            navigatorAction: action,
+                            in: session
+                        )
+                        self.extensionSession = updated
+                        if let extensionID = updated.extensionID,
+                           let reference = self.extensionStateReference {
+                            let payload = try JSONEncoder().encode(updated)
+                            try ExtensionHost.shared.stateStore.save(
+                                extensionID: extensionID,
+                                schemaVersion: 1,
+                                payload: payload,
+                                reference: reference
+                            )
+                        }
+                        self.saveState()
+                    } catch {
+                        NSLog("Navigator action failed: \(error.localizedDescription)")
+                    }
+                }
+                return
+            }
+            guard let contribution = builtInNavigatorContributions.first(where: {
+                $0.id == action.contributionID
+            }) else { return }
+            do {
+                try NavigatorContributionValidator.validate(action, in: contribution)
+                builtInNavigatorActionHandler?(action)
+            } catch {
+                NSLog("Built-in navigator action failed validation: \(error.localizedDescription)")
             }
         }
 

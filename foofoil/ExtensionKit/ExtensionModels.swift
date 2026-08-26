@@ -117,7 +117,7 @@ struct ExtensionCapabilityDeclaration: Codable, Equatable, Sendable {
 
 enum ExtensionCapabilityIdentifier {
     static let seekable = "session.seekable"
-    static let playbackQueue = "audio.playback-queue"
+    static let mediaPlaybackQueue = "media.playback-queue"
     static let audioEffects = "audio.effects"
     static let visualization = "audio.visualization"
     static let subtitle = "video.subtitle"
@@ -125,6 +125,7 @@ enum ExtensionCapabilityIdentifier {
     static let deviceSelector = "audio.device-selection"
     static let settingsProvider = "application.settings"
     static let commandProvider = "ui.commands"
+    static let navigator = "ui.navigator"
     static let presentationAdapter = "ui.presentation"
 
     static func inferredScope(for identifier: String) -> ExtensionCapabilityScope {

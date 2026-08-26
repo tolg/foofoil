@@ -18,6 +18,7 @@
     }
   ],
   "capabilities": [
-    {"id": "ui.commands", "contractVersion": 1, "scope": "presentation", "dependencies": []}
+    {"id": "ui.commands", "contractVersion": 1, "scope": "presentation", "dependencies": []},
+    {"id": "ui.navigator", "contractVersion": 1, "scope": "presentation", "dependencies": []}
   ]
 }

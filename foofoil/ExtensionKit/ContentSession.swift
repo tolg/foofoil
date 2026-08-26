@@ -85,6 +85,7 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
     var presentation: SessionPresentation
     var capabilities: [NegotiatedCapability]
     var commands: [CommandDescriptor]
+    var navigatorContributions: [NavigatorContribution]
     var stateReference: String?
 
     init(
@@ -95,6 +96,7 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
         presentation: SessionPresentation,
         capabilities: [NegotiatedCapability] = [],
         commands: [CommandDescriptor] = [],
+        navigatorContributions: [NavigatorContribution] = [],
         stateReference: String? = nil
     ) {
         self.id = id
@@ -104,7 +106,30 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
         self.presentation = presentation
         self.capabilities = capabilities
         self.commands = commands
+        self.navigatorContributions = navigatorContributions
         self.stateReference = stateReference
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, extensionID, providerID, request, presentation, capabilities, commands
+        case navigatorContributions, stateReference
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        extensionID = try container.decodeIfPresent(String.self, forKey: .extensionID)
+        providerID = try container.decode(String.self, forKey: .providerID)
+        request = try container.decode(ContentRequest.self, forKey: .request)
+        presentation = try container.decode(SessionPresentation.self, forKey: .presentation)
+        capabilities = try container.decodeIfPresent([NegotiatedCapability].self, forKey: .capabilities) ?? []
+        commands = try container.decodeIfPresent([CommandDescriptor].self, forKey: .commands) ?? []
+        // Phase 0 早期 Session 没有导航贡献；缺失字段必须保持可恢复。
+        navigatorContributions = try container.decodeIfPresent(
+            [NavigatorContribution].self,
+            forKey: .navigatorContributions
+        ) ?? []
+        stateReference = try container.decodeIfPresent(String.self, forKey: .stateReference)
     }
 }
 
@@ -128,10 +153,15 @@ protocol ContentProvider: AnyObject {
     func match(_ request: ContentRequest) -> ProviderMatch?
     func makeSession(for request: ContentRequest, negotiatedAPI: UInt32) async throws -> ContentSession
     func perform(commandID: String, session: ContentSession) async throws -> ContentSession
+    func perform(navigatorAction: NavigatorAction, session: ContentSession) async throws -> ContentSession
 }
 
 extension ContentProvider {
     func perform(commandID: String, session: ContentSession) async throws -> ContentSession {
+        session
+    }
+
+    func perform(navigatorAction: NavigatorAction, session: ContentSession) async throws -> ContentSession {
         session
     }
 }

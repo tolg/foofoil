@@ -162,6 +162,7 @@ final class ProviderResolver {
                 let accessScope = ExtensionResourceAccessScope(request: request)
                 defer { accessScope.stop() }
                 let session = try await provider.makeSession(for: request, negotiatedAPI: negotiatedAPI)
+                try NavigatorContributionValidator.validate(session)
                 return SessionResolutionOutcome(session: session, resolution: resolution, failures: failures)
             } catch {
                 failures.append(ProviderFailure(providerID: providerID, message: error.localizedDescription))

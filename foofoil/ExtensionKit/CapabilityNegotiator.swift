@@ -31,7 +31,7 @@ struct CapabilityNegotiationResult: Equatable, Sendable {
 enum CapabilityNegotiator {
     static let v1HostContracts: [HostCapabilityContract] = [
         .init(id: ExtensionCapabilityIdentifier.seekable, maximumContractVersion: 1, scope: .session),
-        .init(id: ExtensionCapabilityIdentifier.playbackQueue, maximumContractVersion: 1, scope: .session),
+        .init(id: ExtensionCapabilityIdentifier.mediaPlaybackQueue, maximumContractVersion: 1, scope: .session),
         .init(id: ExtensionCapabilityIdentifier.audioEffects, maximumContractVersion: 1, scope: .session),
         .init(id: ExtensionCapabilityIdentifier.visualization, maximumContractVersion: 1, scope: .session),
         .init(id: ExtensionCapabilityIdentifier.subtitle, maximumContractVersion: 1, scope: .session),
@@ -39,6 +39,7 @@ enum CapabilityNegotiator {
         .init(id: ExtensionCapabilityIdentifier.deviceSelector, maximumContractVersion: 1, scope: .application),
         .init(id: ExtensionCapabilityIdentifier.settingsProvider, maximumContractVersion: 1, scope: .application),
         .init(id: ExtensionCapabilityIdentifier.commandProvider, maximumContractVersion: 1, scope: .presentation),
+        .init(id: ExtensionCapabilityIdentifier.navigator, maximumContractVersion: 1, scope: .presentation),
         .init(id: ExtensionCapabilityIdentifier.presentationAdapter, maximumContractVersion: 1, scope: .presentation)
     ]
 

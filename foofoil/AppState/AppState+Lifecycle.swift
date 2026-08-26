@@ -39,6 +39,11 @@ extension AppState {
             self.extensionSession = nil
             self.extensionFallbackProviderID = nil
             self.extensionStateReference = nil
+            self.builtInNavigatorContributions = []
+            self.builtInNavigatorActionHandler = nil
+            self.isNavigatorPanelExplicitlyVisible = false
+            self.activeNavigatorContributionID = nil
+            self.expandedNavigatorItemIDs = []
             isBatchUpdating = false
 
             NotificationCenter.default.post(

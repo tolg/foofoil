@@ -35,9 +35,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private var pdfResizeInitialSize: NSSize?
     private var pendingPDFFitWorkItem: DispatchWorkItem?
     private var currentPDFPageSize: NSSize?
+    private let navigatorPanelController: NavigatorPanelController
+    private var pendingNavigatorPanelHide: DispatchWorkItem?
+    private var isNavigatorEdgeHovered = false
 
     public init(appState: AppState) {
         self.appState = appState
+        self.navigatorPanelController = NavigatorPanelController(appState: appState)
         self.isRestoringSavedImageFrame = (appState.windowFrame != nil && appState.imageURL != nil)
         self.isRestoringSavedWebFrame = (appState.windowFrame != nil && appState.webURL != nil)
         self.pendingSavedFrameRestore = self.isRestoringSavedImageFrame
@@ -81,6 +85,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
         // 绑定状态监听
         setupBindings()
+        setupNavigatorPanelBindings()
     }
 
     required init?(coder: NSCoder) {
@@ -121,18 +126,20 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
         // 监听 Pin/Unpin 状态，更新窗口层级
         appState.$isPinned
-            .sink { [weak window] isPinned in
+            .sink { [weak self, weak window] isPinned in
                 DispatchQueue.main.async {
                     window?.level = isPinned ? .floating : .normal
+                    if let window { self?.navigatorPanelController.synchronizeAppearance(with: window) }
                 }
             }
             .store(in: &cancellables)
 
         // 监听透明度变化，更新窗口透明度
         appState.$opacity
-            .sink { [weak window] opacity in
+            .sink { [weak self, weak window] opacity in
                 DispatchQueue.main.async {
                     window?.alphaValue = CGFloat(opacity)
+                    if let window { self?.navigatorPanelController.synchronizeAppearance(with: window) }
                 }
             }
             .store(in: &cancellables)
@@ -369,6 +376,116 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func setupNavigatorPanelBindings() {
+        appState.$extensionSession
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.$builtInNavigatorContributions
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.$navigatorPanelVisibilityMode
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.$isNavigatorPanelExplicitlyVisible
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.$isNavigatorPanelHovered
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.$navigatorPanelSide
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self, let window = self.window else { return }
+                    self.navigatorPanelController.updateFrame(relativeTo: window)
+                }
+            }
+            .store(in: &cancellables)
+
+        appState.$navigatorPanelWidth
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self, let window = self.window else { return }
+                    self.navigatorPanelController.updateFrame(relativeTo: window)
+                }
+            }
+            .store(in: &cancellables)
+
+        updateNavigatorPanelVisibility()
+    }
+
+    private var shouldShowNavigatorPanel: Bool {
+        guard !appState.navigatorContributions.isEmpty else { return false }
+        if appState.navigatorPanelVisibilityMode == .always { return true }
+        return appState.isNavigatorPanelExplicitlyVisible
+            || appState.isNavigatorPanelHovered
+            || isNavigatorEdgeHovered
+    }
+
+    private func updateNavigatorPanelVisibility() {
+        guard let window else { return }
+        if shouldShowNavigatorPanel {
+            pendingNavigatorPanelHide?.cancel()
+            pendingNavigatorPanelHide = nil
+            navigatorPanelController.show(attachedTo: window)
+            return
+        }
+
+        pendingNavigatorPanelHide?.cancel()
+        if appState.navigatorContributions.isEmpty {
+            navigatorPanelController.hide()
+            return
+        }
+        // 鼠标跨过主窗口与伴随面板之间的间隙时保留短暂宽限，避免 hover 闪烁。
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, !self.shouldShowNavigatorPanel else { return }
+            self.navigatorPanelController.hide()
+        }
+        pendingNavigatorPanelHide = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+    }
+
+    func updateNavigatorEdgeHover(at point: NSPoint?) {
+        let wasHovered = isNavigatorEdgeHovered
+        if let point, let window, !appState.navigatorContributions.isEmpty {
+            let triggerWidth = CGFloat(NavigatorPanelMetrics.edgeTriggerWidth)
+            switch appState.navigatorPanelSide {
+            case .left:
+                isNavigatorEdgeHovered = point.x >= 0 && point.x <= triggerWidth
+            case .right:
+                isNavigatorEdgeHovered = point.x >= window.frame.width - triggerWidth
+                    && point.x <= window.frame.width
+            }
+        } else {
+            isNavigatorEdgeHovered = false
+        }
+        if wasHovered != isNavigatorEdgeHovered {
+            updateNavigatorPanelVisibility()
+        }
+    }
+
+    func owns(_ candidate: NSWindow) -> Bool {
+        window === candidate || navigatorPanelController.owns(candidate)
+    }
+
+    var isNavigatorPanelVisible: Bool {
+        navigatorPanelController.isVisible
     }
 
     public func zoomIn() {
@@ -737,6 +854,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     public func windowDidBecomeKey(_ notification: Notification) {
         let isCommandPressed = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
         appState.isCommandKeyPressed = isCommandPressed
+        updateNavigatorPanelVisibility()
     }
 
     public func windowDidResignKey(_ notification: Notification) {
@@ -813,10 +931,12 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     public func windowDidMove(_ notification: Notification) {
+        if let window { navigatorPanelController.updateFrame(relativeTo: window) }
         scheduleWindowFrameSave()
     }
 
     public func windowDidResize(_ notification: Notification) {
+        if let window { navigatorPanelController.updateFrame(relativeTo: window) }
         guard !isLiveResizing else { return }
         scheduleWindowFrameSave()
     }
@@ -824,6 +944,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     public func windowWillClose(_ notification: Notification) {
         pendingFrameSave?.cancel()
         pendingZoomCommit?.cancel()
+        pendingNavigatorPanelHide?.cancel()
+        navigatorPanelController.detachAndClose()
         pinchImageBaseScale = nil
         if appState.isInteractiveZooming {
             appState.isInteractiveZooming = false

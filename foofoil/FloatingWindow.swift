@@ -92,12 +92,18 @@ public class FloatingWindow: NSWindow {
         }
 
         if event.type == .mouseMoved || event.type == .cursorUpdate {
+            if let controller = self.windowController as? FloatingWindowController {
+                controller.updateNavigatorEdgeHover(at: event.locationInWindow)
+            }
             if !modifiers.contains(.command), updateEdgeResizeCursor(at: event.locationInWindow) {
                 return
             }
         }
 
         if event.type == .mouseExited {
+            if let controller = self.windowController as? FloatingWindowController {
+                controller.updateNavigatorEdgeHover(at: nil)
+            }
             resetEdgeResizeCursor()
         }
 

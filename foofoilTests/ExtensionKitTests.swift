@@ -3,6 +3,8 @@
 //
 //  Created by tolg on 2026/8/25.
 
+import AppKit
+import CoreGraphics
 import Foundation
 import Testing
 @testable import foofoil
@@ -23,6 +25,7 @@ struct ExtensionKitTests {
 
         #expect(manifest.id == LocalTestExtension.identifier)
         #expect(manifest.providers.map(\.id) == ["test.content", "test.audio-enhancer"])
+        #expect(manifest.capabilities.map(\.id).contains(ExtensionCapabilityIdentifier.navigator))
         #expect(ExtensionAPI.negotiate(with: manifest.extensionAPI) == 1)
 
         let incompatibleURL = try #require(Bundle.main.url(forResource: "IncompatibleExtensionManifest", withExtension: "json"))
@@ -118,6 +121,7 @@ struct ExtensionKitTests {
     @Test func capabilityNegotiationChecksContractScopeVersionAndDependencies() {
         let declarations: [ExtensionCapabilityDeclaration] = [
             .init(id: ExtensionCapabilityIdentifier.commandProvider, scope: .presentation),
+            .init(id: ExtensionCapabilityIdentifier.navigator, scope: .presentation),
             .init(
                 id: ExtensionCapabilityIdentifier.visualization,
                 scope: .session,
@@ -130,6 +134,7 @@ struct ExtensionKitTests {
 
         #expect(result.accepted.map(\.declaration.id) == [
             ExtensionCapabilityIdentifier.commandProvider,
+            ExtensionCapabilityIdentifier.navigator,
             ExtensionCapabilityIdentifier.visualization
         ])
         #expect(result.rejected.map(\.reason).contains(.unsupportedContractVersion))
@@ -150,6 +155,7 @@ struct ExtensionKitTests {
 
         #expect(outcome.session.providerID == "test.content")
         #expect(outcome.session.commands.map(\.id) == ["test.append-marker"])
+        #expect(outcome.session.navigatorContributions.map(\.style) == [.flat, .outline])
         guard case .text(_, let body) = outcome.session.presentation else {
             Issue.record("Expected a host text presentation")
             return
@@ -163,6 +169,113 @@ struct ExtensionKitTests {
             return
         }
         #expect(updatedBody.hasSuffix("✓ Extension command"))
+
+        let action = NavigatorAction(
+            contributionID: "test.outline",
+            kind: .activate,
+            itemIDs: ["section-b"]
+        )
+        let navigated = try await provider.perform(navigatorAction: action, session: outcome.session)
+        #expect(navigated.navigatorContributions[1].selectedItemIDs == ["section-b"])
+        #expect(navigated.navigatorContributions[1].revision == 1)
+    }
+
+    @Test func navigatorContractRoundTripsAndRejectsInvalidHierarchyAndActions() throws {
+        let contribution = NavigatorContribution(
+            id: "document.outline",
+            titleLocalizationKey: "Outline",
+            style: .outline,
+            items: [
+                NavigatorItem(id: "chapter", title: "Chapter"),
+                NavigatorItem(id: "section", parentID: "chapter", title: "Section")
+            ],
+            selectedItemIDs: ["section"],
+            allowedActions: [.activate, .move],
+            revision: 4
+        )
+        try NavigatorContributionValidator.validate(contribution)
+        let decoded = try JSONDecoder().decode(
+            NavigatorContribution.self,
+            from: JSONEncoder().encode(contribution)
+        )
+        #expect(decoded == contribution)
+
+        let action = NavigatorAction(
+            contributionID: contribution.id,
+            kind: .move,
+            itemIDs: ["section"],
+            movePosition: .end
+        )
+        try NavigatorContributionValidator.validate(action, in: contribution)
+        #expect(try JSONDecoder().decode(NavigatorAction.self, from: JSONEncoder().encode(action)) == action)
+
+        let missingParent = NavigatorContribution(
+            id: "missing-parent",
+            titleLocalizationKey: "Outline",
+            style: .outline,
+            items: [NavigatorItem(id: "child", parentID: "missing", title: "Child")]
+        )
+        #expect(throws: NavigatorContributionError.missingParent(itemID: "child", parentID: "missing")) {
+            try NavigatorContributionValidator.validate(missingParent)
+        }
+
+        let cycle = NavigatorContribution(
+            id: "cycle",
+            titleLocalizationKey: "Outline",
+            style: .outline,
+            items: [
+                NavigatorItem(id: "a", parentID: "b", title: "A"),
+                NavigatorItem(id: "b", parentID: "a", title: "B")
+            ]
+        )
+        #expect(throws: NavigatorContributionError.hierarchyCycle("a")) {
+            try NavigatorContributionValidator.validate(cycle)
+        }
+    }
+
+    @Test func contentSessionDecodesPreNavigatorPhaseZeroState() throws {
+        let session = ContentSession(
+            extensionID: LocalTestExtension.identifier,
+            providerID: "test.content",
+            request: .singleFile(.init(url: URL(fileURLWithPath: "/tmp/Test.foo"))),
+            presentation: .text(titleKey: "Test Extension", body: "legacy")
+        )
+        let encoded = try JSONEncoder().encode(session)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "navigatorContributions")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(ContentSession.self, from: legacyData)
+        #expect(decoded.navigatorContributions.isEmpty)
+        #expect(decoded.providerID == session.providerID)
+    }
+
+    @Test func navigatorPanelUsesCompanionWindowWithoutChangingFoilFrame() throws {
+        let state = AppState()
+        state.builtInNavigatorContributions = [
+            NavigatorContribution(
+                id: "builtin.test",
+                titleLocalizationKey: "Navigator",
+                style: .flat,
+                items: [NavigatorItem(id: "one", title: "One")]
+            )
+        ]
+        state.navigatorPanelVisibilityMode = .always
+        state.navigatorPanelSide = .right
+        state.navigatorPanelWidth = 300
+
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+        let originalFrame = foilWindow.frame
+        let panel = try #require(foilWindow.childWindows?.first)
+
+        #expect(controller.isNavigatorPanelVisible)
+        #expect(controller.owns(panel))
+        #expect(abs(panel.frame.width - 300) < 0.5)
+        #expect(abs(panel.frame.minX - foilWindow.frame.maxX - NavigatorPanelMetrics.attachmentGap) < 0.5)
+        #expect(foilWindow.frame == originalFrame)
+
+        controller.close()
     }
 
     @Test func audioOverrideIsSelectedAndFallsBackToBuiltInAfterFailure() async throws {
@@ -227,10 +340,20 @@ struct ExtensionKitTests {
     @Test func windowConfigDecodingKeepsBackwardCompatibility() throws {
         let legacy = WindowConfig(id: UUID(), text: "legacy")
         let encoded = try JSONEncoder().encode(legacy)
-        let decoded = try JSONDecoder().decode(WindowConfig.self, from: encoded)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "navigatorPanelSide")
+        object.removeValue(forKey: "navigatorPanelVisibilityMode")
+        object.removeValue(forKey: "navigatorPanelWidth")
+        let decoded = try JSONDecoder().decode(
+            WindowConfig.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
 
         #expect(decoded.extensionID == nil)
         #expect(decoded.extensionStateReference == nil)
+        #expect(decoded.navigatorPanelSide == .right)
+        #expect(decoded.navigatorPanelVisibilityMode == .onHover)
+        #expect(decoded.navigatorPanelWidth == NavigatorPanelMetrics.defaultWidth)
         #expect(decoded.text == "legacy")
     }
 
@@ -242,7 +365,10 @@ struct ExtensionKitTests {
             id: UUID(),
             originalImageName: "Test.foo",
             extensionID: LocalTestExtension.identifier,
-            extensionStateReference: "session-state"
+            extensionStateReference: "session-state",
+            navigatorPanelSide: .left,
+            navigatorPanelVisibilityMode: .always,
+            navigatorPanelWidth: 312
         )
 
         try database.upsert(config)
@@ -252,6 +378,9 @@ struct ExtensionKitTests {
         #expect(restored.contentKind == .extensionContent)
         #expect(restored.extensionID == LocalTestExtension.identifier)
         #expect(restored.extensionStateReference == "session-state")
+        #expect(restored.navigatorPanelSide == .left)
+        #expect(restored.navigatorPanelVisibilityMode == .always)
+        #expect(restored.navigatorPanelWidth == 312)
     }
 
     @Test func sandboxedXPCServiceNegotiatesAPIAndTransfersBookmarkMessage() async throws {

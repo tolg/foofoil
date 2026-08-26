@@ -418,6 +418,37 @@ extension AppDelegate {
         activeAppState?.showBorder.toggle()
     }
 
+    @objc func toggleNavigatorPanelAction() {
+        guard let controller = activeWindowController,
+              !controller.appState.navigatorContributions.isEmpty else { return }
+        if controller.isNavigatorPanelVisible {
+            controller.appState.navigatorPanelVisibilityMode = .onHover
+            controller.appState.isNavigatorPanelExplicitlyVisible = false
+        } else {
+            controller.appState.isNavigatorPanelExplicitlyVisible = true
+        }
+    }
+
+    @objc func placeNavigatorOnLeftAction() {
+        activeAppState?.navigatorPanelSide = .left
+        SettingsStore.shared.navigatorPanelSide = .left
+    }
+
+    @objc func placeNavigatorOnRightAction() {
+        activeAppState?.navigatorPanelSide = .right
+        SettingsStore.shared.navigatorPanelSide = .right
+    }
+
+    @objc func showNavigatorOnHoverAction() {
+        activeAppState?.navigatorPanelVisibilityMode = .onHover
+        SettingsStore.shared.navigatorPanelVisibilityMode = .onHover
+    }
+
+    @objc func alwaysShowNavigatorAction() {
+        activeAppState?.navigatorPanelVisibilityMode = .always
+        SettingsStore.shared.navigatorPanelVisibilityMode = .always
+    }
+
     @objc func reloadPageAction() {
         guard let appState = activeAppState, appState.webURL != nil else { return }
         NotificationCenter.default.post(
