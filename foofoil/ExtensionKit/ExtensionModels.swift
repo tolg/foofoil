@@ -28,6 +28,35 @@ struct ExtensionAPICompatibility: Codable, Equatable, Sendable {
 struct ExtensionSystemRequirements: Codable, Equatable, Sendable {
     let minMacOS: String
     let architectures: [String]
+
+    static var currentArchitecture: String {
+#if arch(arm64)
+        "arm64"
+#elseif arch(x86_64)
+        "x86_64"
+#else
+        "unknown"
+#endif
+    }
+
+    func isSatisfied(
+        architecture: String = currentArchitecture,
+        macOS: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
+    ) -> Bool {
+        guard architectures.contains(architecture) else { return false }
+        let parts = minMacOS.split(separator: ".").compactMap { Int($0) }
+        guard !parts.isEmpty else { return false }
+        let required = OperatingSystemVersion(
+            majorVersion: parts[0],
+            minorVersion: parts.count > 1 ? parts[1] : 0,
+            patchVersion: parts.count > 2 ? parts[2] : 0
+        )
+        return macOS.majorVersion > required.majorVersion
+            || (macOS.majorVersion == required.majorVersion
+                && (macOS.minorVersion > required.minorVersion
+                    || (macOS.minorVersion == required.minorVersion
+                        && macOS.patchVersion >= required.patchVersion)))
+    }
 }
 
 enum ExtensionProviderRole: String, Codable, Sendable {

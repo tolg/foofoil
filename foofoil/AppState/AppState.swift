@@ -35,7 +35,15 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     /// 仅用于路由网页编辑控件的键盘快捷键，不需要持久化。
     @Published public var isWebEditableElementFocused: Bool = false
     /// 扩展会话仅通过可序列化描述驱动宿主展示，不让扩展 View 穿过 ABI/XPC 边界。
-    @Published var extensionSession: ContentSession?
+    @Published var extensionSession: ContentSession? {
+        didSet {
+            let oldID = oldValue?.extensionID
+            let newID = extensionSession?.extensionID
+            guard oldID != newID else { return }
+            if let oldID { ExtensionHost.shared.releaseSession(extensionID: oldID) }
+            if let newID { ExtensionHost.shared.retainSession(extensionID: newID) }
+        }
+    }
     @Published var extensionFallbackProviderID: String?
     var extensionStateReference: String?
 
@@ -393,5 +401,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         renderTask?.cancel()
         saveTask?.cancel()
         stopVideoAccess()
+        if let extensionID = extensionSession?.extensionID {
+            ExtensionHost.shared.releaseSession(extensionID: extensionID)
+        }
     }
 }

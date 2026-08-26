@@ -243,7 +243,10 @@ public class SettingsStore {
             Keys.text: "",
             Keys.navigatorPanelSide: NavigatorPanelSide.right.rawValue,
             Keys.navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode.onHover.rawValue,
-            Keys.navigatorPanelWidth: NavigatorPanelMetrics.defaultWidth
+            Keys.navigatorPanelWidth: NavigatorPanelMetrics.defaultWidth,
+            Keys.extensionAutoCheckUpdates: true,
+            Keys.extensionAutoDownloadUpdates: false,
+            Keys.extensionAutoInstallCompatibleMinorUpdates: false
         ])
     }
 
@@ -258,6 +261,10 @@ public class SettingsStore {
         static let navigatorPanelSide = "navigatorPanelSide"
         static let navigatorPanelVisibilityMode = "navigatorPanelVisibilityMode"
         static let navigatorPanelWidth = "navigatorPanelWidth"
+        static let preferredProvidersByDomain = "preferredProvidersByDomain"
+        static let extensionAutoCheckUpdates = "extensionAutoCheckUpdates"
+        static let extensionAutoDownloadUpdates = "extensionAutoDownloadUpdates"
+        static let extensionAutoInstallCompatibleMinorUpdates = "extensionAutoInstallCompatibleMinorUpdates"
     }
 
     var navigatorPanelSide: NavigatorPanelSide {
@@ -277,6 +284,34 @@ public class SettingsStore {
     var navigatorPanelWidth: Double {
         get { NavigatorPanelMetrics.clampWidth(userDefaults.double(forKey: Keys.navigatorPanelWidth)) }
         set { userDefaults.set(NavigatorPanelMetrics.clampWidth(newValue), forKey: Keys.navigatorPanelWidth) }
+    }
+
+    var preferredProvidersByDomain: [String: String] {
+        get {
+            guard let data = userDefaults.data(forKey: Keys.preferredProvidersByDomain),
+                  let values = try? JSONDecoder().decode([String: String].self, from: data) else {
+                return [:]
+            }
+            return values
+        }
+        set {
+            userDefaults.set(try? JSONEncoder().encode(newValue), forKey: Keys.preferredProvidersByDomain)
+        }
+    }
+
+    var extensionAutoCheckUpdates: Bool {
+        get { userDefaults.object(forKey: Keys.extensionAutoCheckUpdates) as? Bool ?? true }
+        set { userDefaults.set(newValue, forKey: Keys.extensionAutoCheckUpdates) }
+    }
+
+    var extensionAutoDownloadUpdates: Bool {
+        get { userDefaults.bool(forKey: Keys.extensionAutoDownloadUpdates) }
+        set { userDefaults.set(newValue, forKey: Keys.extensionAutoDownloadUpdates) }
+    }
+
+    var extensionAutoInstallCompatibleMinorUpdates: Bool {
+        get { userDefaults.bool(forKey: Keys.extensionAutoInstallCompatibleMinorUpdates) }
+        set { userDefaults.set(newValue, forKey: Keys.extensionAutoInstallCompatibleMinorUpdates) }
     }
 
     public var windowConfigs: [WindowConfig] {

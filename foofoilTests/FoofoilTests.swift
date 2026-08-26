@@ -856,6 +856,35 @@ struct FoofoilTests {
         try? FileManager.default.removeItem(at: sourceURL)
     }
 
+    @Test func settingsWindowUsesToolbarTabsAndLocksWidth() throws {
+        let controller = SettingsWindowController.shared
+        let window = try #require(controller.window)
+        let tabController = try #require(window.contentViewController as? NSTabViewController)
+
+        #expect(tabController.tabStyle == .toolbar)
+        #expect(tabController.tabViewItems.map(\.label) == [
+            NSLocalizedString("General", comment: ""),
+            NSLocalizedString("Keyboard Shortcuts", comment: ""),
+            NSLocalizedString("Extensions", comment: "")
+        ])
+        #expect(!window.styleMask.contains(.resizable))
+        #expect(window.contentMinSize.width == SettingsWindowMetrics.width)
+        #expect(window.contentMaxSize.width == SettingsWindowMetrics.width)
+        #expect(window.contentMaxSize.height == SettingsWindowMetrics.maxHeight)
+
+        tabController.selectedTabViewItemIndex = 0
+        controller.applySelectedTabAppearance(animated: false)
+        #expect(window.title == NSLocalizedString("General", comment: ""))
+        let generalHeight = window.contentLayoutRect.height
+        #expect(generalHeight <= SettingsWindowMetrics.maxHeight + 0.5)
+        #expect(generalHeight < SettingsWindowMetrics.maxHeight - 1)
+
+        tabController.selectedTabViewItemIndex = 2
+        controller.applySelectedTabAppearance(animated: false)
+        #expect(window.title == NSLocalizedString("Extensions", comment: ""))
+        #expect(window.contentLayoutRect.height <= SettingsWindowMetrics.maxHeight + 0.5)
+    }
+
     @Test func testMainMenuIncludesHideMenuItems() {
         let appDelegate = AppDelegate()
         appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))

@@ -263,7 +263,10 @@ extension AppState {
             if Self.isExternalMediaFile(url: url) {
                 return true
             }
-            return NSImage(contentsOf: url) != nil
+            if NSImage(contentsOf: url) != nil {
+                return true
+            }
+            return ExtensionHost.shared.manager.availableExtension(for: url) != nil
         }
 
         public func openFile(url: URL) {
@@ -292,8 +295,10 @@ extension AppState {
             } else if Self.isExternalMediaFile(url: url) {
                 let accessed = url.startAccessingSecurityScopedResource()
                 openExternalMediaIfPlayable(url: url, holdsSecurityAccess: accessed)
-            } else {
+            } else if NSImage(contentsOf: url) != nil {
                 openImage(url: url)
+            } else if let available = ExtensionHost.shared.manager.availableExtension(for: url) {
+                promptToInstall(available, opening: url)
             }
         }
 
@@ -334,6 +339,33 @@ extension AppState {
                 } catch {
                     self.isBatchUpdating = false
                     NSLog("Extension session failed: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        func promptToInstall(_ entry: ExtensionRegistryEntry, opening url: URL) {
+            let alert = NSAlert()
+            alert.messageText = String(format: NSLocalizedString("Install Extension Title Format", comment: ""), entry.name)
+            alert.informativeText = String(
+                format: NSLocalizedString("Install Extension Message Format", comment: ""),
+                entry.name
+            )
+            alert.addButton(withTitle: NSLocalizedString("Install and Open", comment: ""))
+            alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+            isLoading = true
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try await ExtensionHost.shared.manager.install(entry.id)
+                    self.openUsingExtension(url: url)
+                } catch {
+                    self.isLoading = false
+                    let failed = NSAlert()
+                    failed.messageText = NSLocalizedString("Extension Install Failed Title", comment: "")
+                    failed.informativeText = error.localizedDescription
+                    failed.runModal()
                 }
             }
         }

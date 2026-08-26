@@ -25,6 +25,16 @@ extension AppDelegate {
             .withSymbol("info.circle")
         appMenu.addItem(NSMenuItem.separator())
 
+        let settingsItem = NSMenuItem(
+            title: NSLocalizedString("Settings...", comment: ""),
+            action: #selector(showSettingsAction),
+            keyEquivalent: ","
+        )
+        settingsItem.withSymbol("gearshape")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(NSMenuItem.separator())
+
         let hideItem = NSMenuItem(
             title: String(format: NSLocalizedString("Hide %@", comment: ""), appName),
             action: #selector(NSApplication.hide(_:)),

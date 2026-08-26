@@ -173,7 +173,8 @@ extension AppState {
             do {
                 if let envelope = try ExtensionHost.shared.stateStore.load(extensionID: extensionID, reference: reference),
                    let session = try? JSONDecoder().decode(ContentSession.self, from: envelope.payload),
-                   (try? NavigatorContributionValidator.validate(session)) != nil {
+                   (try? NavigatorContributionValidator.validate(session)) != nil,
+                   ExtensionHost.shared.manager.isInstalledAndEnabled(extensionID) {
                     extensionSession = session
                 } else {
                     extensionSession = ContentSession(

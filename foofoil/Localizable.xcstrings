@@ -2395,6 +2395,202 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "测试扩展"}}
       }
     },
+    "Settings...": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Settings..."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "设置..."}}
+      }
+    },
+    "General": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "General"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "通用"}}
+      }
+    },
+    "Keyboard Shortcuts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Keyboard Shortcuts"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "快捷键"}}
+      }
+    },
+    "Extensions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Extensions"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "扩展"}}
+      }
+    },
+    "Install Extension": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Install"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "安装"}}
+      }
+    },
+    "Update Extension": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Update"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "更新"}}
+      }
+    },
+    "Rollback Extension": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Roll Back"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "回滚"}}
+      }
+    },
+    "Remove Extension": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Remove"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "移除"}}
+      }
+    },
+    "Check for Extension Updates Automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Check for extension updates automatically"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "自动检查扩展更新"}}
+      }
+    },
+    "Download Extension Updates Automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Download extension updates automatically"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "自动下载扩展更新"}}
+      }
+    },
+    "Install Compatible Minor Extension Updates Automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Install compatible minor extension updates automatically"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "自动安装兼容的扩展小版本更新"}}
+      }
+    },
+    "Installed Version Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Version %@"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "版本 %@"}}
+      }
+    },
+    "Update Available Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Update available: %@"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "可更新：%@"}}
+      }
+    },
+    "Pending Activation Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "%@ will activate the next time foofoil starts."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "%@ 将在下次启动 foofoil 时激活。"}}
+      }
+    },
+    "Pending Removal Message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This extension will be removed after open sessions close."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "打开的会话结束后将移除此扩展。"}}
+      }
+    },
+    "Revoked Extension Message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This version has been revoked and will not be loaded."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "此版本已被撤销，将停止加载。"}}
+      }
+    },
+    "Default Audio Provider": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Default audio provider"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "普通音频默认使用"}}
+      }
+    },
+    "System Player": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "System Player"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "系统播放器"}}
+      }
+    },
+    "Install Extension Title Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Install %@?"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "安装 %@？"}}
+      }
+    },
+    "Install Extension Message Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "%@ can open this file."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "%@ 可以打开此文件。"}}
+      }
+    },
+    "Install and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Install and Open"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "安装并打开"}}
+      }
+    },
+    "Extension Install Failed Title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Couldn’t Install Extension"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法安装扩展"}}
+      }
+    },
+    "Uninstall Extension Title Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Remove %@?"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "移除 %@？"}}
+      }
+    },
+    "Uninstall Extension Message Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Installed files will be removed. Saved sessions stay on this Mac."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "将删除已安装的文件，已保存的会话仍保留在这台 Mac 上。"}}
+      }
+    },
+    "Test Extension Summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Opens .foo files and can enhance MP3 playback."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "打开 .foo 文件，并可以增强 MP3 播放。"}}
+      }
+    },
+    "Test Extension Features": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "FOO · MP3"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "FOO · MP3"}}
+      }
+    },
+    "Test Extension Capabilities": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Commands · Navigator"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "命令 · 导航"}}
+      }
+    },
+    "No Extensions Available": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "No extensions are available."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "暂无可用扩展。"}}
+      }
+    },
     "Toggle Audio Enhancement": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "Toggle Audio Enhancement"}},

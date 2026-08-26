@@ -17,6 +17,10 @@ extension AppDelegate {
         showNewWindow(with: AppState())
     }
 
+    @objc func showSettingsAction() {
+        SettingsWindowController.shared.show()
+    }
+
     @objc func extensionCommandAction(_ sender: NSMenuItem) {
         guard let commandID = sender.representedObject as? String else { return }
         activeAppState?.performExtensionCommand(commandID)

@@ -98,6 +98,19 @@ final class ProviderResolver {
         providers[id]
     }
 
+    func allDescriptors() -> [ProviderDescriptor] {
+        registrationOrder.compactMap { providers[$0]?.descriptor }
+    }
+
+    func unregisterProviders(extensionID: String) {
+        let ids = registrationOrder.filter { providers[$0]?.descriptor.extensionID == extensionID }
+        ids.forEach { unregister(providerID: $0) }
+    }
+
+    func candidates(for request: ContentRequest) -> [ProviderCandidate] {
+        matchingCandidates(for: request)
+    }
+
     func canResolve(_ request: ContentRequest) -> Bool {
         !matchingCandidates(for: request).isEmpty
     }

@@ -25,6 +25,8 @@ enum ExtensionLoaderError: LocalizedError {
     case invalidBundle
     case invalidCodeSignature(OSStatus)
     case untrustedTeam
+    case untrustedBundleID(String)
+    case missingNotarization
     case missingExecutable
     case missingEntryPoint
     case invalidInterface
@@ -36,6 +38,8 @@ enum ExtensionLoaderError: LocalizedError {
         case .invalidBundle: "The extension bundle is invalid."
         case .invalidCodeSignature(let status): "Extension code signature validation failed (\(status))."
         case .untrustedTeam: "The extension is not signed by the foofoil team."
+        case .untrustedBundleID(let value): "The extension bundle identifier is not allowed: \(value)."
+        case .missingNotarization: "The extension is not notarized."
         case .missingExecutable: "The extension executable is missing."
         case .missingEntryPoint: "The Extension API entry point is missing."
         case .invalidInterface: "The extension returned an invalid Extension API interface."
@@ -44,12 +48,23 @@ enum ExtensionLoaderError: LocalizedError {
 }
 
 final class ExtensionLoader {
+    static let allowedBundleIDPrefix = "app.foofoil.extension."
+
     private let trustedTeamID: String?
     private let requireSignature: Bool
+    private let requireNotarization: Bool
+    private let allowedBundleIDPrefix: String
 
-    init(trustedTeamID: String? = nil, requireSignature: Bool = true) {
+    init(
+        trustedTeamID: String? = nil,
+        requireSignature: Bool = true,
+        requireNotarization: Bool = false,
+        allowedBundleIDPrefix: String = ExtensionLoader.allowedBundleIDPrefix
+    ) {
         self.trustedTeamID = trustedTeamID ?? Self.teamIdentifier(for: Bundle.main.bundleURL)
         self.requireSignature = requireSignature
+        self.requireNotarization = requireNotarization
+        self.allowedBundleIDPrefix = allowedBundleIDPrefix
     }
 
     func discover(in directory: URL) -> [(url: URL, result: Result<LoadedExtension, Error>)] {
@@ -72,11 +87,16 @@ final class ExtensionLoader {
         }
         let manifest = try ExtensionManifestValidator.decodeAndValidate(Data(contentsOf: manifestURL))
         guard let api = ExtensionAPI.negotiate(with: manifest.extensionAPI),
-              Self.supportsCurrentSystem(manifest.system) else {
+              manifest.system.isSatisfied() else {
             throw ExtensionLoaderError.unsupportedSystem
         }
+        let bundleID = (bundle.bundleIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard bundleID == manifest.id,
+              bundleID.hasPrefix(allowedBundleIDPrefix) else {
+            throw ExtensionLoaderError.untrustedBundleID(bundleID.isEmpty ? manifest.id : bundleID)
+        }
         if requireSignature {
-            try validateCodeSignature(at: bundleURL)
+            try validateCodeSignature(at: bundleURL, expectedBundleID: manifest.id)
         }
         let executionModel = (bundle.object(forInfoDictionaryKey: "FoofoilExtensionExecutionModel") as? String)
             .flatMap(ExtensionExecutionModel.init(rawValue:)) ?? .xpcService
@@ -97,14 +117,28 @@ final class ExtensionLoader {
         return try InProcessExtensionInterface(executableURL: executableURL, negotiatedAPI: loaded.negotiatedAPI)
     }
 
-    private func validateCodeSignature(at url: URL) throws {
+    /// 对静态代码做严格校验：全部 arch、nested code、sealed resources，以及固定 Team ID / Bundle ID。
+    private func validateCodeSignature(at url: URL, expectedBundleID: String) throws {
         var staticCode: SecStaticCode?
         let createStatus = SecStaticCodeCreateWithPath(url as CFURL, SecCSFlags(), &staticCode)
         guard createStatus == errSecSuccess, let staticCode else {
             throw ExtensionLoaderError.invalidCodeSignature(createStatus)
         }
+
+        var requirement: SecRequirement?
+        if let trustedTeamID {
+            let requirementString = """
+            identifier "\(expectedBundleID)" and anchor apple generic \
+            and certificate leaf[subject.OU] = "\(trustedTeamID)"
+            """ as CFString
+            let requirementStatus = SecRequirementCreateWithString(requirementString, SecCSFlags(), &requirement)
+            guard requirementStatus == errSecSuccess else {
+                throw ExtensionLoaderError.invalidCodeSignature(requirementStatus)
+            }
+        }
+
         let flags = SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures | kSecCSCheckNestedCode)
-        let validationStatus = SecStaticCodeCheckValidity(staticCode, flags, nil)
+        let validationStatus = SecStaticCodeCheckValidity(staticCode, flags, requirement)
         guard validationStatus == errSecSuccess else {
             throw ExtensionLoaderError.invalidCodeSignature(validationStatus)
         }
@@ -112,36 +146,49 @@ final class ExtensionLoader {
            Self.teamIdentifier(for: url) != trustedTeamID {
             throw ExtensionLoaderError.untrustedTeam
         }
+        if Self.signingIdentifier(for: url) != expectedBundleID {
+            throw ExtensionLoaderError.untrustedBundleID(Self.signingIdentifier(for: url) ?? "")
+        }
+        if requireNotarization, !Self.isNotarized(staticCode) {
+            throw ExtensionLoaderError.missingNotarization
+        }
     }
 
     private static func teamIdentifier(for url: URL) -> String? {
+        signingInformation(for: url)?[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+
+    private static func signingIdentifier(for url: URL) -> String? {
+        signingInformation(for: url)?[kSecCodeInfoIdentifier as String] as? String
+    }
+
+    private static func isNotarized(_ staticCode: SecStaticCode) -> Bool {
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information
+        ) == errSecSuccess,
+              let dictionary = information as? [String: Any] else { return false }
+        if dictionary["notarization"] != nil { return true }
+        var notarizedRequirement: SecRequirement?
+        guard SecRequirementCreateWithString("notarized" as CFString, SecCSFlags(), &notarizedRequirement) == errSecSuccess else {
+            return false
+        }
+        return SecStaticCodeCheckValidity(staticCode, SecCSFlags(), notarizedRequirement) == errSecSuccess
+    }
+
+    private static func signingInformation(for url: URL) -> [String: Any]? {
         var staticCode: SecStaticCode?
         guard SecStaticCodeCreateWithPath(url as CFURL, SecCSFlags(), &staticCode) == errSecSuccess,
               let staticCode else { return nil }
         var information: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
-              let dictionary = information as? [String: Any] else { return nil }
-        return dictionary[kSecCodeInfoTeamIdentifier as String] as? String
-    }
-
-    private static func supportsCurrentSystem(_ requirements: ExtensionSystemRequirements) -> Bool {
-        let architecture: String
-#if arch(arm64)
-        architecture = "arm64"
-#elseif arch(x86_64)
-        architecture = "x86_64"
-#else
-        architecture = "unknown"
-#endif
-        guard requirements.architectures.contains(architecture) else { return false }
-        let parts = requirements.minMacOS.split(separator: ".").compactMap { Int($0) }
-        guard !parts.isEmpty else { return false }
-        let required = OperatingSystemVersion(
-            majorVersion: parts[0],
-            minorVersion: parts.count > 1 ? parts[1] : 0,
-            patchVersion: parts.count > 2 ? parts[2] : 0
-        )
-        return ProcessInfo.processInfo.isOperatingSystemAtLeast(required)
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information
+        ) == errSecSuccess else { return nil }
+        return information as? [String: Any]
     }
 }
 
