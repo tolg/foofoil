@@ -415,7 +415,12 @@ extension AppDelegate {
     }
 
     @objc func toggleShowBorderAction() {
+        guard activeAppState?.isFullScreen != true else { return }
         activeAppState?.showBorder.toggle()
+    }
+
+    @objc func toggleFullScreenAction() {
+        activeWindowController?.toggleFullScreen()
     }
 
     @objc func toggleNavigatorPanelAction() {
@@ -563,19 +568,19 @@ extension AppDelegate {
     @objc func fitWindowToImageAction() {
         guard let appState = activeAppState,
               appState.imageURL != nil && appState.webURL == nil,
-              appState.showBorder else { return }
+              appState.effectiveShowBorder else { return }
         activeWindowController?.fitWindowToCurrentImageSize()
     }
 
     @objc func fitImageToWindowWidthAction() {
         guard let appState = activeAppState,
               appState.imageURL != nil && appState.webURL == nil,
-              appState.showBorder else { return }
+              appState.effectiveShowBorder else { return }
         activeWindowController?.fitImageToWindowWidth()
     }
 
     @objc func zoomOutWindowAction() {
-        guard let appState = activeAppState else { return }
+        guard let appState = activeAppState, !appState.isFullScreen else { return }
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
         if isImageMode {
             if appState.showBorder {
@@ -589,7 +594,7 @@ extension AppDelegate {
     }
 
     @objc func zoomInWindowAction() {
-        guard let appState = activeAppState else { return }
+        guard let appState = activeAppState, !appState.isFullScreen else { return }
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
         if isImageMode {
             if appState.showBorder {

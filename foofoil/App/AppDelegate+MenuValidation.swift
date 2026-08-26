@@ -71,7 +71,11 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         navigatorMenuItem?.isHidden = appState.navigatorContributions.isEmpty
 
         // 1. 图片和网页模式均可切换视觉边框。
-        setMenuItem(withAction: #selector(toggleShowBorderAction), in: menu, isHidden: !(isImageMode || isWebMode))
+        setMenuItem(
+            withAction: #selector(toggleShowBorderAction),
+            in: menu,
+            isHidden: appState.isFullScreen || !(isImageMode || isWebMode)
+        )
 
         // 1.5 Reload Page 菜单项
         setMenuItem(withAction: #selector(reloadPageAction), in: menu, isHidden: !isWebMode)
@@ -87,13 +91,13 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         setMenuItem(withAction: #selector(backgroundColorAction), in: menu, isHidden: false)
 
         // 3. Fit Window to Image & Fit Image to Window Width 菜单项 - 仅图片且有边框时可见
-        let showFitOptions = isImageMode && appState.showBorder
+        let showFitOptions = isImageMode && appState.effectiveShowBorder
         setMenuItem(withAction: #selector(fitWindowToImageAction), in: menu, isHidden: !showFitOptions)
         setMenuItem(withAction: #selector(fitImageToWindowWidthAction), in: menu, isHidden: !showFitOptions)
 
         // 4. Zoom Out Window & Zoom In Window 菜单项 (增大/缩小箔) - 始终可见
-        setMenuItem(withAction: #selector(zoomOutWindowAction), in: menu, isHidden: false)
-        setMenuItem(withAction: #selector(zoomInWindowAction), in: menu, isHidden: false)
+        setMenuItem(withAction: #selector(zoomOutWindowAction), in: menu, isHidden: appState.isFullScreen)
+        setMenuItem(withAction: #selector(zoomInWindowAction), in: menu, isHidden: appState.isFullScreen)
     }
 
     func setMenuItem(withAction action: Selector, in menu: NSMenu, isHidden: Bool) {
@@ -146,11 +150,22 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         if menuItem.action == #selector(toggleShowBorderAction) {
             // 仅图片和网页模式支持切换视觉边框。
             guard let appState = activeAppState,
+                  !appState.isFullScreen,
                   appState.imageURL != nil || appState.webURL != nil else {
                 menuItem.state = .off
                 return false
             }
             menuItem.state = appState.showBorder ? .on : .off
+            return true
+        }
+
+
+        if menuItem.action == #selector(toggleFullScreenAction) {
+            guard let appState = activeAppState else { return false }
+            menuItem.title = NSLocalizedString(
+                appState.isFullScreen ? "Exit Full Screen" : "Enter Full Screen",
+                comment: ""
+            )
             return true
         }
 
@@ -205,7 +220,7 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
 
         if menuItem.action == #selector(zoomOutWindowAction) ||
             menuItem.action == #selector(zoomInWindowAction) {
-            return activeAppState != nil
+            return activeAppState?.isFullScreen == false
         }
 
         if menuItem.action == #selector(actualSizeAction) {

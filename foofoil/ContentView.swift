@@ -23,10 +23,11 @@ public struct ContentView: View {
 
     public var body: some View {
         // 网页和图片都支持仅隐藏视觉边框；网页切换边框不应改变窗口的缩放规则。
-        let shouldHideBorder = (appState.imageURL != nil || appState.webURL != nil) && !appState.showBorder
+        let shouldHideBorder = appState.isFullScreen
+            || ((appState.imageURL != nil || appState.webURL != nil) && !appState.showBorder)
         // 网页即使同时保留了截图缓存，也不能套用图片无边框模式的最小尺寸规则。
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
-        let usesCompactMinimumSize = isImageMode && !appState.showBorder
+        let usesCompactMinimumSize = isImageMode && !appState.effectiveShowBorder
         let minimumLength: CGFloat = usesCompactMinimumSize ? 80 : 150
         // 音视频窗口再抬高最小宽度，保证底部播放条单行能放下。
         let minimumWidth = appState.isExternalMediaDocument
@@ -34,12 +35,18 @@ public struct ContentView: View {
             : minimumLength
         // PDF 显示边框时，四周保留 12pt 的边框区域。
         let isMarkdownPreview = appState.isMarkdownPreview && appState.isMarkdownDocument
-        let contentPadding: CGFloat = isMarkdownPreview ? 0 : (appState.isPDFDocument && appState.showBorder ? 12 : (shouldHideBorder ? 0 : 4))
+        let contentPadding: CGFloat = isMarkdownPreview ? 0 : (appState.isPDFDocument && appState.effectiveShowBorder ? 12 : (shouldHideBorder ? 0 : 4))
         let backgroundColor = appState.backgroundColorHex.flatMap(NSColor.init(hex:)) ?? .windowBackgroundColor
 
         ZStack {
             // 毛玻璃背景 (玻璃拟态效果)
-            if !shouldHideBorder {
+            if appState.isFullScreen {
+                // 全屏统一使用无圆角的整屏背景，不继承窗口态的有/无边框外观。
+                ZStack {
+                    VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                    Color(backgroundColor).opacity(0.6)
+                }
+            } else if !shouldHideBorder {
                 ZStack {
                     VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                     Color(backgroundColor).opacity(0.6) // 叠加半透明窗口背景色以降低背景透明度，提升内容清晰度
@@ -100,6 +107,8 @@ public struct ContentView: View {
                 .cornerRadius(shouldHideBorder ? 0 : 12)
                 .opacity(flashOpacity)
                 .allowsHitTesting(false)
+
+            fullScreenNavigatorOverlay
         }
         .frame(minWidth: minimumWidth, minHeight: minimumLength)
         // 直接在最外层容器上处理拖放逻辑，避免使用覆盖整窗的透明交互层拦截正常点击事件
@@ -126,6 +135,7 @@ public struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: pdfPageIndicator)
+        .animation(.easeInOut(duration: 0.18), value: isFullScreenNavigatorVisible)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("flashWindow_\(appState.id.uuidString)"))) { _ in
             // 瞬间变白（0.85 不透明度）
             flashOpacity = 0.85
@@ -153,7 +163,7 @@ public struct ContentView: View {
         // 图片模式下：有边框时鼠标双击作用改为和cmd.一样，无边框时双击作用改为和cmd=一样（放大）
         .onTapGesture(count: 2) {
             if appState.imageURL != nil {
-                if appState.showBorder {
+                if appState.effectiveShowBorder {
                     NotificationCenter.default.post(
                         name: .shouldFitImageToWindowWidth,
                         object: nil,
@@ -200,7 +210,7 @@ public struct ContentView: View {
             }
                 .keyboardShortcut("t", modifiers: [.command])
 
-            if appState.imageURL != nil || appState.webURL != nil {
+            if !appState.isFullScreen && (appState.imageURL != nil || appState.webURL != nil) {
                 Toggle(isOn: $appState.showBorder) {
                     Label(NSLocalizedString("Border (ContextMenu)", comment: ""), systemImage: "rectangle")
                 }
@@ -226,7 +236,7 @@ public struct ContentView: View {
                     }
                 }
 
-                if appState.showBorder {
+                if appState.effectiveShowBorder {
                     Button(action: {
                         NotificationCenter.default.post(
                             name: .shouldFitWindowToImage,
@@ -271,5 +281,28 @@ public struct ContentView: View {
             }
             .keyboardShortcut("w", modifiers: [.command])
         }
+    }
+
+    @ViewBuilder
+    private var fullScreenNavigatorOverlay: some View {
+        if appState.isFullScreen,
+           !appState.navigatorContributions.isEmpty,
+           isFullScreenNavigatorVisible {
+            HStack(spacing: 0) {
+                if appState.navigatorPanelSide == .right { Spacer(minLength: 0) }
+                NavigatorPanelView(appState: appState, isFullScreenOverlay: true)
+                    .frame(width: CGFloat(appState.navigatorPanelWidth))
+                    .transition(.move(edge: appState.navigatorPanelSide == .left ? .leading : .trailing))
+                if appState.navigatorPanelSide == .left { Spacer(minLength: 0) }
+            }
+            .zIndex(20)
+        }
+    }
+
+    private var isFullScreenNavigatorVisible: Bool {
+        appState.navigatorPanelVisibilityMode == .always
+            || appState.isNavigatorPanelExplicitlyVisible
+            || appState.isNavigatorPanelHovered
+            || appState.isNavigatorEdgeHovered
     }
 }

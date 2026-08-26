@@ -7,6 +7,7 @@ import SwiftUI
 
 struct NavigatorPanelView: View {
     @ObservedObject var appState: AppState
+    var isFullScreenOverlay = false
     @State private var dragStartWidth: Double?
 
     private struct VisibleRow: Identifiable {
@@ -48,12 +49,17 @@ struct NavigatorPanelView: View {
 
             resizeHandle
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: isFullScreenOverlay ? 0 : 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: isFullScreenOverlay ? 0 : 12, style: .continuous)
+                .stroke(isFullScreenOverlay ? Color.clear : Color.white.opacity(0.16), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.24), radius: 12, y: 4)
+        .shadow(
+            color: .black.opacity(isFullScreenOverlay ? 0.34 : 0.24),
+            radius: isFullScreenOverlay ? 18 : 12,
+            x: isFullScreenOverlay ? (appState.navigatorPanelSide == .left ? 7 : -7) : 0,
+            y: isFullScreenOverlay ? 0 : 4
+        )
         .onHover { appState.isNavigatorPanelHovered = $0 }
         .onAppear { selectFirstContributionIfNeeded() }
         .onChange(of: contributions.map(\.id)) { _, _ in
@@ -211,7 +217,7 @@ struct NavigatorPanelView: View {
 
     private var resizeHandle: some View {
         HStack(spacing: 0) {
-            if appState.navigatorPanelSide == .right { Spacer() }
+            if appState.navigatorPanelSide == .left { Spacer() }
             Color.clear
                 .frame(width: 8)
                 .contentShape(Rectangle())
@@ -228,7 +234,7 @@ struct NavigatorPanelView: View {
                             let start = dragStartWidth ?? appState.navigatorPanelWidth
                             let delta = Double(value.translation.width)
                             appState.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(
-                                appState.navigatorPanelSide == .left ? start - delta : start + delta
+                                appState.navigatorPanelSide == .left ? start + delta : start - delta
                             )
                         }
                         .onEnded { _ in
@@ -238,7 +244,7 @@ struct NavigatorPanelView: View {
                             appState.saveState()
                         }
                 )
-            if appState.navigatorPanelSide == .left { Spacer() }
+            if appState.navigatorPanelSide == .right { Spacer() }
         }
     }
 

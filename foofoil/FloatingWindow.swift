@@ -110,13 +110,16 @@ public class FloatingWindow: NSWindow {
         // 透明全尺寸内容视图会让部分 macOS 版本的上下边缘命中落到内容层，窗口级处理可保证四边均可缩放。
         if event.type == .leftMouseDown,
            !modifiers.contains(.command),
+           (windowController as? FloatingWindowController)?.appState.isFullScreen != true,
            let edges = resizeEdges(at: event.locationInWindow) {
             performEdgeResize(with: event, edges: edges)
             return
         }
 
         // Command + 拖拽始终交由 AppKit 移动整个窗口，并屏蔽内容视图的默认交互。
-        if event.type == .leftMouseDown, modifiers.contains(.command) {
+        if event.type == .leftMouseDown,
+           modifiers.contains(.command),
+           (windowController as? FloatingWindowController)?.appState.isFullScreen != true {
             updateCommandDragCursor(isCommandPressed: true)
             performDrag(with: event)
             return
@@ -165,6 +168,7 @@ public class FloatingWindow: NSWindow {
         // 无边框 PDF 的缩放只调整窗口；手势结束后再由 PDFKit 适配新的窗口尺寸。
         if let controller = self.windowController as? FloatingWindowController,
            controller.appState.isPDFDocument,
+           !controller.appState.isFullScreen,
            !controller.appState.showBorder {
             if event.type == .scrollWheel {
                 let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -188,6 +192,14 @@ public class FloatingWindow: NSWindow {
                 }
                 return
             }
+        }
+
+        // 全屏时滚轮与捏合只交给内容视图；不能改变原窗口 frame。
+        if let controller = windowController as? FloatingWindowController,
+           controller.appState.isFullScreen,
+           event.type == .scrollWheel || event.type == .magnify {
+            super.sendEvent(event)
+            return
         }
 
         // 处理 cmd + 鼠标滚轮
@@ -429,6 +441,13 @@ public class FloatingWindow: NSWindow {
     // 重写 performKeyEquivalent(with:) 拦截快捷键事件，支持不带 Shift 的 cmd + = / , / . 快捷键响应
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        if modifiers == [.command, .control],
+           event.charactersIgnoringModifiers?.lowercased() == "f",
+           let controller = windowController as? FloatingWindowController {
+            controller.toggleFullScreen()
+            return true
+        }
 
         // 快捷键 ⌃⌥ (Control + Option) 组合键（如 ⌃⌥q/w/e/a/s/d/z/x/c 窗口定位），优先交由主菜单处理。
         if modifiers == [.control, .option] {

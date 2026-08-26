@@ -37,7 +37,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private var currentPDFPageSize: NSSize?
     private let navigatorPanelController: NavigatorPanelController
     private var pendingNavigatorPanelHide: DispatchWorkItem?
-    private var isNavigatorEdgeHovered = false
+    private var isTransitioningFullScreen = false
+    private var windowedFrameDescriptorBeforeFullScreen: String?
 
     public init(appState: AppState) {
         self.appState = appState
@@ -128,7 +129,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         appState.$isPinned
             .sink { [weak self, weak window] isPinned in
                 DispatchQueue.main.async {
-                    window?.level = isPinned ? .floating : .normal
+                    window?.level = self?.appState.isFullScreen == true ? .normal : (isPinned ? .floating : .normal)
                     if let window { self?.navigatorPanelController.synchronizeAppearance(with: window) }
                 }
             }
@@ -369,7 +370,10 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 if let targetState = notification.object as? AppState,
                    targetState === self.appState {
                     self.pendingFrameSave?.cancel()
-                    if let window = self.window {
+                    if self.appState.isFullScreen || self.isTransitioningFullScreen {
+                        self.appState.windowFrame = self.windowedFrameDescriptorBeforeFullScreen
+                            ?? self.appState.windowFrame
+                    } else if let window = self.window {
                         self.appState.windowFrame = window.frameDescriptor
                     }
                     self.appState.saveState()
@@ -435,11 +439,17 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         if appState.navigatorPanelVisibilityMode == .always { return true }
         return appState.isNavigatorPanelExplicitlyVisible
             || appState.isNavigatorPanelHovered
-            || isNavigatorEdgeHovered
+            || appState.isNavigatorEdgeHovered
     }
 
     private func updateNavigatorPanelVisibility() {
         guard let window else { return }
+        if appState.isFullScreen || isTransitioningFullScreen {
+            pendingNavigatorPanelHide?.cancel()
+            pendingNavigatorPanelHide = nil
+            navigatorPanelController.hide()
+            return
+        }
         if shouldShowNavigatorPanel {
             pendingNavigatorPanelHide?.cancel()
             pendingNavigatorPanelHide = nil
@@ -462,20 +472,20 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func updateNavigatorEdgeHover(at point: NSPoint?) {
-        let wasHovered = isNavigatorEdgeHovered
+        let wasHovered = appState.isNavigatorEdgeHovered
         if let point, let window, !appState.navigatorContributions.isEmpty {
             let triggerWidth = CGFloat(NavigatorPanelMetrics.edgeTriggerWidth)
             switch appState.navigatorPanelSide {
             case .left:
-                isNavigatorEdgeHovered = point.x >= 0 && point.x <= triggerWidth
+                appState.isNavigatorEdgeHovered = point.x >= 0 && point.x <= triggerWidth
             case .right:
-                isNavigatorEdgeHovered = point.x >= window.frame.width - triggerWidth
+                appState.isNavigatorEdgeHovered = point.x >= window.frame.width - triggerWidth
                     && point.x <= window.frame.width
             }
         } else {
-            isNavigatorEdgeHovered = false
+            appState.isNavigatorEdgeHovered = false
         }
-        if wasHovered != isNavigatorEdgeHovered {
+        if wasHovered != appState.isNavigatorEdgeHovered {
             updateNavigatorPanelVisibility()
         }
     }
@@ -485,7 +495,17 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     var isNavigatorPanelVisible: Bool {
-        navigatorPanelController.isVisible
+        appState.isFullScreen ? shouldShowNavigatorPanel : navigatorPanelController.isVisible
+    }
+
+    /// 使用 AppKit 原生全屏 Space；每个箔片窗口独立切换，窗口态 frame 与边框偏好保持不变。
+    public func toggleFullScreen() {
+        guard let window, !isTransitioningFullScreen else { return }
+        if !appState.isFullScreen {
+            window.collectionBehavior = [.fullScreenPrimary]
+            window.level = .normal
+        }
+        window.toggleFullScreen(nil)
     }
 
     public func zoomIn() {
@@ -579,7 +599,9 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         pendingZoomCommit = nil
         pinchImageBaseScale = nil
         appState.isInteractiveZooming = false
-        if let window = window {
+        if appState.isFullScreen || isTransitioningFullScreen {
+            appState.windowFrame = windowedFrameDescriptorBeforeFullScreen ?? appState.windowFrame
+        } else if let window = window {
             appState.windowFrame = window.frameDescriptor
         }
         appState.saveState()
@@ -723,6 +745,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
     func setWindowSize(_ size: NSSize, keepWidth: Bool, animated: Bool, showBorderOverride: Bool? = nil) {
         guard let window = window else { return }
+        guard !appState.isFullScreen, !isTransitioningFullScreen else { return }
         var newWidth = size.width
         var newHeight = size.height
         let minSize = minimumWindowSize(showBorderOverride: showBorderOverride)
@@ -861,7 +884,65 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         appState.isCommandKeyPressed = false
     }
 
+    public func windowWillEnterFullScreen(_ notification: Notification) {
+        guard let window else { return }
+        isTransitioningFullScreen = true
+        pendingFrameSave?.cancel()
+        windowedFrameDescriptorBeforeFullScreen = window.frameDescriptor
+        appState.isFullScreen = true
+        appState.isNavigatorPanelHovered = false
+        appState.isNavigatorEdgeHovered = false
+        navigatorPanelController.hide()
+        window.hasShadow = false
+    }
+
+    public func windowDidEnterFullScreen(_ notification: Notification) {
+        isTransitioningFullScreen = false
+        appState.isFullScreen = true
+        updateNavigatorPanelVisibility()
+    }
+
+    public func windowWillExitFullScreen(_ notification: Notification) {
+        isTransitioningFullScreen = true
+        pendingFrameSave?.cancel()
+        appState.isNavigatorPanelHovered = false
+        appState.isNavigatorEdgeHovered = false
+        navigatorPanelController.hide()
+    }
+
+    public func windowDidExitFullScreen(_ notification: Notification) {
+        guard let window else { return }
+        isTransitioningFullScreen = false
+        appState.isFullScreen = false
+        window.hasShadow = true
+        window.level = appState.isPinned ? .floating : .normal
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        if let windowedFrameDescriptorBeforeFullScreen {
+            appState.windowFrame = windowedFrameDescriptorBeforeFullScreen
+        }
+        self.windowedFrameDescriptorBeforeFullScreen = nil
+        updateNavigatorPanelVisibility()
+    }
+
+    public func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        isTransitioningFullScreen = false
+        appState.isFullScreen = false
+        window.hasShadow = true
+        window.level = appState.isPinned ? .floating : .normal
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        windowedFrameDescriptorBeforeFullScreen = nil
+        updateNavigatorPanelVisibility()
+    }
+
+    public func windowDidFailToExitFullScreen(_ window: NSWindow) {
+        isTransitioningFullScreen = false
+        appState.isFullScreen = true
+        window.hasShadow = false
+        navigatorPanelController.hide()
+    }
+
     public func windowWillStartLiveResize(_ notification: Notification) {
+        guard !appState.isFullScreen, !isTransitioningFullScreen else { return }
         isLiveResizing = true
         guard let window = window else { return }
         // 不要在 live resize 开始时把 aspectRatio 设为 .zero：无边框透明窗口自由拉伸会在
@@ -872,7 +953,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     public func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        constrainedLiveResizeSize(frameSize, sender: sender, referenceSize: sender.frame.size)
+        guard !appState.isFullScreen, !isTransitioningFullScreen else { return frameSize }
+        return constrainedLiveResizeSize(frameSize, sender: sender, referenceSize: sender.frame.size)
     }
 
     func beginManualLiveResize() {
@@ -920,6 +1002,10 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func finishLiveResize() {
+        guard !appState.isFullScreen, !isTransitioningFullScreen else {
+            isLiveResizing = false
+            return
+        }
         // 用户松开鼠标结束缩放时，通过重置 resizeIncrements 来解除宽高比锁定，为其余代码主动 setFrame 预留通路，根治死锁
         window?.resizeIncrements = NSSize(width: 1.0, height: 1.0)
         window?.aspectRatio = .zero
@@ -931,12 +1017,12 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     public func windowDidMove(_ notification: Notification) {
-        if let window { navigatorPanelController.updateFrame(relativeTo: window) }
+        if !appState.isFullScreen, let window { navigatorPanelController.updateFrame(relativeTo: window) }
         scheduleWindowFrameSave()
     }
 
     public func windowDidResize(_ notification: Notification) {
-        if let window { navigatorPanelController.updateFrame(relativeTo: window) }
+        if !appState.isFullScreen, let window { navigatorPanelController.updateFrame(relativeTo: window) }
         guard !isLiveResizing else { return }
         scheduleWindowFrameSave()
     }
@@ -950,7 +1036,9 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         if appState.isInteractiveZooming {
             appState.isInteractiveZooming = false
         }
-        if let window = window {
+        if appState.isFullScreen, let windowedFrameDescriptorBeforeFullScreen {
+            appState.windowFrame = windowedFrameDescriptorBeforeFullScreen
+        } else if let window = window {
             appState.windowFrame = window.frameDescriptor
         }
         appState.saveState()
@@ -964,7 +1052,11 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     func scheduleWindowFrameSave() {
         pendingFrameSave?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self, !self.isLiveResizing, let window = self.window else { return }
+            guard let self = self,
+                  !self.isLiveResizing,
+                  !self.appState.isFullScreen,
+                  !self.isTransitioningFullScreen,
+                  let window = self.window else { return }
             self.appState.windowFrame = window.frameDescriptor
         }
         pendingFrameSave = workItem

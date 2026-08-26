@@ -40,9 +40,15 @@ struct PDFModeView: NSViewRepresentable {
             pdfView.document = PDFDocument(url: url)
             context.coordinator.postCurrentPageSize()
         }
-        let targetScale = CGFloat(appState.imageScale)
-        if abs(pdfView.scaleFactor - targetScale) > 0.0001 {
-            pdfView.scaleFactor = targetScale
+        if appState.isFullScreen {
+            // 全屏只改变展示倍率，不写回窗口态缩放偏好。
+            pdfView.autoScales = true
+        } else {
+            pdfView.autoScales = false
+            let targetScale = CGFloat(appState.imageScale)
+            if abs(pdfView.scaleFactor - targetScale) > 0.0001 {
+                pdfView.scaleFactor = targetScale
+            }
         }
         applyBackgroundColor(to: pdfView, defaultColor: context.coordinator.defaultBackgroundColor)
     }
@@ -171,16 +177,18 @@ struct PDFModeView: NSViewRepresentable {
             pinItem.state = appState.isPinned ? .on : .off
             menu.addItem(pinItem)
 
-            let borderItem = NSMenuItem(
-                title: NSLocalizedString("Border (ContextMenu)", comment: ""),
-                action: #selector(toggleBorderAction(_:)),
-                keyEquivalent: "b"
-            )
-            borderItem.withSymbol("rectangle")
-            borderItem.keyEquivalentModifierMask = [.command]
-            borderItem.target = self
-            borderItem.state = appState.showBorder ? .on : .off
-            menu.addItem(borderItem)
+            if !appState.isFullScreen {
+                let borderItem = NSMenuItem(
+                    title: NSLocalizedString("Border (ContextMenu)", comment: ""),
+                    action: #selector(toggleBorderAction(_:)),
+                    keyEquivalent: "b"
+                )
+                borderItem.withSymbol("rectangle")
+                borderItem.keyEquivalentModifierMask = [.command]
+                borderItem.target = self
+                borderItem.state = appState.showBorder ? .on : .off
+                menu.addItem(borderItem)
+            }
 
             menu.addItem(NSMenuItem.separator())
 
@@ -254,6 +262,7 @@ struct PDFModeView: NSViewRepresentable {
         }
 
         @objc private func toggleBorderAction(_ sender: Any?) {
+            guard !appState.isFullScreen else { return }
             appState.showBorder.toggle()
         }
 

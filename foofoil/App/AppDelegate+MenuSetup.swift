@@ -198,6 +198,17 @@ extension AppDelegate {
         toggleBorderItem.target = self
         viewMenu.addItem(toggleBorderItem)
 
+        let toggleFullScreenItem = NSMenuItem(
+            title: NSLocalizedString("Enter Full Screen", comment: ""),
+            action: #selector(toggleFullScreenAction),
+            keyEquivalent: "f"
+        )
+        toggleFullScreenItem.withSymbol("arrow.up.left.and.arrow.down.right")
+        toggleFullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        toggleFullScreenItem.target = self
+        viewMenu.addItem(toggleFullScreenItem)
+        viewMenu.addItem(NSMenuItem.separator())
+
         let navigatorMenu = NSMenu(title: NSLocalizedString("Navigator", comment: ""))
         let toggleNavigatorItem = NSMenuItem(
             title: NSLocalizedString("Toggle Navigator", comment: ""),

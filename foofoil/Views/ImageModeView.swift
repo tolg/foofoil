@@ -15,7 +15,13 @@ struct ImageModeView: View {
     var body: some View {
         Group {
             if shouldHideBorder {
-                renderImage(for: nsImage, contentMode: .fill, width: nil, height: nil)
+                // 窗口态无边框会按受约束的窗口比例铺满；全屏比例不可控，改为完整显示以避免裁切。
+                renderImage(
+                    for: nsImage,
+                    contentMode: appState.isFullScreen ? .fit : .fill,
+                    width: nil,
+                    height: nil
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             } else {

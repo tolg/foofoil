@@ -34,6 +34,25 @@ final class FoofoilUITests: XCTestCase {
     }
 
     @MainActor
+    func testFullScreenShortcutEntersFullScreen() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let windowedFrame = window.frame
+
+        app.typeKey("f", modifierFlags: [.command, .control])
+        let enteredFullScreen = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.exists && window.frame.width > windowedFrame.width + 100
+            },
+            object: nil
+        )
+        wait(for: [enteredFullScreen], timeout: 5)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

@@ -443,6 +443,11 @@ Video+ Extension ──── 视频队列 / 章节
 滑入，通过边缘 hover 或宿主快捷键触发。桌面与全屏不能维护两份选择、展开或当前项状态。
 所选外侧空间不足时可以临时退化为内侧覆盖，但不能静默修改用户的左右偏好。
 
+Core 为每个箔片提供 AppKit 原生全屏 Space，`⌘⌃F` 只切换当前活动窗口。全屏是瞬时展示状态，
+不写入窗口历史，也不修改 `showBorder`：无论窗口态原本有无边框，进入全屏后都使用相同的无圆角、
+无阴影、无窗口边框展示；退出后恢复原有 frame、置顶层级和边框偏好。全屏期间禁止窗口拖动、
+边缘缩放及屏幕 frame 持久化，避免覆盖窗口态恢复数据。
+
 ### Provider Resolution
 
 同一内容可以同时存在多个候选 Provider。选择顺序必须稳定且可解释：
@@ -960,6 +965,7 @@ PresentationAdapter
 -   capability negotiation；
 -   CommandDescriptor 与宿主菜单样机；
 -   `ui.navigator` v1 contract、校验、动作路由与宿主伴随面板样机；
+-   所有箔片共用的原生全屏切换，以及 Navigator 从伴随面板到内侧覆盖层的无状态迁移；
 -   一维列表和树形目录 Test Extension fixture，证明扩展不传递自定义 View；
 -   namespaced、versioned extension state；
 -   Extension Loader；

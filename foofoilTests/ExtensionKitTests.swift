@@ -278,6 +278,69 @@ struct ExtensionKitTests {
         controller.close()
     }
 
+    @Test func fullScreenLifecycleKeepsWindowedBorderAndFramePreferences() throws {
+        let state = AppState()
+        state.showBorder = true
+        state.isPinned = true
+        state.builtInNavigatorContributions = [
+            NavigatorContribution(
+                id: "builtin.fullscreen-test",
+                titleLocalizationKey: "Navigator",
+                style: .flat,
+                items: [NavigatorItem(id: "one", title: "One")]
+            )
+        ]
+        state.navigatorPanelVisibilityMode = .always
+
+        let controller = FloatingWindowController(appState: state)
+        let window = try #require(controller.window)
+        let originalFrame = window.frame
+        let windowedFrame = window.frameDescriptor
+        let companionPanel = try #require(window.childWindows?.first)
+        #expect(controller.isNavigatorPanelVisible)
+        #expect(state.effectiveShowBorder)
+
+        controller.windowWillEnterFullScreen(
+            Notification(name: NSWindow.willEnterFullScreenNotification, object: window)
+        )
+        #expect(state.isFullScreen)
+        #expect(state.showBorder)
+        #expect(!state.effectiveShowBorder)
+        #expect(controller.isNavigatorPanelVisible)
+        #expect(!companionPanel.isVisible)
+        #expect(!window.hasShadow)
+
+        window.setFrame(NSRect(x: 0, y: 0, width: 1600, height: 900), display: false)
+        controller.windowDidEnterFullScreen(
+            Notification(name: NSWindow.didEnterFullScreenNotification, object: window)
+        )
+        #expect(controller.isNavigatorPanelVisible)
+
+        controller.windowWillExitFullScreen(
+            Notification(name: NSWindow.willExitFullScreenNotification, object: window)
+        )
+        controller.windowDidExitFullScreen(
+            Notification(name: NSWindow.didExitFullScreenNotification, object: window)
+        )
+        #expect(!state.isFullScreen)
+        #expect(state.showBorder)
+        #expect(state.effectiveShowBorder)
+        #expect(state.windowFrame == windowedFrame)
+        #expect(window.hasShadow)
+        #expect(window.level == .floating)
+        #expect(window.collectionBehavior.contains(.canJoinAllSpaces))
+        #expect(window.collectionBehavior.contains(.fullScreenAuxiliary))
+
+        state.showBorder = false
+        state.isFullScreen = true
+        #expect(!state.effectiveShowBorder)
+        state.isFullScreen = false
+        #expect(!state.effectiveShowBorder)
+
+        window.setFrame(originalFrame, display: false)
+        controller.close()
+    }
+
     @Test func audioOverrideIsSelectedAndFallsBackToBuiltInAfterFailure() async throws {
         let resolver = ProviderResolver()
         resolver.register(BuiltInAudioProvider())

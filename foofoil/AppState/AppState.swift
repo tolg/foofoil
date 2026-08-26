@@ -30,6 +30,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
     @Published public var isCommandKeyPressed: Bool = false
     @Published public var isLoading: Bool = false
+    /// 原生全屏只是一种瞬时展示状态，不写入窗口历史；退出后恢复原有边框偏好。
+    @Published public var isFullScreen: Bool = false
     /// 仅用于路由网页编辑控件的键盘快捷键，不需要持久化。
     @Published public var isWebEditableElementFocused: Bool = false
     /// 扩展会话仅通过可序列化描述驱动宿主展示，不让扩展 View 穿过 ABI/XPC 边界。
@@ -63,6 +65,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     }
     @Published var isNavigatorPanelExplicitlyVisible = false
     @Published var isNavigatorPanelHovered = false
+    @Published var isNavigatorEdgeHovered = false
     @Published var activeNavigatorContributionID: String?
     @Published var expandedNavigatorItemIDs: Set<String> = []
     var isAdjustingNavigatorPanelWidth = false
@@ -197,6 +200,11 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             saveState()
             NotificationCenter.default.post(name: .showBorderDidChange, object: self)
         }
+    }
+
+    /// 全屏中不存在边框概念，但不修改用户在窗口态选择的 showBorder。
+    public var effectiveShowBorder: Bool {
+        showBorder && !isFullScreen
     }
 
     @Published public var imageScale: Double {
