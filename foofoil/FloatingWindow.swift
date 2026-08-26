@@ -20,6 +20,8 @@ public class FloatingWindow: NSWindow {
 
     private var isCommandDragCursorVisible = false
     private var isEdgeResizeCursorVisible = false
+    private weak var resizeCursorTrackingView: NSView?
+    private var resizeCursorTrackingArea: NSTrackingArea?
     private var currentAccumulatedMagnification: CGFloat = 1.0
     private static let resizeHitThickness: CGFloat = 8
     private static let resizeCornerExtent: CGFloat = 20
@@ -61,6 +63,23 @@ public class FloatingWindow: NSWindow {
         return true
     }
 
+    func installResizeCursorTracking(in view: NSView) {
+        if let resizeCursorTrackingArea, let resizeCursorTrackingView {
+            resizeCursorTrackingView.removeTrackingArea(resizeCursorTrackingArea)
+        }
+
+        // acceptsMouseMovedEvents 不保证鼠标越界后还能收到最后一个 mouseMoved，显式跟踪整个内容区以可靠接收 mouseExited。
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        view.addTrackingArea(trackingArea)
+        resizeCursorTrackingView = view
+        resizeCursorTrackingArea = trackingArea
+    }
+
     public override func sendEvent(_ event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
@@ -76,6 +95,10 @@ public class FloatingWindow: NSWindow {
             if !modifiers.contains(.command), updateEdgeResizeCursor(at: event.locationInWindow) {
                 return
             }
+        }
+
+        if event.type == .mouseExited {
+            resetEdgeResizeCursor()
         }
 
         // 透明全尺寸内容视图会让部分 macOS 版本的上下边缘命中落到内容层，窗口级处理可保证四边均可缩放。
@@ -239,6 +262,14 @@ public class FloatingWindow: NSWindow {
 
     static func resizeEdges(at point: NSPoint, in size: NSSize) -> ResizeEdges? {
         let bounds = NSRect(origin: .zero, size: size)
+        // 窗口外坐标不能继续命中最近的边，否则离开窗口后会残留甚至切换成错误方向的缩放光标。
+        guard point.x >= bounds.minX,
+              point.x <= bounds.maxX,
+              point.y >= bounds.minY,
+              point.y <= bounds.maxY else {
+            return nil
+        }
+
         var edges: ResizeEdges = []
         let nearLeft = point.x <= resizeHitThickness
         let nearRight = point.x >= bounds.maxX - resizeHitThickness
@@ -268,16 +299,26 @@ public class FloatingWindow: NSWindow {
 
     private func updateEdgeResizeCursor(at point: NSPoint) -> Bool {
         guard let edges = resizeEdges(at: point) else {
-            if isEdgeResizeCursorVisible {
-                NSCursor.arrow.set()
-                isEdgeResizeCursorVisible = false
-            }
+            resetEdgeResizeCursor()
             return false
         }
 
         cursor(for: edges).set()
         isEdgeResizeCursorVisible = true
         return true
+    }
+
+    private func resetEdgeResizeCursor() {
+        guard isEdgeResizeCursorVisible else { return }
+        isEdgeResizeCursorVisible = false
+        if !isCommandDragCursorVisible {
+            NSCursor.arrow.set()
+        }
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        resetEdgeResizeCursor()
+        super.mouseExited(with: event)
     }
 
     private func cursor(for edges: ResizeEdges) -> NSCursor {
@@ -301,7 +342,12 @@ public class FloatingWindow: NSWindow {
         let initialFrame = frame
         let initialMouseLocation = NSEvent.mouseLocation
         controller.beginManualLiveResize()
-        defer { controller.endManualLiveResize() }
+        defer {
+            controller.endManualLiveResize()
+
+            let mouseLocationInWindow = convertPoint(fromScreen: NSEvent.mouseLocation)
+            _ = updateEdgeResizeCursor(at: mouseLocationInWindow)
+        }
 
         while let nextEvent = NSApp.nextEvent(
             matching: [.leftMouseDragged, .leftMouseUp],

@@ -446,6 +446,12 @@ struct FoofoilTests {
 
         let interior = FloatingWindow.resizeEdges(at: NSPoint(x: 200, y: 150), in: size)
         #expect(interior == nil)
+
+        // 鼠标越过任意窗口边界后不应继续命中边缘，否则缩放光标会残留或变成错误方向。
+        #expect(FloatingWindow.resizeEdges(at: NSPoint(x: -1, y: 150), in: size) == nil)
+        #expect(FloatingWindow.resizeEdges(at: NSPoint(x: 401, y: 150), in: size) == nil)
+        #expect(FloatingWindow.resizeEdges(at: NSPoint(x: 200, y: -1), in: size) == nil)
+        #expect(FloatingWindow.resizeEdges(at: NSPoint(x: 200, y: 301), in: size) == nil)
     }
 
     @Test func testAudioMetadataFormatters() {

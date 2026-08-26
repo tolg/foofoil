@@ -63,6 +63,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         let contentView = ContentView(appState: appState)
         let hostingView = NSHostingView(rootView: contentView)
         window.contentView = hostingView
+        window.installResizeCursorTracking(in: hostingView)
 
         applyWindowSizeLimits()
 
