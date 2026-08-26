@@ -54,6 +54,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         return extensionSession?.navigatorContributions ?? []
     }
     var builtInNavigatorActionHandler: ((NavigatorAction) -> Void)?
+    /// 内置同类型文件列表；仅当 items >= 2 时投影到导航面板。
+    @Published var fileList: FileListState?
+    var fileListRevision: UInt64 = 0
 
     @Published var navigatorPanelSide: NavigatorPanelSide {
         didSet { saveState() }
@@ -72,8 +75,15 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
     }
     @Published var isNavigatorPanelExplicitlyVisible = false
-    @Published var isNavigatorPanelHovered = false
-    @Published var isNavigatorEdgeHovered = false
+    let navigatorHover = NavigatorHoverState()
+    var isNavigatorPanelHovered: Bool {
+        get { navigatorHover.isPanelHovered }
+        set { navigatorHover.isPanelHovered = newValue }
+    }
+    var isNavigatorEdgeHovered: Bool {
+        get { navigatorHover.isPointerInside }
+        set { navigatorHover.isPointerInside = newValue }
+    }
     @Published var activeNavigatorContributionID: String?
     @Published var expandedNavigatorItemIDs: Set<String> = []
     var isAdjustingNavigatorPanelWidth = false
@@ -205,6 +215,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
     @Published public var showBorder: Bool {
         didSet {
+            guard showBorder != oldValue else { return }
             saveState()
             NotificationCenter.default.post(name: .showBorderDidChange, object: self)
         }
@@ -312,6 +323,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.navigatorPanelSide = config.navigatorPanelSide
         self.navigatorPanelVisibilityMode = config.navigatorPanelVisibilityMode
         self.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(config.navigatorPanelWidth)
+        self.fileList = nil
+        self.fileListRevision = 0
 
         if let path = config.imagePath {
             let url = URL(fileURLWithPath: path)
@@ -353,6 +366,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
         super.init()
         restoreExtensionSession(from: config)
+        restoreFileList(from: config)
         // 在调用 saveState 时避免触发死循环；视频经书签恢复后可能重建了书签，也需要落盘
         if let path = config.imagePath, !FileManager.default.fileExists(atPath: path) {
             if Self.findCachedImageInDirectory(for: config.id) != nil || Self.findLegacyCachedImageInDirectory() != nil {
@@ -393,6 +407,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.navigatorPanelSide = SettingsStore.shared.navigatorPanelSide
         self.navigatorPanelVisibilityMode = SettingsStore.shared.navigatorPanelVisibilityMode
         self.navigatorPanelWidth = SettingsStore.shared.navigatorPanelWidth
+        self.fileList = nil
+        self.fileListRevision = 0
         super.init()
         updateRenderedMarkdown()
     }

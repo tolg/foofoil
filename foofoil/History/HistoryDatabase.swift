@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 nonisolated final class HistoryDatabase {
-    static let schemaVersion = 7
+    static let schemaVersion = 8
 
     private let queue = DispatchQueue(label: "com.foofoil.history.database", qos: .utility)
     private var connection: OpaquePointer?
@@ -68,7 +68,8 @@ nonisolated final class HistoryDatabase {
                 var duplicateCreatedAt: Date?
 
                 // 同一本地来源再次打开时只更新一条历史，不因新的窗口 UUID 重复记录。
-                if kind != .note, let fingerprint = config.sourceFingerprint,
+                // 列表会话没有单文件 fingerprint，避免打开其中某一项时吞掉整份列表。
+                if kind != .note, config.fileList?.isPresentable != true, let fingerprint = config.sourceFingerprint,
                    let duplicate = try findSourceDuplicate(fingerprint: fingerprint, excluding: config.id) {
                     duplicateCreatedAt = duplicate.createdAt
                     try deleteItem(id: duplicate.id)
@@ -97,8 +98,8 @@ nonisolated final class HistoryDatabase {
                         svg_color, background_color_hex, created_at, updated_at, last_opened_at,
                         source_fingerprint, index_status, index_version, video_looping, video_bookmark,
                         extension_id, extension_state_reference, navigator_panel_side,
-                        navigator_panel_visibility, navigator_panel_width
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        navigator_panel_visibility, navigator_panel_width, file_list
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
                         content_kind=excluded.content_kind, display_title=excluded.display_title,
                         original_filename=excluded.original_filename, image_path=excluded.image_path,
@@ -117,7 +118,8 @@ nonisolated final class HistoryDatabase {
                         extension_state_reference=excluded.extension_state_reference,
                         navigator_panel_side=excluded.navigator_panel_side,
                         navigator_panel_visibility=excluded.navigator_panel_visibility,
-                        navigator_panel_width=excluded.navigator_panel_width
+                        navigator_panel_width=excluded.navigator_panel_width,
+                        file_list=excluded.file_list
                     """, bindings: [
                         config.id.uuidString, kind.rawValue, title, config.originalImageName,
                         config.imagePath, config.textPath, config.webURLString, config.actualWebURLString,
@@ -127,10 +129,14 @@ nonisolated final class HistoryDatabase {
                         createdAt, now, now, config.sourceFingerprint, 0, 1, config.isVideoLooping,
                         config.videoBookmark?.base64EncodedString(), config.extensionID,
                         config.extensionStateReference, config.navigatorPanelSide.rawValue,
-                        config.navigatorPanelVisibilityMode.rawValue, config.navigatorPanelWidth
+                        config.navigatorPanelVisibilityMode.rawValue, config.navigatorPanelWidth,
+                        encodeFileList(config.fileList)
                     ])
 
-                let metadata = [config.webURLString, config.actualWebURLString].compactMap { $0 }.joined(separator: " ")
+                let metadata = (
+                    [config.webURLString, config.actualWebURLString].compactMap { $0 }
+                    + (config.fileList?.items.map(\.displayName) ?? [])
+                ).joined(separator: " ")
                 try insertChunk(historyID: config.id, title: title, kind: 0, ordinal: 0, pageNumber: nil, text: metadata)
                 if kind == .note || kind == .text || kind == .markdown || kind == .csv {
                     try insertTextChunks(historyID: config.id, title: title, kind: 1, text: config.text)
@@ -295,7 +301,8 @@ nonisolated final class HistoryDatabase {
                 extension_id TEXT, extension_state_reference TEXT,
                 navigator_panel_side TEXT NOT NULL DEFAULT 'right',
                 navigator_panel_visibility TEXT NOT NULL DEFAULT 'onHover',
-                navigator_panel_width REAL NOT NULL DEFAULT 260.0
+                navigator_panel_width REAL NOT NULL DEFAULT 260.0,
+                file_list TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_history_last_opened ON history_items(last_opened_at DESC);
             CREATE INDEX IF NOT EXISTS idx_history_kind ON history_items(content_kind);
@@ -335,16 +342,17 @@ nonisolated final class HistoryDatabase {
         }
         if previousVersion >= 1 && previousVersion < 6 {
             // v6 只保存扩展命名空间和状态引用，扩展 payload 仍由 ExtensionStateStore 管理。
-            try execute("ALTER TABLE history_items ADD COLUMN extension_id TEXT; ALTER TABLE history_items ADD COLUMN extension_state_reference TEXT")
+            try addColumnIfMissing("extension_id", definition: "extension_id TEXT")
+            try addColumnIfMissing("extension_state_reference", definition: "extension_state_reference TEXT")
         }
         if previousVersion >= 1 && previousVersion < 7 {
             // v7 导航面板布局归 Core/窗口所有；旧记录采用不会改变箔片 frame 的默认值。
-            try execute("""
-                ALTER TABLE history_items ADD COLUMN navigator_panel_side TEXT NOT NULL DEFAULT 'right';
-                ALTER TABLE history_items ADD COLUMN navigator_panel_visibility TEXT NOT NULL DEFAULT 'onHover';
-                ALTER TABLE history_items ADD COLUMN navigator_panel_width REAL NOT NULL DEFAULT 260.0;
-                """)
+            try addColumnIfMissing("navigator_panel_side", definition: "navigator_panel_side TEXT NOT NULL DEFAULT 'right'")
+            try addColumnIfMissing("navigator_panel_visibility", definition: "navigator_panel_visibility TEXT NOT NULL DEFAULT 'onHover'")
+            try addColumnIfMissing("navigator_panel_width", definition: "navigator_panel_width REAL NOT NULL DEFAULT 260.0")
         }
+        // 即使用户库的 user_version 落后于实际列，也按列是否存在补 file_list，避免 INSERT 引用缺失列。
+        try addColumnIfMissing("file_list", definition: "file_list TEXT")
         try execute("PRAGMA user_version = \(Self.schemaVersion)")
         // 新库明确不读取旧历史；初始化成功后移除旧键，避免旧路径复活。
         UserDefaults.standard.removeObject(forKey: "historyConfigs")
@@ -357,7 +365,38 @@ nonisolated final class HistoryDatabase {
         }
     }
 
+    private func tableColumns() throws -> Set<String> {
+        var names = Set<String>()
+        try withStatement("PRAGMA table_info(history_items)", bindings: []) { statement in
+            while sqlite3_step(statement) == SQLITE_ROW {
+                names.insert(text(statement, 1))
+            }
+        }
+        return names
+    }
+
+    private func addColumnIfMissing(_ name: String, definition: String) throws {
+        if try tableColumns().contains(name) { return }
+        try execute("ALTER TABLE history_items ADD COLUMN \(definition)")
+    }
+
+    private func encodeFileList(_ fileList: FileListState?) -> String? {
+        guard let fileList, fileList.isPresentable else { return nil }
+        return (try? JSONEncoder().encode(fileList)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    private func decodeFileList(_ json: String?) -> FileListState? {
+        guard let json, let data = json.data(using: .utf8),
+              let list = try? JSONDecoder().decode(FileListState.self, from: data),
+              list.isPresentable else { return nil }
+        return list
+    }
+
     private func displayTitle(for config: WindowConfig, kind: HistoryContentKind) -> String {
+        // 列表标题随数量变化重算，不能沿用库里旧的 storedDisplayTitle。
+        if let fileList = config.fileList, fileList.isPresentable {
+            return String(format: NSLocalizedString(fileList.kind.historyTitleFormatKey, comment: ""), fileList.items.count)
+        }
         // 普通笔记的原始文件名字段承载用户自定义标题；其他类型继续沿用既有展示规则。
         if kind == .note, let title = config.originalImageName?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             return title
@@ -489,7 +528,8 @@ nonisolated final class HistoryDatabase {
                         .flatMap(NavigatorPanelVisibilityMode.init(rawValue:)) ?? .onHover,
                     navigatorPanelWidth: NavigatorPanelMetrics.clampWidth(
                         sqlite3_column_double(statement, columns["navigator_panel_width"]!)
-                    )
+                    ),
+                    fileList: columns["file_list"].flatMap { decodeFileList(optionalText(statement, $0)) }
                 ))
             }
         }

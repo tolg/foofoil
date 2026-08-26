@@ -29,4 +29,6 @@ extension Notification.Name {
     public static let shouldMatchPDFWindowAspectRatio = Notification.Name("shouldMatchPDFWindowAspectRatio")
     public static let shouldApplyPDFScaleToWindow = Notification.Name("shouldApplyPDFScaleToWindow")
     public static let shouldToggleVideoPlayback = Notification.Name("shouldToggleVideoPlayback")
+    public static let mediaPlaybackDidFinish = Notification.Name("mediaPlaybackDidFinish")
+    public static let openGroupedFiles = Notification.Name("openGroupedFiles")
 }

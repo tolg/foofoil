@@ -250,6 +250,33 @@ struct ExtensionKitTests {
         #expect(decoded.providerID == session.providerID)
     }
 
+    @Test func navigatorWidthDragFollowsOuterEdge() {
+        let start = 260.0
+        #expect(NavigatorPanelMetrics.width(afterDrag: start, translation: -40, draggingLeftEdge: true) == 300)
+        #expect(NavigatorPanelMetrics.width(afterDrag: start, translation: 40, draggingLeftEdge: true) == 220)
+        #expect(NavigatorPanelMetrics.width(afterDrag: start, translation: 40, draggingLeftEdge: false) == 300)
+        #expect(NavigatorPanelMetrics.width(afterDrag: start, translation: -40, draggingLeftEdge: false) == 220)
+    }
+
+    @Test func navigatorWidthScrollGrowsOnPositiveDelta() {
+        let start = 260.0
+        #expect(NavigatorPanelMetrics.width(afterScroll: start, delta: 1, precise: false) > start)
+        #expect(NavigatorPanelMetrics.width(afterScroll: start, delta: -1, precise: false) < start)
+        #expect(NavigatorPanelMetrics.width(afterScroll: start, delta: 1000, precise: false) == NavigatorPanelMetrics.maximumWidth)
+        #expect(NavigatorPanelMetrics.width(afterScroll: start, delta: -1000, precise: false) == NavigatorPanelMetrics.minimumWidth)
+        let precise = NavigatorPanelMetrics.width(afterScroll: start, delta: 10, precise: true)
+        let coarse = NavigatorPanelMetrics.width(afterScroll: start, delta: 10, precise: false)
+        #expect(precise < coarse)
+    }
+
+    @Test func navigatorWidthResizeHandleSitsOnOuterEdge() {
+        let width: CGFloat = 260
+        #expect(NavigatorPanelMetrics.containsWidthResizeHandle(x: 2, width: width, draggingLeftEdge: true))
+        #expect(!NavigatorPanelMetrics.containsWidthResizeHandle(x: 40, width: width, draggingLeftEdge: true))
+        #expect(NavigatorPanelMetrics.containsWidthResizeHandle(x: 258, width: width, draggingLeftEdge: false))
+        #expect(!NavigatorPanelMetrics.containsWidthResizeHandle(x: 40, width: width, draggingLeftEdge: false))
+    }
+
     @Test func navigatorPanelUsesCompanionWindowWithoutChangingFoilFrame() throws {
         let state = AppState()
         state.builtInNavigatorContributions = [
@@ -274,6 +301,36 @@ struct ExtensionKitTests {
         #expect(abs(panel.frame.width - 300) < 0.5)
         #expect(abs(panel.frame.minX - foilWindow.frame.maxX - NavigatorPanelMetrics.attachmentGap) < 0.5)
         #expect(foilWindow.frame == originalFrame)
+
+        controller.close()
+    }
+
+    @Test func navigatorPanelAppearsWhenPointerIsInsideWindowOnHover() throws {
+        let state = AppState()
+        state.builtInNavigatorContributions = [
+            NavigatorContribution(
+                id: "builtin.hover-test",
+                titleLocalizationKey: "Navigator",
+                style: .flat,
+                items: [NavigatorItem(id: "one", title: "One")]
+            )
+        ]
+        state.navigatorPanelVisibilityMode = .onHover
+        state.navigatorPanelSide = .right
+
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+        #expect(controller.isNavigatorPanelVisible == false)
+
+        let interior = NSPoint(x: foilWindow.frame.width / 2, y: foilWindow.frame.height / 2)
+        controller.updateNavigatorEdgeHover(at: interior)
+        #expect(state.isNavigatorEdgeHovered)
+        #expect(controller.isNavigatorPanelVisible)
+
+        let away = NSPoint(x: foilWindow.frame.maxX + 2400, y: foilWindow.frame.minY - 2400)
+        controller.refreshNavigatorHoverFromPointer(screenPoint: away)
+        #expect(state.isNavigatorEdgeHovered == false)
+        #expect(state.isNavigatorPanelHovered == false)
 
         controller.close()
     }
@@ -407,6 +464,7 @@ struct ExtensionKitTests {
         object.removeValue(forKey: "navigatorPanelSide")
         object.removeValue(forKey: "navigatorPanelVisibilityMode")
         object.removeValue(forKey: "navigatorPanelWidth")
+        object.removeValue(forKey: "fileList")
         let decoded = try JSONDecoder().decode(
             WindowConfig.self,
             from: JSONSerialization.data(withJSONObject: object)
@@ -417,6 +475,7 @@ struct ExtensionKitTests {
         #expect(decoded.navigatorPanelSide == .right)
         #expect(decoded.navigatorPanelVisibilityMode == .onHover)
         #expect(decoded.navigatorPanelWidth == NavigatorPanelMetrics.defaultWidth)
+        #expect(decoded.fileList == nil)
         #expect(decoded.text == "legacy")
     }
 

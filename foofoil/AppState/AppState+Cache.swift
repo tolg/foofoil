@@ -80,11 +80,11 @@ extension AppState {
                 .reduce(into: Set<String>()) { $0.insert($1) }
         }
 
-        func getCachedImageURL(for windowId: UUID? = nil, extension ext: String? = nil) -> URL? {
-            getCachedContentURL(kind: "image", for: windowId, extension: ext)
+        func getCachedImageURL(for windowId: UUID? = nil, extension ext: String? = nil, itemToken: String? = nil) -> URL? {
+            getCachedContentURL(kind: "image", for: windowId, extension: ext, itemToken: itemToken)
         }
 
-        func getCachedContentURL(kind: String, for windowId: UUID? = nil, extension ext: String? = nil) -> URL? {
+        func getCachedContentURL(kind: String, for windowId: UUID? = nil, extension ext: String? = nil, itemToken: String? = nil) -> URL? {
             guard let foofoilURL = AppState.getFoofoilDirectoryURL() else {
                 return nil
             }
@@ -92,7 +92,11 @@ extension AppState {
                 try? FileManager.default.createDirectory(at: foofoilURL, withIntermediateDirectories: true, attributes: nil)
             }
             let targetId = windowId ?? self.id
-            let filename = "cached_\(kind)_\(targetId.uuidString)"
+            var filename = "cached_\(kind)_\(targetId.uuidString)"
+            if let itemToken, !itemToken.isEmpty {
+                let token = itemToken.replacingOccurrences(of: "/", with: "-")
+                filename += "_\(token)"
+            }
             if let ext = ext, !ext.isEmpty {
                 return foofoilURL.appendingPathComponent("\(filename).\(ext)", isDirectory: false)
             } else {
@@ -273,20 +277,20 @@ extension AppState {
             return image
         }
 
-        func cacheImage(from sourceURL: URL) -> URL? {
+        func cacheImage(from sourceURL: URL, itemToken: String? = nil) -> URL? {
             clearCachedImages()
 
             let ext = sourceURL.pathExtension.lowercased()
             let shouldCompressToHEIC = ["png", "bmp", "tiff", "tif"].contains(ext)
 
-            if shouldCompressToHEIC, let destURL = getCachedImageURL(extension: "heic") {
+            if shouldCompressToHEIC, let destURL = getCachedImageURL(extension: "heic", itemToken: itemToken) {
                 if convertToHEIC(sourceURL: sourceURL, destURL: destURL) {
                     return destURL
                 }
                 // 如果 HEIC 压缩失败，继续尝试使用原始格式拷贝
             }
 
-            guard let destURL = getCachedImageURL(extension: sourceURL.pathExtension) else { return nil }
+            guard let destURL = getCachedImageURL(extension: sourceURL.pathExtension, itemToken: itemToken) else { return nil }
 
             do {
                 if FileManager.default.fileExists(atPath: destURL.path) {

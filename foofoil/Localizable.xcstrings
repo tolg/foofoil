@@ -81,6 +81,23 @@
         }
       }
     },
+    "Add to List...": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to List..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加到列表..."
+          }
+        }
+      }
+    },
     "Actual Size": {
       "extractionState": "manual",
       "localizations": {
@@ -676,6 +693,23 @@
         }
       }
     },
+    "File List Item Unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法访问"
+          }
+        }
+      }
+    },
     "File": {
       "extractionState": "manual",
       "localizations": {
@@ -897,6 +931,40 @@
         }
       }
     },
+    "Image List": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image List"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片列表"
+          }
+        }
+      }
+    },
+    "Image List History Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image List (%d)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片列表（%d）"
+          }
+        }
+      }
+    },
     "Increase Opacity": {
       "extractionState": "manual",
       "localizations": {
@@ -1080,6 +1148,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "新建一张箔"
+          }
+        }
+      }
+    },
+    "Next Item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Item"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一项"
           }
         }
       }
@@ -1319,6 +1404,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "播放进度"
+          }
+        }
+      }
+    },
+    "Previous Item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Item"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一项"
           }
         }
       }
@@ -2054,6 +2156,40 @@
         }
       }
     },
+    "Video List": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video List"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频列表"
+          }
+        }
+      }
+    },
+    "Video List History Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video List (%d)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频列表（%d）"
+          }
+        }
+      }
+    },
     "Volume": {
       "extractionState": "manual",
       "localizations": {
@@ -2281,6 +2417,40 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "添加测试标记"}}
       }
     },
+    "Audio List": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio List"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频列表"
+          }
+        }
+      }
+    },
+    "Audio List History Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio List (%d)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频列表（%d）"
+          }
+        }
+      }
+    },
     "Audio Enhancer": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "Audio Enhancer"}},
@@ -2319,8 +2489,8 @@
     },
     "Always Show Navigator": {
       "localizations": {
-        "en": {"stringUnit": {"state": "translated", "value": "Always Show"}},
-        "zh-Hans": {"stringUnit": {"state": "translated", "value": "始终显示"}}
+        "en": {"stringUnit": {"state": "translated", "value": "Always Show Navigator"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "始终显示导航面板"}}
       }
     },
     "Hide Navigator": {
@@ -2359,12 +2529,7 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "移除"}}
       }
     },
-    "Show Navigator on Hover": {
-      "localizations": {
-        "en": {"stringUnit": {"state": "translated", "value": "Show on Hover"}},
-        "zh-Hans": {"stringUnit": {"state": "translated", "value": "鼠标移入时显示"}}
-      }
-    },
+
     "Test Items": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "Test Items"}},
@@ -2377,12 +2542,7 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "测试目录"}}
       }
     },
-    "Toggle Navigator": {
-      "localizations": {
-        "en": {"stringUnit": {"state": "translated", "value": "Toggle Navigator"}},
-        "zh-Hans": {"stringUnit": {"state": "translated", "value": "显示或隐藏导航面板"}}
-      }
-    },
+
     "Toggle Navigator Group": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "Expand or Collapse Group"}},

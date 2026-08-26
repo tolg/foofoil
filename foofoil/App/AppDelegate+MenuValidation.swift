@@ -9,6 +9,13 @@ import UniformTypeIdentifiers
 import Combine
 import WebKit
 
+enum GoMenuItemTag {
+    static let pdfPrevious = 801
+    static let pdfNext = 802
+    static let fileListPrevious = 803
+    static let fileListNext = 804
+    static let fileListExtra = 805
+}
 
 extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
     public func menuNeedsUpdate(_ menu: NSMenu) {
@@ -39,15 +46,67 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
 
     func updateGoMenu(_ menu: NSMenu) {
         let isPDFDocument = activeAppState?.isPDFDocument == true
-        menu.items.forEach {
-            $0.isHidden = false
-            $0.isEnabled = isPDFDocument
+        let hasFileList = activeAppState?.fileList?.isPresentable == true
+        for item in menu.items {
+            if item.action == #selector(previousFileListItemAction)
+                || item.action == #selector(nextFileListItemAction) {
+                let isPrimaryArrow = item.tag == GoMenuItemTag.fileListPrevious
+                    || item.tag == GoMenuItemTag.fileListNext
+                item.isHidden = !hasFileList || !isPrimaryArrow
+                item.isEnabled = hasFileList
+            } else if item.isSeparatorItem {
+                item.isHidden = !isPDFDocument && !hasFileList
+            } else {
+                item.isHidden = !isPDFDocument
+                item.isEnabled = isPDFDocument
+            }
         }
+        syncGoMenuKeyEquivalents()
     }
 
-    /// “前往”仅服务于 PDF 翻页，其他内容模式不在菜单栏中显示。
+    /// “前往”在 PDF 翻页或文件列表切项时显示。
     func updateGoMenuVisibility() {
-        goMenuItem?.isHidden = activeAppState?.isPDFDocument != true
+        let appState = activeAppState
+        goMenuItem?.isHidden = appState?.isPDFDocument != true
+            && appState?.fileList?.isPresentable != true
+        syncGoMenuKeyEquivalents()
+    }
+
+    /// AppKit 会在窗口 `keyDown` 之前匹配菜单快捷键；禁用项仍会吞掉对应按键。
+    /// PDF 翻页与文件列表切项共用方向键，因此只给当前内容模式绑定。
+    func syncGoMenuKeyEquivalents() {
+        guard let menu = goMenu else { return }
+        let isPDFDocument = activeAppState?.isPDFDocument == true
+        let hasFileList = activeAppState?.fileList?.isPresentable == true
+        let left = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+        let right = String(UnicodeScalar(NSRightArrowFunctionKey)!)
+        let up = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+        let down = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+
+        for item in menu.items {
+            switch item.tag {
+            case GoMenuItemTag.pdfPrevious:
+                item.keyEquivalent = isPDFDocument ? left : ""
+                item.keyEquivalentModifierMask = []
+            case GoMenuItemTag.pdfNext:
+                item.keyEquivalent = isPDFDocument ? right : ""
+                item.keyEquivalentModifierMask = []
+            case GoMenuItemTag.fileListPrevious:
+                item.keyEquivalent = hasFileList ? left : ""
+                item.keyEquivalentModifierMask = []
+            case GoMenuItemTag.fileListNext:
+                item.keyEquivalent = hasFileList ? right : ""
+                item.keyEquivalentModifierMask = []
+            case GoMenuItemTag.fileListExtra:
+                let assigned = item.representedObject as? String ?? ""
+                item.keyEquivalent = hasFileList ? assigned : ""
+                if assigned == up || assigned == down {
+                    item.keyEquivalentModifierMask = []
+                }
+            default:
+                break
+            }
+        }
     }
 
     func updateViewMenu(_ menu: NSMenu) {
@@ -147,6 +206,10 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             return activeAppState != nil && clipboardImage() != nil
         }
 
+        if menuItem.action == #selector(addToFileListAction) {
+            return activeAppState?.listableKind != nil
+        }
+
         if menuItem.action == #selector(toggleShowBorderAction) {
             // 仅图片和网页模式支持切换视觉边框。
             guard let appState = activeAppState,
@@ -178,12 +241,11 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         }
 
         if menuItem.action == #selector(toggleNavigatorPanelAction) {
-            guard let controller = activeWindowController,
-                  !controller.appState.navigatorContributions.isEmpty else {
+            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else {
                 menuItem.state = .off
                 return false
             }
-            menuItem.state = controller.isNavigatorPanelVisible ? .on : .off
+            menuItem.state = appState.navigatorPanelVisibilityMode == .always ? .on : .off
             return true
         }
 
@@ -196,18 +258,6 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         if menuItem.action == #selector(placeNavigatorOnRightAction) {
             guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
             menuItem.state = appState.navigatorPanelSide == .right ? .on : .off
-            return true
-        }
-
-        if menuItem.action == #selector(showNavigatorOnHoverAction) {
-            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
-            menuItem.state = appState.navigatorPanelVisibilityMode == .onHover ? .on : .off
-            return true
-        }
-
-        if menuItem.action == #selector(alwaysShowNavigatorAction) {
-            guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return false }
-            menuItem.state = appState.navigatorPanelVisibilityMode == .always ? .on : .off
             return true
         }
 
@@ -235,6 +285,11 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             menuItem.action == #selector(nextPDFPageAction) ||
             menuItem.action == #selector(goToPDFPageAction) {
             return activeAppState?.isPDFDocument == true
+        }
+
+        if menuItem.action == #selector(previousFileListItemAction) ||
+            menuItem.action == #selector(nextFileListItemAction) {
+            return activeAppState?.fileList?.isPresentable == true
         }
 
 

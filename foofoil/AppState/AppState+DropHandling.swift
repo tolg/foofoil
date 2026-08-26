@@ -20,7 +20,15 @@ extension AppState {
         }
 
         public func handleDrop(providers: [NSItemProvider], completion: @escaping (Bool) -> Void = { _ in }) {
-            NSLog("handleDrop started for \(providers.count) providers")
+            handleDrop(providers: providers, appendToFileList: false, completion: completion)
+        }
+
+        public func handleNavigatorDrop(providers: [NSItemProvider], completion: @escaping (Bool) -> Void = { _ in }) {
+            handleDrop(providers: providers, appendToFileList: true, completion: completion)
+        }
+
+        func handleDrop(providers: [NSItemProvider], appendToFileList: Bool, completion: @escaping (Bool) -> Void) {
+            NSLog("handleDrop started for \(providers.count) providers append=\(appendToFileList)")
             for (index, p) in providers.enumerated() {
                 NSLog("Provider [\(index)] types: \(p.registeredTypeIdentifiers), suggestedName: \(p.suggestedName ?? "nil")")
             }
@@ -28,6 +36,30 @@ extension AppState {
             // 递增代次，后续所有异步回调需校验仍为当前代次，否则丢弃（防止并发覆盖与“打开以前的东西”）。
             currentDropGeneration &+= 1
             let generation = currentDropGeneration
+
+            if appendToFileList || providers.count > 1 {
+                loadDroppedFileURLs(from: providers, generation: generation) { [weak self] urls in
+                    guard let self, self.isCurrentDrop(generation) else {
+                        completion(false)
+                        return
+                    }
+                    let openable = urls.filter { self.canOpenFile(url: $0) }
+                    if appendToFileList, !openable.isEmpty {
+                        self.postGroupedFileOpen(urls: openable, append: true)
+                        completion(true)
+                        return
+                    }
+                    if openable.count >= 2 {
+                        self.postGroupedFileOpen(urls: openable, append: false)
+                        completion(true)
+                    } else if let url = openable.first {
+                        self.openDroppedURL(url, generation: generation, completion: completion)
+                    } else {
+                        self.tryLoadProviders(providers, index: 0, generation: generation, completion: completion)
+                    }
+                }
+                return
+            }
 
             // 直接基于 providers 解析，不再读取全局 drag pasteboard，避免读取到过期/残留的粘贴板内容导致误打开旧数据。
             tryLoadProviders(providers, index: 0, generation: generation, completion: { [weak self] success in
@@ -43,6 +75,44 @@ extension AppState {
                 }
                 completion(success)
             })
+        }
+
+        func postGroupedFileOpen(urls: [URL], append: Bool) {
+            NotificationCenter.default.post(
+                name: .openGroupedFiles,
+                object: nil,
+                userInfo: [
+                    "urls": urls,
+                    "windowID": id,
+                    "append": append
+                ]
+            )
+        }
+
+        func loadDroppedFileURLs(
+            from providers: [NSItemProvider],
+            generation: UInt64,
+            completion: @escaping ([URL]) -> Void
+        ) {
+            var collected: [URL?] = Array(repeating: nil, count: providers.count)
+            let group = DispatchGroup()
+            for (index, provider) in providers.enumerated() {
+                guard provider.canLoadObject(ofClass: URL.self) else { continue }
+                group.enter()
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    defer { group.leave() }
+                    if let url, url.isFileURL {
+                        collected[index] = url
+                    }
+                }
+            }
+            group.notify(queue: .main) { [weak self] in
+                guard let self, self.isCurrentDrop(generation) else {
+                    completion([])
+                    return
+                }
+                completion(collected.compactMap { $0 })
+            }
         }
 
         func tryLoadProviders(_ providers: [NSItemProvider], index: Int, generation: UInt64, completion: @escaping (Bool) -> Void) {

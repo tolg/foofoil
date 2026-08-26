@@ -60,36 +60,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     // 处理文件关联打开事件 (右键 "打开方式" 或者双击文件)
     public func application(_ sender: NSApplication, openFiles filenames: [String]) {
         didOpenFiles = true
-        for filename in filenames {
-            let fileURL = URL(fileURLWithPath: filename)
-
-            // 如果当前存在活跃的空白窗口，则直接在其中加载
-            if let activeState = activeAppState, isBlank(activeState) {
-                activeState.openFile(url: fileURL)
-                activeWindowController?.window?.makeKeyAndOrderFront(nil)
-            } else {
-                // 否则，创建一个新窗口加载该图片或网页
-                let state = AppState()
-                state.openFile(url: fileURL)
-
-                let controller = FloatingWindowController(appState: state)
-                if let keyWindow = activeWindowController?.window ?? NSApplication.shared.keyWindow {
-                    let keyFrame = keyWindow.frame
-                    let size = controller.window?.frame.size ?? NSSize(width: 400, height: 400)
-                    let offsetFrame = NSRect(
-                        x: keyFrame.minX + 30,
-                        y: keyFrame.minY - 30,
-                        width: size.width,
-                        height: size.height
-                    )
-                    controller.window?.setFrame(offsetFrame, display: true)
-                } else {
-                    controller.window?.center()
-                }
-                addWindowController(controller)
-                controller.showWindow(nil)
-            }
-        }
+        let urls = filenames.map { URL(fileURLWithPath: $0) }
+        openGroupedFiles(urls, into: availableBlankWindowController?.appState, append: false)
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -112,6 +84,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(handleCreateNewFoofoilFromImage(_:)),
             name: .createNewFoofoilFromImage,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenGroupedFiles(_:)),
+            name: .openGroupedFiles,
             object: nil
         )
 
@@ -164,6 +143,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 内容在当前窗口内切换时（例如通过“打开”或拖放）也立即更新 PDF 专用菜单。
         controller.appState.$imageURL
+            .sink { [weak self, weak controller] _ in
+                guard let self, let controller, self.activeWindowController === controller else { return }
+                self.updateGoMenuVisibility()
+            }
+            .store(in: &contentModeCancellables)
+
+        controller.appState.$fileList
             .sink { [weak self, weak controller] _ in
                 guard let self, let controller, self.activeWindowController === controller else { return }
                 self.updateGoMenuVisibility()

@@ -39,6 +39,8 @@ extension AppState {
             self.extensionSession = nil
             self.extensionFallbackProviderID = nil
             self.extensionStateReference = nil
+            self.fileList = nil
+            self.fileListRevision = 0
             self.builtInNavigatorContributions = []
             self.builtInNavigatorActionHandler = nil
             self.isNavigatorPanelExplicitlyVisible = false

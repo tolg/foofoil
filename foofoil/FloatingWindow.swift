@@ -63,6 +63,11 @@ public class FloatingWindow: NSWindow {
         return true
     }
 
+    public override func mouseEntered(with event: NSEvent) {
+        (windowController as? FloatingWindowController)?.updateNavigatorEdgeHover(at: event.locationInWindow)
+        super.mouseEntered(with: event)
+    }
+
     func installResizeCursorTracking(in view: NSView) {
         if let resizeCursorTrackingArea, let resizeCursorTrackingView {
             resizeCursorTrackingView.removeTrackingArea(resizeCursorTrackingArea)
@@ -91,7 +96,7 @@ public class FloatingWindow: NSWindow {
             }
         }
 
-        if event.type == .mouseMoved || event.type == .cursorUpdate {
+        if event.type == .mouseEntered || event.type == .mouseMoved || event.type == .cursorUpdate {
             if let controller = self.windowController as? FloatingWindowController {
                 controller.updateNavigatorEdgeHover(at: event.locationInWindow)
             }
@@ -122,6 +127,12 @@ public class FloatingWindow: NSWindow {
            (windowController as? FloatingWindowController)?.appState.isFullScreen != true {
             updateCommandDragCursor(isCommandPressed: true)
             performDrag(with: event)
+            return
+        }
+
+        if event.type == .keyDown,
+           let controller = self.windowController as? FloatingWindowController,
+           controller.appState.handleFileListKeyDown(event) {
             return
         }
 
@@ -192,6 +203,15 @@ public class FloatingWindow: NSWindow {
                 }
                 return
             }
+        }
+
+        // 指针在导航栏上时，⌘+滚轮调节导航栏宽度（全屏覆盖层也走这里）。
+        if event.type == .scrollWheel,
+           modifiers.contains(.command),
+           let controller = windowController as? FloatingWindowController,
+           controller.shouldCommandScrollResizeNavigator(at: event.locationInWindow) {
+            controller.handleNavigatorCommandScroll(event)
+            return
         }
 
         // 全屏时滚轮与捏合只交给内容视图；不能改变原窗口 frame。
@@ -335,6 +355,7 @@ public class FloatingWindow: NSWindow {
     }
 
     public override func mouseExited(with event: NSEvent) {
+        (windowController as? FloatingWindowController)?.updateNavigatorEdgeHover(at: nil)
         resetEdgeResizeCursor()
         super.mouseExited(with: event)
     }
@@ -440,6 +461,12 @@ public class FloatingWindow: NSWindow {
 
     // 重写 performKeyEquivalent(with:)：内容缩放仍响应不带 Shift 的 ⌘=；增大/缩小箔走 ⇧⌘+/-；⌘, 始终打开设置。
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // 列表切项必须赶在主菜单匹配 PDF 翻页方向键之前处理。
+        if let controller = windowController as? FloatingWindowController,
+           controller.appState.handleFileListKeyDown(event) {
+            return true
+        }
+
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let delegate = NSApplication.shared.delegate as? AppDelegate
 

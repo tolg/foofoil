@@ -53,6 +53,11 @@ final class VideoPlayerController: ObservableObject {
                     self.player.play()
                 } else {
                     self.isPlaying = false
+                    NotificationCenter.default.post(
+                        name: .mediaPlaybackDidFinish,
+                        object: nil,
+                        userInfo: ["id": self.appStateID]
+                    )
                 }
             }
         })

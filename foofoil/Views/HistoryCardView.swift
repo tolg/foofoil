@@ -79,6 +79,9 @@ struct HistoryCardView: View {
             .onChange(of: config.thumbnailPath) { _ in
                 loadImageAsync()
             }
+            .onChange(of: config.fileList?.items.count) { _ in
+                loadImageAsync()
+            }
     }
 
     private var isSVG: Bool {
@@ -128,6 +131,31 @@ struct HistoryCardView: View {
             .foregroundStyle(.secondary)
             .frame(width: 60, height: 60)
             .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var fileListCountBadge: some View {
+        if let count = config.fileList?.items.count, count >= 2 {
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.black.opacity(0.55), in: Capsule())
+                }
+            }
+            .padding(4)
+            .accessibilityLabel(
+                String(
+                    format: NSLocalizedString(config.fileList?.kind.historyTitleFormatKey ?? "Image List History Format", comment: ""),
+                    count
+                )
+            )
+        }
     }
 
     /// 叠在封面缩略图上的半透明类型标记，避免音频封面被当成普通图片。
@@ -189,13 +217,20 @@ struct HistoryCardView: View {
                             .frame(width: 60, height: 60)
                             .clipped()
                         mediaKindOverlay
+                        fileListCountBadge
                     }
                     .frame(width: 60, height: 60)
                     .clipped()
                 } else if isAudioHistory {
-                    audioPlaceholder
+                    ZStack {
+                        audioPlaceholder
+                        fileListCountBadge
+                    }
                 } else if isVideoHistory {
-                    videoPlaceholder
+                    ZStack {
+                        videoPlaceholder
+                        fileListCountBadge
+                    }
                 } else {
                     Color(NSColor.controlBackgroundColor)
                         .frame(width: 60, height: 60)

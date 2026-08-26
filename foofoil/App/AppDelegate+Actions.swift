@@ -309,7 +309,7 @@ extension AppDelegate {
     @objc func openFileAction() {
         guard let appState = activeAppState else { return }
         let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
@@ -323,12 +323,78 @@ extension AppDelegate {
         panel.allowedContentTypes = types
 
         panel.begin { response in
-            if response == .OK, let url = panel.url {
+            if response == .OK {
                 DispatchQueue.main.async {
-                    appState.openFile(url: url)
+                    self.openGroupedFiles(panel.urls, into: appState, append: false)
                 }
             }
         }
+    }
+
+    @objc func addToFileListAction() {
+        guard let appState = activeAppState, let kind = appState.listableKind else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = kind.allowedContentTypes
+
+        panel.begin { response in
+            if response == .OK {
+                DispatchQueue.main.async {
+                    self.openGroupedFiles(panel.urls, into: appState, append: true)
+                }
+            }
+        }
+    }
+
+    @objc func handleOpenGroupedFiles(_ notification: Notification) {
+        guard let urls = notification.userInfo?["urls"] as? [URL] else { return }
+        let windowID = notification.userInfo?["windowID"] as? UUID
+        let append = notification.userInfo?["append"] as? Bool ?? false
+        let target = windowControllers.first(where: { $0.appState.id == windowID })?.appState
+        openGroupedFiles(urls, into: target, append: append)
+    }
+
+    /// 按同类型分组打开：第一组进入目标箔片（或新窗口），其余组另开箔片。
+    func openGroupedFiles(_ urls: [URL], into target: AppState?, append: Bool) {
+        let probe = target ?? AppState()
+        let openable = urls.filter { probe.canOpenFile(url: $0) }
+        var groups = FileListGrouper.groups(from: openable)
+        guard !groups.isEmpty else { return }
+
+        if append, let target {
+            if let kind = target.listableKind {
+                let matching = groups.filter { $0.kind == .listable(kind) }.flatMap(\.urls)
+                if !matching.isEmpty {
+                    target.appendToFileList(urls: matching)
+                }
+                groups.removeAll { $0.kind == .listable(kind) }
+            }
+            for group in groups {
+                openGroupInNewWindow(group)
+            }
+            return
+        }
+
+        let first = groups.removeFirst()
+        if let target {
+            target.openFileGroup(first, preservesIdentity: isBlank(target))
+            if let controller = windowControllers.first(where: { $0.appState === target }) {
+                activateWindow(controller)
+            }
+        } else {
+            openGroupInNewWindow(first)
+        }
+        for group in groups {
+            openGroupInNewWindow(group)
+        }
+    }
+
+    func openGroupInNewWindow(_ group: FileListGroup) {
+        let state = AppState()
+        state.openFileGroup(group, preservesIdentity: true)
+        showNewWindow(with: state)
     }
 
     @objc func openWebURLAction() {
@@ -439,13 +505,12 @@ extension AppDelegate {
     }
 
     @objc func toggleNavigatorPanelAction() {
-        guard let controller = activeWindowController,
-              !controller.appState.navigatorContributions.isEmpty else { return }
-        if controller.isNavigatorPanelVisible {
-            controller.appState.navigatorPanelVisibilityMode = .onHover
-            controller.appState.isNavigatorPanelExplicitlyVisible = false
-        } else {
-            controller.appState.isNavigatorPanelExplicitlyVisible = true
+        guard let appState = activeAppState, !appState.navigatorContributions.isEmpty else { return }
+        let next: NavigatorPanelVisibilityMode = appState.navigatorPanelVisibilityMode == .always ? .onHover : .always
+        appState.navigatorPanelVisibilityMode = next
+        SettingsStore.shared.navigatorPanelVisibilityMode = next
+        if next != .always {
+            appState.isNavigatorPanelExplicitlyVisible = false
         }
     }
 
@@ -457,16 +522,6 @@ extension AppDelegate {
     @objc func placeNavigatorOnRightAction() {
         activeAppState?.navigatorPanelSide = .right
         SettingsStore.shared.navigatorPanelSide = .right
-    }
-
-    @objc func showNavigatorOnHoverAction() {
-        activeAppState?.navigatorPanelVisibilityMode = .onHover
-        SettingsStore.shared.navigatorPanelVisibilityMode = .onHover
-    }
-
-    @objc func alwaysShowNavigatorAction() {
-        activeAppState?.navigatorPanelVisibilityMode = .always
-        SettingsStore.shared.navigatorPanelVisibilityMode = .always
     }
 
     @objc func reloadPageAction() {
@@ -541,6 +596,14 @@ extension AppDelegate {
 
     @objc func nextPDFPageAction() {
         postPDFNavigationNotification(.shouldGoToNextPDFPage)
+    }
+
+    @objc func previousFileListItemAction() {
+        activeAppState?.activateAdjacentFileListItem(delta: -1)
+    }
+
+    @objc func nextFileListItemAction() {
+        activeAppState?.activateAdjacentFileListItem(delta: 1)
     }
 
     @objc func goToPDFPageAction() {

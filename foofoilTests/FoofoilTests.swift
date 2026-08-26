@@ -983,6 +983,35 @@ struct FoofoilTests {
         #expect(zoomOutContentItem?.keyEquivalentModifierMask == [.command])
     }
 
+    @Test func navigatorMenuUsesAlwaysShowToggle() throws {
+        let appDelegate = AppDelegate()
+        appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        guard let viewMenu = NSApplication.shared.mainMenu?.items.first(where: {
+            $0.submenu?.title == NSLocalizedString("View", comment: "")
+        })?.submenu,
+              let navigatorMenu = viewMenu.items.first(where: {
+                  $0.submenu?.title == NSLocalizedString("Navigator", comment: "")
+              })?.submenu else {
+            #expect(Bool(false), "Navigator submenu not setup")
+            return
+        }
+
+        let alwaysShow = try #require(navigatorMenu.items.first { $0.action == #selector(AppDelegate.toggleNavigatorPanelAction) })
+        #expect(alwaysShow.title == NSLocalizedString("Always Show Navigator", comment: ""))
+        #expect(alwaysShow.keyEquivalent == "s")
+        #expect(alwaysShow.keyEquivalentModifierMask == [.command, .control])
+        #expect(appDelegate.validateMenuItem(alwaysShow) == false)
+        #expect(alwaysShow.state == .off)
+
+        #expect(navigatorMenu.items.contains { $0.title == NSLocalizedString("Toggle Navigator", comment: "") } == false)
+        #expect(navigatorMenu.items.contains { $0.title == NSLocalizedString("Show Navigator on Hover", comment: "") } == false)
+        #expect(navigatorMenu.items.contains {
+            $0.title == NSLocalizedString("Always Show Navigator", comment: "")
+                && $0.action != #selector(AppDelegate.toggleNavigatorPanelAction)
+        } == false)
+    }
+
     @Test func testWebModeMenuItemsInFileAndEditMenu() {
         let appDelegate = AppDelegate()
         appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
@@ -1150,5 +1179,266 @@ struct FoofoilTests {
         }
         // 即使没有检测到 table 属性，也应保证文本内容已渲染，不强制 hasTableAttribute
         #expect(attr.length > 0)
+    }
+
+    @Test func groupsSameKindTogetherAndKeepsOthersSeparate() {
+        let urls = [
+            URL(fileURLWithPath: "/tmp/a.jpg"),
+            URL(fileURLWithPath: "/tmp/b.jpg"),
+            URL(fileURLWithPath: "/tmp/c.mp4"),
+            URL(fileURLWithPath: "/tmp/d.pdf"),
+            URL(fileURLWithPath: "/tmp/e.jpg"),
+            URL(fileURLWithPath: "/tmp/notes.txt")
+        ]
+        let groups = FileListGrouper.groups(from: urls)
+        #expect(groups.count == 4)
+        #expect(groups[0].kind == .listable(.image))
+        #expect(groups[0].urls.map(\.lastPathComponent) == ["a.jpg", "b.jpg", "e.jpg"])
+        #expect(groups[1].kind == .listable(.video))
+        #expect(groups[1].urls.map(\.lastPathComponent) == ["c.mp4"])
+        #expect(groups[2].kind == .other)
+        #expect(groups[2].urls.first?.lastPathComponent == "d.pdf")
+        #expect(groups[3].kind == .other)
+        #expect(groups[3].urls.first?.lastPathComponent == "notes.txt")
+    }
+
+    @Test func classifyRejectsPDFAndTextFromImageLists() {
+        #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.png")) == .listable(.image))
+        #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.mp3")) == .listable(.audio))
+        #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.mp4")) == .listable(.video))
+        #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.pdf")) == .other)
+        #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.txt")) == .other)
+    }
+
+    @Test func appendingFilesKeepsWindowIdentityAndUpdatesHistoryTitle() throws {
+        let first = try writeTestPNG(name: "list-a.png")
+        let second = try writeTestPNG(name: "list-b.png")
+        let third = try writeTestPNG(name: "list-c.png")
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+            try? FileManager.default.removeItem(at: third)
+        }
+
+        let state = AppState()
+        let originalID = state.id
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+        #expect(state.fileList == nil)
+        #expect(state.navigatorContributions.isEmpty)
+
+        state.appendToFileList(urls: [second])
+        #expect(state.id == originalID)
+        #expect(state.fileList?.items.count == 2)
+        #expect(!state.navigatorContributions.isEmpty)
+        #expect(state.isNavigatorPanelExplicitlyVisible == false)
+        #expect(state.sourceFingerprint == nil)
+
+        let listed = state.toConfig()
+        #expect(listed.fileList?.items.count == 2)
+        #expect(listed.historyMenuSymbolName == "photo.on.rectangle")
+        #expect(listed.historyMenuDisplayName.contains("2"))
+
+        state.appendToFileList(urls: [third])
+        #expect(state.id == originalID)
+        #expect(state.fileList?.items.count == 3)
+        #expect(state.toConfig().historyMenuDisplayName.contains("3"))
+
+        let currentID = state.fileList?.currentID
+        let otherID = state.fileList?.items.first(where: { $0.id != currentID })?.id
+        #expect(otherID != nil)
+        if let otherID {
+            state.performNavigatorAction(
+                NavigatorAction(contributionID: AppState.fileListNavigatorID, kind: .activate, itemIDs: [otherID])
+            )
+            #expect(state.fileList?.currentID == otherID)
+            #expect(state.originalImageName == second.lastPathComponent || state.originalImageName == third.lastPathComponent)
+            #expect(state.imageURL?.path.contains(otherID) == true)
+        }
+        #expect(state.fileList?.items.count == 3)
+        #expect(state.id == originalID)
+
+        if let removeID = state.fileList?.items.last?.id {
+            state.performNavigatorAction(
+                NavigatorAction(contributionID: AppState.fileListNavigatorID, kind: .remove, itemIDs: [removeID])
+            )
+        }
+        #expect(state.fileList?.items.count == 2)
+        #expect(state.id == originalID)
+
+        if let remainingExtra = state.fileList?.items.first(where: { $0.id != state.fileList?.currentID })?.id {
+            state.performNavigatorAction(
+                NavigatorAction(contributionID: AppState.fileListNavigatorID, kind: .remove, itemIDs: [remainingExtra])
+            )
+        }
+        #expect(state.fileList == nil)
+        #expect(state.navigatorContributions.isEmpty)
+        #expect(state.isNavigatorPanelExplicitlyVisible == false)
+        #expect(state.id == originalID)
+    }
+
+    @Test func fileListKeyDownNavigatesAdjacentItems() throws {
+        let first = try writeTestPNG(name: "key-a.png")
+        let second = try writeTestPNG(name: "key-b.png")
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+        }
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+        state.appendToFileList(urls: [second])
+        let firstID = try #require(state.fileList?.currentID)
+
+        func keyEvent(keyCode: UInt16, characters: String = "", modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: modifiers,
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: characters,
+                charactersIgnoringModifiers: characters,
+                isARepeat: false,
+                keyCode: keyCode
+            )!
+        }
+
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 124)))
+        #expect(state.fileList?.currentID != firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 126)))
+        #expect(state.fileList?.currentID == firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 45, characters: "n", modifiers: .control)))
+        #expect(state.fileList?.currentID != firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 35, characters: "p", modifiers: .control)))
+        #expect(state.fileList?.currentID == firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 3, characters: "f", modifiers: .control)))
+        #expect(state.fileList?.currentID != firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 11, characters: "b", modifiers: .control)))
+        #expect(state.fileList?.currentID == firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 125)))
+        #expect(state.fileList?.currentID != firstID)
+        #expect(state.handleFileListKeyDown(keyEvent(keyCode: 123)))
+        #expect(state.fileList?.currentID == firstID)
+    }
+
+    @Test func switchingFileListItemsPreservesBorder() throws {
+        let first = try writeTestPNG(name: "border-a.png")
+        let second = try writeTestPNG(name: "border-b.png")
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+        }
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+        #expect(state.showBorder == false)
+        state.showBorder = true
+        state.appendToFileList(urls: [second])
+        let firstID = try #require(state.fileList?.currentID)
+        let secondID = try #require(state.fileList?.items.first(where: { $0.id != firstID })?.id)
+
+        state.presentFileListItem(id: secondID, rotatesIdentity: false)
+        #expect(state.showBorder == true)
+        #expect(state.fileList?.currentID == secondID)
+
+        state.showBorder = false
+        state.presentFileListItem(id: firstID, rotatesIdentity: false)
+        #expect(state.showBorder == false)
+        #expect(state.fileList?.currentID == firstID)
+    }
+
+    @Test func goMenuArrowKeysAreNotBoundUntilContentOwnsThem() {
+        let appDelegate = AppDelegate()
+        appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        guard let goMenu = NSApplication.shared.mainMenu?.items.first(where: {
+            $0.submenu?.title == NSLocalizedString("Go", comment: "")
+        })?.submenu else {
+            #expect(Bool(false), "Go menu not setup")
+            return
+        }
+
+        let left = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+        let right = String(UnicodeScalar(NSRightArrowFunctionKey)!)
+        let pdfPrevious = goMenu.items.first { $0.action == #selector(AppDelegate.previousPDFPageAction) }
+        let pdfNext = goMenu.items.first { $0.action == #selector(AppDelegate.nextPDFPageAction) }
+        let listPrevious = goMenu.items.first {
+            $0.action == #selector(AppDelegate.previousFileListItemAction)
+                && $0.tag == GoMenuItemTag.fileListPrevious
+        }
+        let listNext = goMenu.items.first {
+            $0.action == #selector(AppDelegate.nextFileListItemAction)
+                && $0.tag == GoMenuItemTag.fileListNext
+        }
+
+        appDelegate.updateGoMenuVisibility()
+        #expect(pdfPrevious?.keyEquivalent != left)
+        #expect(pdfNext?.keyEquivalent != right)
+        #expect(listPrevious?.keyEquivalent != left)
+        #expect(listNext?.keyEquivalent != right)
+        #expect(pdfPrevious?.keyEquivalent == "")
+        #expect(listPrevious?.keyEquivalent == "")
+    }
+
+    @Test func windowConfigAndHistoryRoundTripFileList() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("foofoil-filelist-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = FileListItem(id: "a", path: "/tmp/a.png", bookmark: nil, displayName: "a.png")
+        let second = FileListItem(id: "b", path: "/tmp/b.png", bookmark: nil, displayName: "b.png")
+        let list = FileListState(kind: .image, items: [first, second], currentID: "b")
+        let config = WindowConfig(
+            id: UUID(),
+            imagePath: "/tmp/b.png",
+            originalImageName: "b.png",
+            contentKind: .image,
+            fileList: list
+        )
+
+        let encoded = try JSONEncoder().encode(config)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "fileList")
+        let legacy = try JSONDecoder().decode(WindowConfig.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(legacy.fileList == nil)
+
+        let decoded = try JSONDecoder().decode(WindowConfig.self, from: encoded)
+        #expect(decoded.fileList?.items.map(\.id) == ["a", "b"])
+        #expect(decoded.fileList?.currentID == "b")
+        #expect(decoded.historyMenuDisplayName.contains("2"))
+
+        let database = try HistoryDatabase(databaseURL: directory.appendingPathComponent("history.sqlite3"))
+        try database.upsert(config)
+        let stored = try #require(try database.config(id: config.id))
+        #expect(stored.id == config.id)
+        #expect(stored.fileList?.items.count == 2)
+        #expect(stored.storedDisplayTitle?.contains("2") == true)
+        #expect(stored.sourceFingerprint == nil)
+
+        let member = WindowConfig(
+            id: UUID(),
+            imagePath: "/tmp/a.png",
+            originalImageName: "a.png",
+            contentKind: .image,
+            sourceFingerprint: "file:/tmp/a.png"
+        )
+        try database.upsert(member)
+        let listAfter = try #require(try database.config(id: config.id))
+        #expect(listAfter.fileList?.items.count == 2)
+    }
+
+    private func writeTestPNG(name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("foofoil-\(UUID().uuidString)-\(name)")
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSRect(origin: .zero, size: image.size).fill()
+        image.unlockFocus()
+        let tiff = try #require(image.tiffRepresentation)
+        let rep = try #require(NSBitmapImageRep(data: tiff))
+        let data = try #require(rep.representation(using: .png, properties: [:]))
+        try data.write(to: url)
+        return url
     }
 }

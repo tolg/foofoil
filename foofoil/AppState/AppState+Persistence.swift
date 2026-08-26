@@ -53,12 +53,15 @@ extension AppState {
             self.navigatorPanelSide = config.navigatorPanelSide
             self.navigatorPanelVisibilityMode = config.navigatorPanelVisibilityMode
             self.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(config.navigatorPanelWidth)
+            self.fileList = nil
+            self.fileListRevision = 0
             self.builtInNavigatorContributions = []
             self.builtInNavigatorActionHandler = nil
             self.isNavigatorPanelExplicitlyVisible = false
             self.activeNavigatorContributionID = nil
             self.expandedNavigatorItemIDs = []
             restoreExtensionSession(from: config)
+            restoreFileList(from: config)
 
             // 载入历史记录时，一律尝试通知窗口控制器恢复当初保存的窗口位置与尺寸
             if let frameString = config.windowFrame {
@@ -159,7 +162,8 @@ extension AppState {
                 extensionStateReference: extensionStateReference,
                 navigatorPanelSide: navigatorPanelSide,
                 navigatorPanelVisibilityMode: navigatorPanelVisibilityMode,
-                navigatorPanelWidth: navigatorPanelWidth
+                navigatorPanelWidth: navigatorPanelWidth,
+                fileList: fileList?.isPresentable == true ? fileList : nil
             )
         }
 

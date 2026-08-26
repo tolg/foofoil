@@ -51,6 +51,8 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     public var navigatorPanelSide: NavigatorPanelSide
     public var navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode
     public var navigatorPanelWidth: Double
+    /// 内置同类型文件列表；缺省或条目少于 2 时按单文件历史展示。
+    public var fileList: FileListState?
 
 
     public init(
@@ -81,9 +83,10 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         videoBookmark: Data? = nil,
         extensionID: String? = nil,
         extensionStateReference: String? = nil,
-        navigatorPanelSide: NavigatorPanelSide = .right,
+        navigatorPanelSide: NavigatorPanelSide = .left,
         navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode = .onHover,
-        navigatorPanelWidth: Double = 260.0
+        navigatorPanelWidth: Double = 260.0,
+        fileList: FileListState? = nil
     ) {
         self.id = id
         self.imagePath = imagePath
@@ -115,10 +118,11 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         self.navigatorPanelSide = navigatorPanelSide
         self.navigatorPanelVisibilityMode = navigatorPanelVisibilityMode
         self.navigatorPanelWidth = navigatorPanelWidth
+        self.fileList = fileList?.isPresentable == true ? fileList : nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark, extensionID, extensionStateReference, navigatorPanelSide, navigatorPanelVisibilityMode, navigatorPanelWidth
+        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark, extensionID, extensionStateReference, navigatorPanelSide, navigatorPanelVisibilityMode, navigatorPanelWidth, fileList
     }
 
     public init(from decoder: Decoder) throws {
@@ -159,9 +163,14 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(
             try container.decodeIfPresent(Double.self, forKey: .navigatorPanelWidth) ?? NavigatorPanelMetrics.defaultWidth
         )
+        let decodedList = try container.decodeIfPresent(FileListState.self, forKey: .fileList)
+        fileList = decodedList?.isPresentable == true ? decodedList : nil
     }
 
     public var historyMenuSymbolName: String {
+        if let fileList, fileList.isPresentable {
+            return fileList.kind.historySymbolName
+        }
         if let contentKind { return contentKind.symbolName }
         if self.webURLString != nil {
             return "globe"
@@ -186,6 +195,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
 
     public var historyMenuDisplayName: String {
         if let storedDisplayTitle, !storedDisplayTitle.isEmpty { return storedDisplayTitle }
+        if let fileList, fileList.isPresentable {
+            return String(format: NSLocalizedString(fileList.kind.historyTitleFormatKey, comment: ""), fileList.items.count)
+        }
         if let webURLString = self.webURLString {
             return self.originalImageName ?? webURLString
         } else if let imagePath = self.imagePath {
@@ -220,9 +232,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         let emoji: String
         switch historyMenuSymbolName {
         case "globe": emoji = "🌐"
-        case "photo", "text.document": emoji = "🏞️"
-        case "play.rectangle": emoji = "🎬"
-        case "music.note": emoji = "🎵"
+        case "photo", "photo.on.rectangle", "text.document": emoji = "🏞️"
+        case "play.rectangle", "film.stack": emoji = "🎬"
+        case "music.note", "music.note.list": emoji = "🎵"
         case "tablecells": emoji = "▦"
         case "arrow.down.document": emoji = "Ⓜ️"
         default: emoji = "📝"
@@ -241,7 +253,7 @@ public class SettingsStore {
             Keys.opacity: 1.0,
             Keys.isPinned: false,
             Keys.text: "",
-            Keys.navigatorPanelSide: NavigatorPanelSide.right.rawValue,
+            Keys.navigatorPanelSide: NavigatorPanelSide.left.rawValue,
             Keys.navigatorPanelVisibilityMode: NavigatorPanelVisibilityMode.onHover.rawValue,
             Keys.navigatorPanelWidth: NavigatorPanelMetrics.defaultWidth,
             Keys.extensionAutoCheckUpdates: true,
@@ -268,7 +280,7 @@ public class SettingsStore {
     }
 
     var navigatorPanelSide: NavigatorPanelSide {
-        get { NavigatorPanelSide(rawValue: userDefaults.string(forKey: Keys.navigatorPanelSide) ?? "") ?? .right }
+        get { NavigatorPanelSide(rawValue: userDefaults.string(forKey: Keys.navigatorPanelSide) ?? "") ?? .left }
         set { userDefaults.set(newValue.rawValue, forKey: Keys.navigatorPanelSide) }
     }
 

@@ -12,17 +12,27 @@ import AppKit
 struct VisualEffectView: NSViewRepresentable {
     let material: NSVisualEffectView.Material
     let blendingMode: NSVisualEffectView.BlendingMode
+    var cornerRadius: CGFloat = 0
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
+        apply(to: view)
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
+        apply(to: nsView)
+    }
+
+    private func apply(to view: NSVisualEffectView) {
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        view.wantsLayer = true
+        view.layer?.borderWidth = 0
+        view.layer?.borderColor = NSColor.clear.cgColor
+        view.layer?.cornerRadius = cornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = cornerRadius > 0
     }
 }

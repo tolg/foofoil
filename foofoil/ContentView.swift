@@ -108,7 +108,7 @@ public struct ContentView: View {
                 .opacity(flashOpacity)
                 .allowsHitTesting(false)
 
-            fullScreenNavigatorOverlay
+            FullScreenNavigatorOverlay(appState: appState)
         }
         .frame(minWidth: minimumWidth, minHeight: minimumLength)
         // 直接在最外层容器上处理拖放逻辑，避免使用覆盖整窗的透明交互层拦截正常点击事件
@@ -135,7 +135,6 @@ public struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: pdfPageIndicator)
-        .animation(.easeInOut(duration: 0.18), value: isFullScreenNavigatorVisible)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("flashWindow_\(appState.id.uuidString)"))) { _ in
             // 瞬间变白（0.85 不透明度）
             flashOpacity = 0.85
@@ -283,26 +282,36 @@ public struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var fullScreenNavigatorOverlay: some View {
+}
+
+private struct FullScreenNavigatorOverlay: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var hover: NavigatorHoverState
+
+    init(appState: AppState) {
+        self.appState = appState
+        self.hover = appState.navigatorHover
+    }
+
+    var body: some View {
         if appState.isFullScreen,
            !appState.navigatorContributions.isEmpty,
-           isFullScreenNavigatorVisible {
+           isVisible {
             HStack(spacing: 0) {
                 if appState.navigatorPanelSide == .right { Spacer(minLength: 0) }
                 NavigatorPanelView(appState: appState, isFullScreenOverlay: true)
                     .frame(width: CGFloat(appState.navigatorPanelWidth))
-                    .transition(.move(edge: appState.navigatorPanelSide == .left ? .leading : .trailing))
                 if appState.navigatorPanelSide == .left { Spacer(minLength: 0) }
             }
             .zIndex(20)
+            .transition(.move(edge: appState.navigatorPanelSide == .left ? .leading : .trailing))
         }
     }
 
-    private var isFullScreenNavigatorVisible: Bool {
+    private var isVisible: Bool {
         appState.navigatorPanelVisibilityMode == .always
             || appState.isNavigatorPanelExplicitlyVisible
-            || appState.isNavigatorPanelHovered
-            || appState.isNavigatorEdgeHovered
+            || hover.isPanelHovered
+            || hover.isPointerInside
     }
 }

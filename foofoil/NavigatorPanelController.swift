@@ -7,8 +7,76 @@ import AppKit
 import SwiftUI
 
 final class NavigatorPanel: NSPanel {
+    var onDeleteSelected: (() -> Void)?
+    var handleKeyDown: ((NSEvent) -> Bool)?
+    /// 与导航栏宽度手柄同侧：左挂为左缘，右挂为右缘。
+    var widthResizeOnLeadingEdge = true
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .scrollWheel,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command),
+           let controller = parent?.windowController as? FloatingWindowController {
+            controller.handleNavigatorCommandScroll(event)
+            return
+        }
+        if event.type == .leftMouseDown, shouldDragAttachedFoofoil(with: event) {
+            dragAttachedFoofoil(with: event)
+            return
+        }
+        super.sendEvent(event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if handleKeyDown?(event) == true { return }
+        if event.keyCode == 51 || event.keyCode == 117 {
+            onDeleteSelected?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    private var isParentFullScreen: Bool {
+        (parent?.windowController as? FloatingWindowController)?.appState.isFullScreen == true
+    }
+
+    private func shouldDragAttachedFoofoil(with event: NSEvent) -> Bool {
+        guard parent != nil, !isParentFullScreen else { return false }
+        let command = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
+        let onResizeHandle = NavigatorPanelMetrics.containsWidthResizeHandle(
+            x: event.locationInWindow.x,
+            width: frame.width,
+            draggingLeftEdge: widthResizeOnLeadingEdge
+        )
+        if command { return true }
+        if onResizeHandle { return false }
+        guard let contentView else { return true }
+        guard let hit = contentView.hitTest(event.locationInWindow) else { return true }
+        if hit is NSControl { return false }
+        return hit.mouseDownCanMoveWindow
+    }
+
+    /// 拖父窗口，子窗口随相对位置一起走；事件坐标换算到箔片，避免 performDrag 跳一下。
+    private func dragAttachedFoofoil(with event: NSEvent) {
+        guard let parent else { return }
+        parent.makeKeyAndOrderFront(nil)
+        let screenPoint = convertPoint(toScreen: event.locationInWindow)
+        let parentPoint = parent.convertPoint(fromScreen: screenPoint)
+        guard let dragEvent = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: parentPoint,
+            modifierFlags: event.modifierFlags,
+            timestamp: event.timestamp,
+            windowNumber: parent.windowNumber,
+            context: nil,
+            eventNumber: event.eventNumber,
+            clickCount: event.clickCount,
+            pressure: event.pressure
+        ) else { return }
+        parent.performDrag(with: dragEvent)
+    }
 }
 
 /// 桌面态使用独立伴随窗口，避免导航面板宽度进入箔片内容 frame 和比例缩放计算。
@@ -30,13 +98,39 @@ final class NavigatorPanelController: NSWindowController {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.isReleasedWhenClosed = false
+        panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentView = NSHostingView(rootView: NavigatorPanelView(appState: appState))
+        let hostingView = NSHostingView(rootView: NavigatorPanelView(appState: appState))
+        hostingView.wantsLayer = true
+        hostingView.layer?.borderWidth = 0
+        hostingView.layer?.borderColor = NSColor.clear.cgColor
+        hostingView.layer?.cornerRadius = 12
+        hostingView.layer?.cornerCurve = .continuous
+        hostingView.layer?.masksToBounds = true
+        panel.contentView = hostingView
         super.init(window: panel)
+        panel.handleKeyDown = { [weak appState] event in
+            appState?.handleFileListKeyDown(event) == true
+        }
+        panel.onDeleteSelected = { [weak appState] in
+            guard let appState,
+                  let contribution = appState.navigatorContributions.first(where: {
+                      $0.id == appState.activeNavigatorContributionID
+                  }) ?? appState.navigatorContributions.first,
+                  contribution.allowedActions.contains(.remove),
+                  !contribution.selectedItemIDs.isEmpty else { return }
+            appState.performNavigatorAction(
+                NavigatorAction(
+                    contributionID: contribution.id,
+                    kind: .remove,
+                    itemIDs: contribution.selectedItemIDs
+                )
+            )
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -87,6 +181,9 @@ final class NavigatorPanelController: NSWindowController {
             x = parent.frame.minX - width - gap
         case .right:
             x = parent.frame.maxX + gap
+        }
+        if let panel = panel as? NavigatorPanel {
+            panel.widthResizeOnLeadingEdge = appState.navigatorPanelSide == .left
         }
         let frame = NSRect(x: x, y: parent.frame.minY, width: width, height: parent.frame.height)
         panel.setFrame(frame, display: true)

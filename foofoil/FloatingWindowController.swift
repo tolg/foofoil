@@ -37,6 +37,9 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private var currentPDFPageSize: NSSize?
     private let navigatorPanelController: NavigatorPanelController
     private var pendingNavigatorPanelHide: DispatchWorkItem?
+    private var pendingNavigatorWidthCommit: DispatchWorkItem?
+    private var navigatorHoverLocalMonitor: Any?
+    private var navigatorHoverGlobalMonitor: Any?
     private var isTransitioningFullScreen = false
     private var windowedFrameDescriptorBeforeFullScreen: String?
 
@@ -380,6 +383,15 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 }
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .mediaPlaybackDidFinish)
+            .sink { [weak self] notification in
+                guard let self,
+                      let id = notification.userInfo?["id"] as? UUID,
+                      id == self.appState.id else { return }
+                self.appState.advanceFileListAfterPlayback()
+            }
+            .store(in: &cancellables)
     }
 
     private func setupNavigatorPanelBindings() {
@@ -390,6 +402,12 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             .store(in: &cancellables)
 
         appState.$builtInNavigatorContributions
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.$fileList
             .sink { [weak self] _ in
                 DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
             }
@@ -407,7 +425,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
-        appState.$isNavigatorPanelHovered
+        appState.navigatorHover.$isPanelHovered
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
+            }
+            .store(in: &cancellables)
+
+        appState.navigatorHover.$isPointerInside
             .sink { [weak self] _ in
                 DispatchQueue.main.async { self?.updateNavigatorPanelVisibility() }
             }
@@ -442,6 +466,44 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             || appState.isNavigatorEdgeHovered
     }
 
+    /// 全屏覆盖层下，指针落在导航栏区域内时 ⌘+滚轮改宽度而不是缩放箔片。
+    func shouldCommandScrollResizeNavigator(at pointInWindow: NSPoint) -> Bool {
+        guard appState.isFullScreen,
+              !appState.navigatorContributions.isEmpty,
+              let window,
+              shouldShowNavigatorPanel else { return false }
+        let width = CGFloat(NavigatorPanelMetrics.clampWidth(appState.navigatorPanelWidth))
+        let overlay: NSRect
+        switch appState.navigatorPanelSide {
+        case .left:
+            overlay = NSRect(x: 0, y: 0, width: width, height: window.frame.height)
+        case .right:
+            overlay = NSRect(x: window.frame.width - width, y: 0, width: width, height: window.frame.height)
+        }
+        return overlay.contains(pointInWindow)
+    }
+
+    func handleNavigatorCommandScroll(_ event: NSEvent) {
+        let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY
+        let next = NavigatorPanelMetrics.width(
+            afterScroll: appState.navigatorPanelWidth,
+            delta: Double(delta),
+            precise: event.hasPreciseScrollingDeltas
+        )
+        guard next != appState.navigatorPanelWidth else { return }
+        appState.isAdjustingNavigatorPanelWidth = true
+        appState.navigatorPanelWidth = next
+        pendingNavigatorWidthCommit?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.appState.isAdjustingNavigatorPanelWidth = false
+            SettingsStore.shared.navigatorPanelWidth = self.appState.navigatorPanelWidth
+            self.appState.saveState()
+        }
+        pendingNavigatorWidthCommit = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
+    }
+
     private func updateNavigatorPanelVisibility() {
         guard let window else { return }
         if appState.isFullScreen || isTransitioningFullScreen {
@@ -454,39 +516,99 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             pendingNavigatorPanelHide?.cancel()
             pendingNavigatorPanelHide = nil
             navigatorPanelController.show(attachedTo: window)
+            updateNavigatorHoverMonitors()
             return
         }
 
         pendingNavigatorPanelHide?.cancel()
         if appState.navigatorContributions.isEmpty {
             navigatorPanelController.hide()
+            updateNavigatorHoverMonitors()
             return
         }
         // 鼠标跨过主窗口与伴随面板之间的间隙时保留短暂宽限，避免 hover 闪烁。
         let workItem = DispatchWorkItem { [weak self] in
             guard let self, !self.shouldShowNavigatorPanel else { return }
             self.navigatorPanelController.hide()
+            self.updateNavigatorHoverMonitors()
         }
         pendingNavigatorPanelHide = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + NavigatorPanelMetrics.hoverHideDelay, execute: workItem)
     }
 
     func updateNavigatorEdgeHover(at point: NSPoint?) {
-        let wasHovered = appState.isNavigatorEdgeHovered
-        if let point, let window, !appState.navigatorContributions.isEmpty {
-            let triggerWidth = CGFloat(NavigatorPanelMetrics.edgeTriggerWidth)
-            switch appState.navigatorPanelSide {
-            case .left:
-                appState.isNavigatorEdgeHovered = point.x >= 0 && point.x <= triggerWidth
-            case .right:
-                appState.isNavigatorEdgeHovered = point.x >= window.frame.width - triggerWidth
-                    && point.x <= window.frame.width
+        // 子窗口上的导航面板不会让箔片收到 mouseExited；以屏幕坐标核对箔片 ∪ 面板。
+        refreshNavigatorHoverFromPointer(windowPoint: point)
+    }
+
+    func refreshNavigatorHoverFromPointer(windowPoint: NSPoint? = nil, screenPoint: NSPoint? = nil) {
+        guard let window, !appState.navigatorContributions.isEmpty else {
+            if appState.isNavigatorEdgeHovered || appState.isNavigatorPanelHovered {
+                appState.isNavigatorEdgeHovered = false
+                appState.isNavigatorPanelHovered = false
+                updateNavigatorPanelVisibility()
+            } else {
+                updateNavigatorHoverMonitors()
+            }
+            return
+        }
+
+        let pointer = screenPoint ?? NSEvent.mouseLocation
+        let inWindowEvent = windowPoint.map { point in
+            point.x >= 0
+                && point.y >= 0
+                && point.x <= window.frame.width
+                && point.y <= window.frame.height
+        } ?? false
+        var hoverRegion = window.frame
+        if navigatorPanelController.isVisible, let panel = navigatorPanelController.window {
+            hoverRegion = hoverRegion.union(panel.frame)
+        }
+        let inRegion = hoverRegion.contains(pointer)
+        let inPanel = navigatorPanelController.isVisible
+            && (navigatorPanelController.window?.frame.contains(pointer) ?? false)
+        let inside = inWindowEvent || inRegion
+
+        let wasInside = appState.isNavigatorEdgeHovered || appState.isNavigatorPanelHovered
+        appState.isNavigatorEdgeHovered = inside
+        appState.isNavigatorPanelHovered = inPanel
+        if wasInside != inside {
+            updateNavigatorPanelVisibility()
+        } else {
+            updateNavigatorHoverMonitors()
+        }
+    }
+
+    private func updateNavigatorHoverMonitors() {
+        let needsMonitor = !appState.navigatorContributions.isEmpty
+            && appState.navigatorPanelVisibilityMode == .onHover
+            && (navigatorPanelController.isVisible || appState.isFullScreen)
+            && !isTransitioningFullScreen
+        if needsMonitor {
+            if navigatorHoverLocalMonitor == nil {
+                navigatorHoverLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+                    self?.refreshNavigatorHoverFromPointer()
+                    return event
+                }
+            }
+            if navigatorHoverGlobalMonitor == nil {
+                navigatorHoverGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+                    self?.refreshNavigatorHoverFromPointer()
+                }
             }
         } else {
-            appState.isNavigatorEdgeHovered = false
+            removeNavigatorHoverMonitors()
         }
-        if wasHovered != appState.isNavigatorEdgeHovered {
-            updateNavigatorPanelVisibility()
+    }
+
+    private func removeNavigatorHoverMonitors() {
+        if let navigatorHoverLocalMonitor {
+            NSEvent.removeMonitor(navigatorHoverLocalMonitor)
+            self.navigatorHoverLocalMonitor = nil
+        }
+        if let navigatorHoverGlobalMonitor {
+            NSEvent.removeMonitor(navigatorHoverGlobalMonitor)
+            self.navigatorHoverGlobalMonitor = nil
         }
     }
 
@@ -893,6 +1015,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         appState.isNavigatorPanelHovered = false
         appState.isNavigatorEdgeHovered = false
         navigatorPanelController.hide()
+        removeNavigatorHoverMonitors()
         window.hasShadow = false
     }
 
@@ -908,6 +1031,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         appState.isNavigatorPanelHovered = false
         appState.isNavigatorEdgeHovered = false
         navigatorPanelController.hide()
+        removeNavigatorHoverMonitors()
     }
 
     public func windowDidExitFullScreen(_ notification: Notification) {
@@ -1031,6 +1155,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         pendingFrameSave?.cancel()
         pendingZoomCommit?.cancel()
         pendingNavigatorPanelHide?.cancel()
+        pendingNavigatorWidthCommit?.cancel()
+        removeNavigatorHoverMonitors()
         navigatorPanelController.detachAndClose()
         pinchImageBaseScale = nil
         if appState.isInteractiveZooming {

@@ -16,22 +16,38 @@ import SwiftUI
 
 extension AppState {
         public func openImage(url: URL) {
+            applyImage(url: url, originalName: url.lastPathComponent, rotatesIdentity: true, clearsFileList: true)
+        }
+
+        func applyImage(
+            url: URL,
+            originalName: String,
+            rotatesIdentity: Bool,
+            clearsFileList: Bool,
+            cacheToken: String? = nil
+        ) {
             isBatchUpdating = true
             defer {
                 isBatchUpdating = false
                 saveState()
             }
-            if imageURL != nil || webURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if rotatesIdentity, hasOpenedContent {
                 self.id = UUID()
             }
-            self.originalImageName = url.lastPathComponent
-            self.sourceFingerprint = Self.localSourceFingerprint(for: url)
+            if clearsFileList {
+                resetFileList()
+            }
+            self.originalImageName = originalName
+            self.sourceFingerprint = fileList == nil ? Self.localSourceFingerprint(for: url) : nil
             self.imageSource = nil
-            self.showBorder = false
+            // 列表内切项保留边框；新打开图片仍默认无边框。
+            if clearsFileList || imageURL == nil {
+                self.showBorder = false
+            }
             self.createdAt = Date()
             self.webURL = nil
             self.actualWebURL = nil
-            if let cachedURL = cacheImage(from: url) {
+            if let cachedURL = cacheImage(from: url, itemToken: cacheToken) {
                 self.imageURL = cachedURL
             } else {
                 self.imageURL = url
@@ -51,22 +67,33 @@ extension AppState {
         /// 打开本地音视频：引用原始文件并创建安全范围书签。
         /// - Parameter holdsSecurityAccess: 调用方已对 `url` 调用过 `startAccessingSecurityScopedResource` 且交由本窗口持有。
         func openExternalMedia(url: URL, holdsSecurityAccess: Bool) {
+            applyExternalMedia(url: url, holdsSecurityAccess: holdsSecurityAccess, rotatesIdentity: true, clearsFileList: true)
+        }
+
+        func applyExternalMedia(url: URL, holdsSecurityAccess: Bool, rotatesIdentity: Bool, clearsFileList: Bool) {
             isBatchUpdating = true
             defer {
                 isBatchUpdating = false
                 saveState()
             }
-            if imageURL != nil || webURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if rotatesIdentity, hasOpenedContent {
                 self.id = UUID()
+            }
+            if clearsFileList {
+                resetFileList()
             }
             stopVideoAccess()
             self.originalImageName = url.lastPathComponent
-            self.sourceFingerprint = Self.localSourceFingerprint(for: url)
+            self.sourceFingerprint = fileList == nil ? Self.localSourceFingerprint(for: url) : nil
             self.imageSource = nil
-            self.showBorder = false
+            if clearsFileList || imageURL == nil {
+                self.showBorder = false
+            }
             self.imageScale = 1.0
-            // 新打开的媒体恢复默认的循环播放
-            self.isVideoLooping = true
+            if clearsFileList {
+                // 新打开的媒体恢复默认的循环播放；列表内切项保留用户选择
+                self.isVideoLooping = true
+            }
             self.createdAt = Date()
             self.webURL = nil
             self.actualWebURL = nil
@@ -78,6 +105,11 @@ extension AppState {
             }
             // 创建安全范围书签，保证 app 重启后仍能访问原始文件
             self.videoBookmarkData = Self.makeSecurityScopedBookmark(for: url)
+            if var list = fileList, let index = list.items.firstIndex(where: { $0.id == list.currentID }) {
+                list.items[index].path = url.path
+                list.items[index].bookmark = videoBookmarkData
+                fileList = list
+            }
             self.imageURL = url
         }
 
@@ -128,6 +160,7 @@ extension AppState {
         }
 
         public func openWeb(url: URL) {
+            resetFileList()
             let targetID = (imageURL != nil || webURL != nil || textURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 ? UUID()
                 : id
@@ -194,6 +227,7 @@ extension AppState {
         }
 
         public func openTextFile(url: URL) {
+            resetFileList()
             let targetID = (imageURL != nil || webURL != nil || textURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 ? UUID()
                 : id
@@ -272,11 +306,7 @@ extension AppState {
         public func openFile(url: URL) {
             guard canOpenFile(url: url) else { return }
 
-            builtInNavigatorContributions = []
-            builtInNavigatorActionHandler = nil
-            isNavigatorPanelExplicitlyVisible = false
-            activeNavigatorContributionID = nil
-            expandedNavigatorItemIDs = []
+            resetFileList()
 
             if ExtensionHost.shared.canOpen(url: url) {
                 openUsingExtension(url: url)
@@ -479,9 +509,10 @@ extension AppState {
         }
 
         public func openImage(image: NSImage, originalName: String? = nil, imageSource: ImageSource? = nil) {
-            if imageURL != nil || webURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if hasOpenedContent {
                 self.id = UUID()
             }
+            resetFileList()
             self.isLoading = true
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self = self else { return }

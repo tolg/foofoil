@@ -85,6 +85,15 @@ extension AppDelegate {
         openItem.target = self
         fileMenu.addItem(openItem)
 
+        let addToListItem = NSMenuItem(
+            title: NSLocalizedString("Add to List...", comment: ""),
+            action: #selector(addToFileListAction),
+            keyEquivalent: ""
+        )
+        addToListItem.withSymbol("plus.rectangle.on.folder")
+        addToListItem.target = self
+        fileMenu.addItem(addToListItem)
+
         let openClipboardImageItem = NSMenuItem(title: NSLocalizedString("Open Clipboard Image", comment: ""), action: #selector(openClipboardImageAction), keyEquivalent: "v")
         openClipboardImageItem.withSymbol("photo.on.rectangle")
         openClipboardImageItem.keyEquivalentModifierMask = [.command, .shift]
@@ -160,22 +169,94 @@ extension AppDelegate {
         let previousPageItem = NSMenuItem(
             title: NSLocalizedString("Previous Page", comment: ""),
             action: #selector(previousPDFPageAction),
-            keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+            keyEquivalent: ""
         )
         previousPageItem.withSymbol("chevron.left")
-        previousPageItem.keyEquivalentModifierMask = []
+        previousPageItem.tag = GoMenuItemTag.pdfPrevious
         previousPageItem.target = self
         goMenu.addItem(previousPageItem)
 
         let nextPageItem = NSMenuItem(
             title: NSLocalizedString("Next Page", comment: ""),
             action: #selector(nextPDFPageAction),
-            keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!)
+            keyEquivalent: ""
         )
         nextPageItem.withSymbol("chevron.right")
-        nextPageItem.keyEquivalentModifierMask = []
+        nextPageItem.tag = GoMenuItemTag.pdfNext
         nextPageItem.target = self
         goMenu.addItem(nextPageItem)
+
+        let previousItem = NSMenuItem(
+            title: NSLocalizedString("Previous Item", comment: ""),
+            action: #selector(previousFileListItemAction),
+            keyEquivalent: ""
+        )
+        previousItem.withSymbol("chevron.left")
+        previousItem.tag = GoMenuItemTag.fileListPrevious
+        previousItem.target = self
+        goMenu.addItem(previousItem)
+
+        let nextItem = NSMenuItem(
+            title: NSLocalizedString("Next Item", comment: ""),
+            action: #selector(nextFileListItemAction),
+            keyEquivalent: ""
+        )
+        nextItem.withSymbol("chevron.right")
+        nextItem.tag = GoMenuItemTag.fileListNext
+        nextItem.target = self
+        goMenu.addItem(nextItem)
+
+        func addFileListShortcut(
+            title: String,
+            action: Selector,
+            keyEquivalent: String,
+            modifiers: NSEvent.ModifierFlags
+        ) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.keyEquivalentModifierMask = modifiers
+            item.target = self
+            item.isHidden = true
+            item.tag = GoMenuItemTag.fileListExtra
+            item.representedObject = keyEquivalent
+            item.allowsKeyEquivalentWhenHidden = true
+            goMenu.addItem(item)
+        }
+        addFileListShortcut(
+            title: NSLocalizedString("Previous Item", comment: ""),
+            action: #selector(previousFileListItemAction),
+            keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!),
+            modifiers: []
+        )
+        addFileListShortcut(
+            title: NSLocalizedString("Next Item", comment: ""),
+            action: #selector(nextFileListItemAction),
+            keyEquivalent: String(UnicodeScalar(NSDownArrowFunctionKey)!),
+            modifiers: []
+        )
+        addFileListShortcut(
+            title: NSLocalizedString("Previous Item", comment: ""),
+            action: #selector(previousFileListItemAction),
+            keyEquivalent: "p",
+            modifiers: [.control]
+        )
+        addFileListShortcut(
+            title: NSLocalizedString("Next Item", comment: ""),
+            action: #selector(nextFileListItemAction),
+            keyEquivalent: "n",
+            modifiers: [.control]
+        )
+        addFileListShortcut(
+            title: NSLocalizedString("Previous Item", comment: ""),
+            action: #selector(previousFileListItemAction),
+            keyEquivalent: "b",
+            modifiers: [.control]
+        )
+        addFileListShortcut(
+            title: NSLocalizedString("Next Item", comment: ""),
+            action: #selector(nextFileListItemAction),
+            keyEquivalent: "f",
+            modifiers: [.control]
+        )
 
         goMenu.addItem(NSMenuItem.separator())
         let goToPageItem = NSMenuItem(title: NSLocalizedString("Go to Page Menu Item", comment: ""), action: #selector(goToPDFPageAction), keyEquivalent: "g")
@@ -220,15 +301,15 @@ extension AppDelegate {
         viewMenu.addItem(NSMenuItem.separator())
 
         let navigatorMenu = NSMenu(title: NSLocalizedString("Navigator", comment: ""))
-        let toggleNavigatorItem = NSMenuItem(
-            title: NSLocalizedString("Toggle Navigator", comment: ""),
+        let alwaysShowNavigatorItem = NSMenuItem(
+            title: NSLocalizedString("Always Show Navigator", comment: ""),
             action: #selector(toggleNavigatorPanelAction),
             keyEquivalent: "s"
         )
-        toggleNavigatorItem.withSymbol("sidebar.left")
-        toggleNavigatorItem.keyEquivalentModifierMask = [.command, .control]
-        toggleNavigatorItem.target = self
-        navigatorMenu.addItem(toggleNavigatorItem)
+        alwaysShowNavigatorItem.withSymbol("sidebar.left")
+        alwaysShowNavigatorItem.keyEquivalentModifierMask = [.command, .control]
+        alwaysShowNavigatorItem.target = self
+        navigatorMenu.addItem(alwaysShowNavigatorItem)
         navigatorMenu.addItem(NSMenuItem.separator())
 
         let navigatorLeftItem = NSMenuItem(
@@ -248,23 +329,6 @@ extension AppDelegate {
         navigatorRightItem.withSymbol("sidebar.right")
         navigatorRightItem.target = self
         navigatorMenu.addItem(navigatorRightItem)
-        navigatorMenu.addItem(NSMenuItem.separator())
-
-        let navigatorOnHoverItem = NSMenuItem(
-            title: NSLocalizedString("Show Navigator on Hover", comment: ""),
-            action: #selector(showNavigatorOnHoverAction),
-            keyEquivalent: ""
-        )
-        navigatorOnHoverItem.target = self
-        navigatorMenu.addItem(navigatorOnHoverItem)
-
-        let navigatorAlwaysItem = NSMenuItem(
-            title: NSLocalizedString("Always Show Navigator", comment: ""),
-            action: #selector(alwaysShowNavigatorAction),
-            keyEquivalent: ""
-        )
-        navigatorAlwaysItem.target = self
-        navigatorMenu.addItem(navigatorAlwaysItem)
 
         let navigatorItem = NSMenuItem(title: NSLocalizedString("Navigator", comment: ""), action: nil, keyEquivalent: "")
         navigatorItem.withSymbol("sidebar.left")

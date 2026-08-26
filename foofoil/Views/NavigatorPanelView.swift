@@ -4,11 +4,14 @@
 //  Created by tolg on 2026/8/26.
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct NavigatorPanelView: View {
     @ObservedObject var appState: AppState
     var isFullScreenOverlay = false
     @State private var dragStartWidth: Double?
+    @State private var dragStartMouseX: CGFloat?
 
     private struct VisibleRow: Identifiable {
         let item: NavigatorItem
@@ -31,12 +34,18 @@ struct NavigatorPanelView: View {
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+            VisualEffectView(
+                material: .hudWindow,
+                blendingMode: .behindWindow,
+                cornerRadius: isFullScreenOverlay ? 0 : 12
+            )
             Color(NSColor.windowBackgroundColor).opacity(0.62)
+            MovableBackground()
 
             VStack(spacing: 0) {
-                header
-                Divider().opacity(0.7)
+                if contributions.count > 1 {
+                    contributionPicker
+                }
                 if let contribution = activeContribution {
                     navigatorContent(contribution)
                 } else {
@@ -44,16 +53,13 @@ struct NavigatorPanelView: View {
                         NSLocalizedString("Navigator Empty", comment: ""),
                         systemImage: "sidebar.left"
                     )
+                    .allowsHitTesting(false)
                 }
             }
 
             resizeHandle
         }
         .clipShape(RoundedRectangle(cornerRadius: isFullScreenOverlay ? 0 : 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: isFullScreenOverlay ? 0 : 12, style: .continuous)
-                .stroke(isFullScreenOverlay ? Color.clear : Color.white.opacity(0.16), lineWidth: 1)
-        }
         .shadow(
             color: .black.opacity(isFullScreenOverlay ? 0.34 : 0.24),
             radius: isFullScreenOverlay ? 18 : 12,
@@ -61,49 +67,34 @@ struct NavigatorPanelView: View {
             y: isFullScreenOverlay ? 0 : 4
         )
         .onHover { appState.isNavigatorPanelHovered = $0 }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            appState.handleNavigatorDrop(providers: providers)
+            return true
+        }
         .onAppear { selectFirstContributionIfNeeded() }
         .onChange(of: contributions.map(\.id)) { _, _ in
             selectFirstContributionIfNeeded()
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            if contributions.count > 1 {
-                Picker(
-                    NSLocalizedString("Navigator", comment: ""),
-                    selection: Binding(
-                        get: { activeContribution?.id ?? contributions.first?.id ?? "" },
-                        set: { appState.activeNavigatorContributionID = $0 }
-                    )
-                ) {
-                    ForEach(contributions) { contribution in
-                        Text(NSLocalizedString(contribution.titleLocalizationKey, comment: ""))
-                            .tag(contribution.id)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            } else if let contribution = activeContribution {
+    private var contributionPicker: some View {
+        Picker(
+            NSLocalizedString("Navigator", comment: ""),
+            selection: Binding(
+                get: { activeContribution?.id ?? contributions.first?.id ?? "" },
+                set: { appState.activeNavigatorContributionID = $0 }
+            )
+        ) {
+            ForEach(contributions) { contribution in
                 Text(NSLocalizedString(contribution.titleLocalizationKey, comment: ""))
-                    .font(.headline)
-                    .lineLimit(1)
+                    .tag(contribution.id)
             }
-
-            Spacer(minLength: 4)
-
-            Button {
-                appState.navigatorPanelVisibilityMode = .onHover
-                appState.isNavigatorPanelExplicitlyVisible = false
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.plain)
-            .help(NSLocalizedString("Hide Navigator", comment: ""))
-            .accessibilityLabel(NSLocalizedString("Hide Navigator", comment: ""))
         }
+        .labelsHidden()
+        .pickerStyle(.menu)
         .padding(.horizontal, 12)
-        .frame(height: 38)
+        .frame(height: 32)
+        .background(NonMovableBackground())
     }
 
     @ViewBuilder
@@ -113,14 +104,19 @@ struct NavigatorPanelView: View {
                 NSLocalizedString("Navigator Empty", comment: ""),
                 systemImage: "list.bullet"
             )
+            .allowsHitTesting(false)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(visibleRows(for: contribution)) { row in
-                        navigatorRow(row, contribution: contribution)
+            GeometryReader { geo in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(visibleRows(for: contribution)) { row in
+                            navigatorRow(row, contribution: contribution)
+                        }
                     }
+                    .padding(6)
+                    .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
+                    .background(MovableBackground())
                 }
-                .padding(6)
             }
         }
     }
@@ -213,38 +209,53 @@ struct NavigatorPanelView: View {
             isSelected ? Color.accentColor.opacity(0.20) : Color.clear,
             in: RoundedRectangle(cornerRadius: 7, style: .continuous)
         )
+        .background(NonMovableBackground())
+    }
+
+    /// 桌面伴随窗口拖外侧（左挂左缘、右挂右缘）；全屏覆盖层只能拖贴着箔片的内侧。
+    private var isDraggingLeftEdge: Bool {
+        if isFullScreenOverlay {
+            return appState.navigatorPanelSide == .right
+        }
+        return appState.navigatorPanelSide == .left
     }
 
     private var resizeHandle: some View {
         HStack(spacing: 0) {
-            if appState.navigatorPanelSide == .left { Spacer() }
+            if !isDraggingLeftEdge { Spacer() }
             Color.clear
-                .frame(width: 8)
+                .frame(width: NavigatorPanelMetrics.widthResizeHandleThickness)
+                .background(NonMovableBackground())
                 .contentShape(Rectangle())
                 .onHover { hovering in
                     if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
                 }
                 .gesture(
                     DragGesture(minimumDistance: 1)
-                        .onChanged { value in
+                        .onChanged { _ in
+                            let mouseX = NSEvent.mouseLocation.x
                             if dragStartWidth == nil {
                                 dragStartWidth = appState.navigatorPanelWidth
+                                dragStartMouseX = mouseX
                                 appState.isAdjustingNavigatorPanelWidth = true
                             }
                             let start = dragStartWidth ?? appState.navigatorPanelWidth
-                            let delta = Double(value.translation.width)
-                            appState.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(
-                                appState.navigatorPanelSide == .left ? start + delta : start - delta
+                            let translation = Double(mouseX - (dragStartMouseX ?? mouseX))
+                            appState.navigatorPanelWidth = NavigatorPanelMetrics.width(
+                                afterDrag: start,
+                                translation: translation,
+                                draggingLeftEdge: isDraggingLeftEdge
                             )
                         }
                         .onEnded { _ in
                             dragStartWidth = nil
+                            dragStartMouseX = nil
                             appState.isAdjustingNavigatorPanelWidth = false
                             SettingsStore.shared.navigatorPanelWidth = appState.navigatorPanelWidth
                             appState.saveState()
                         }
                 )
-            if appState.navigatorPanelSide == .right { Spacer() }
+            if isDraggingLeftEdge { Spacer() }
         }
     }
 
