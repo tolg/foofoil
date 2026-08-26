@@ -326,6 +326,30 @@ struct FoofoilTests {
         #expect(AudioMetadataLoader.sidecarCoverImage(for: audioURL) != nil)
     }
 
+    @Test func imageLayoutSizePrefersPointSizeOverPixels() throws {
+        let image = NSImage(size: NSSize(width: 100, height: 50))
+        let rep = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: 400,
+            pixelsHigh: 200,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ))
+        image.addRepresentation(rep)
+
+        #expect(AudioMetadataLoader.reliableImageSize(image) == NSSize(width: 400, height: 200))
+        #expect(AudioMetadataLoader.layoutSize(image) == NSSize(width: 100, height: 50))
+
+        let invalidPointSize = NSImage(size: .zero)
+        invalidPointSize.addRepresentation(rep)
+        #expect(AudioMetadataLoader.layoutSize(invalidPointSize) == NSSize(width: 400, height: 200))
+    }
+
     @Test func testAudioPresentationSizeUsesArtworkAspect() {
         let image = NSImage(size: NSSize(width: 600, height: 400))
         image.lockFocus()

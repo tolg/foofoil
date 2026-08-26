@@ -25,12 +25,13 @@ struct ImageModeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             } else {
+                let layoutSize = AudioMetadataLoader.layoutSize(nsImage) ?? nsImage.size
                 ScrollView([.horizontal, .vertical], showsIndicators: true) {
                     renderImage(
                         for: nsImage,
                         contentMode: .fit,
-                        width: nsImage.size.width * CGFloat(appState.imageScale),
-                        height: nsImage.size.height * CGFloat(appState.imageScale)
+                        width: layoutSize.width * CGFloat(appState.imageScale),
+                        height: layoutSize.height * CGFloat(appState.imageScale)
                     )
                     .transaction { $0.animation = nil }
                 }

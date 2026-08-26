@@ -107,6 +107,14 @@ nonisolated enum AudioMetadataLoader {
         return nil
     }
 
+    /// 图片箔布局用点尺寸，与 SwiftUI 按 `NSImage.size` 绘制一致；仅在 size 无效时退回像素。
+    static func layoutSize(_ image: NSImage) -> NSSize? {
+        if image.size.width > 0, image.size.height > 0 {
+            return image.size
+        }
+        return reliableImageSize(image)
+    }
+
     static func sidecarCoverCandidates(for audioURL: URL) -> [URL] {
         let directory = audioURL.deletingLastPathComponent()
         let base = audioURL.deletingPathExtension().lastPathComponent

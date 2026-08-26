@@ -80,7 +80,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                     self.currentMediaSize = size
                 }
             } else if let nsImage = appState.loadImage(from: url) {
-                self.currentImageSize = AudioMetadataLoader.reliableImageSize(nsImage) ?? nsImage.size
+                self.currentImageSize = AudioMetadataLoader.layoutSize(nsImage)
             }
         }
 
@@ -116,7 +116,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                     } else {
                         self.currentMediaSize = nil
                         if let image = self.appState.loadImage(from: url) {
-                            self.currentImageSize = AudioMetadataLoader.reliableImageSize(image) ?? image.size
+                            self.currentImageSize = AudioMetadataLoader.layoutSize(image)
                         } else {
                             self.currentImageSize = nil
                         }
@@ -672,13 +672,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             return cached
         }
         guard let image = currentImage() else { return nil }
-        return AudioMetadataLoader.reliableImageSize(image) ?? image.size
+        return AudioMetadataLoader.layoutSize(image)
     }
 
     private func imageContentSize(at url: URL) -> NSSize? {
-        guard let image = appState.loadImage(from: url) else { return nil }
-        let size = AudioMetadataLoader.reliableImageSize(image) ?? image.size
-        guard size.width > 0, size.height > 0 else { return nil }
+        guard let image = appState.loadImage(from: url),
+              let size = AudioMetadataLoader.layoutSize(image),
+              size.width > 0, size.height > 0 else { return nil }
         currentImageSize = size
         return size
     }
