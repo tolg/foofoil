@@ -883,6 +883,21 @@ struct FoofoilTests {
         controller.applySelectedTabAppearance(animated: false)
         #expect(window.title == NSLocalizedString("Extensions", comment: ""))
         #expect(window.contentLayoutRect.height <= SettingsWindowMetrics.maxHeight + 0.5)
+        #expect(window.styleMask.contains(.closable))
+    }
+
+    @Test func closeWindowActionClosesSettingsWindow() throws {
+        let appDelegate = AppDelegate()
+        let controller = SettingsWindowController.shared
+        let window = try #require(controller.window)
+        controller.show()
+        #expect(window.isVisible)
+
+        #expect(appDelegate.closeStandardKeyWindow(window))
+        #expect(!window.isVisible)
+
+        controller.show()
+        #expect(window.isVisible)
     }
 
     @Test func testMainMenuIncludesHideMenuItems() {
@@ -908,6 +923,40 @@ struct FoofoilTests {
 
         let showAllItem = appMenu.items.first { $0.action == #selector(NSApplication.unhideAllApplications(_:)) }
         #expect(showAllItem != nil)
+
+        let settingsItem = appMenu.items.first { $0.action == #selector(AppDelegate.showSettingsAction) }
+        #expect(settingsItem != nil)
+        #expect(settingsItem?.keyEquivalent == ",")
+        #expect(settingsItem?.keyEquivalentModifierMask == [.command])
+    }
+
+    @Test func testWindowZoomShortcutsUseCommandShiftPlusMinus() {
+        let appDelegate = AppDelegate()
+        appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        guard let mainMenu = NSApplication.shared.mainMenu,
+              let viewMenu = mainMenu.items.first(where: { $0.submenu?.title == NSLocalizedString("View", comment: "") })?.submenu else {
+            #expect(Bool(false), "Main menu or View menu not setup")
+            return
+        }
+
+        let zoomInWindowItem = viewMenu.items.first { $0.action == #selector(AppDelegate.zoomInWindowAction) }
+        #expect(zoomInWindowItem != nil)
+        #expect(zoomInWindowItem?.keyEquivalent == "+")
+        #expect(zoomInWindowItem?.keyEquivalentModifierMask == [.command, .shift])
+
+        let zoomOutWindowItem = viewMenu.items.first { $0.action == #selector(AppDelegate.zoomOutWindowAction) }
+        #expect(zoomOutWindowItem != nil)
+        #expect(zoomOutWindowItem?.keyEquivalent == "-")
+        #expect(zoomOutWindowItem?.keyEquivalentModifierMask == [.command, .shift])
+
+        let zoomInContentItem = viewMenu.items.first { $0.action == #selector(AppDelegate.zoomInAction) }
+        #expect(zoomInContentItem?.keyEquivalent == "+")
+        #expect(zoomInContentItem?.keyEquivalentModifierMask == [.command])
+
+        let zoomOutContentItem = viewMenu.items.first { $0.action == #selector(AppDelegate.zoomOutAction) }
+        #expect(zoomOutContentItem?.keyEquivalent == "-")
+        #expect(zoomOutContentItem?.keyEquivalentModifierMask == [.command])
     }
 
     @Test func testWebModeMenuItemsInFileAndEditMenu() {

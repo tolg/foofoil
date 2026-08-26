@@ -411,7 +411,18 @@ extension AppDelegate {
     }
 
     @objc func closeWindowAction() {
+        // 设置、关于等带关闭按钮的窗口走系统 performClose；箔窗口是无边框，仍由控制器关闭。
+        if closeStandardKeyWindow(NSApplication.shared.keyWindow) {
+            return
+        }
         activeWindowController?.close()
+    }
+
+    @discardableResult
+    func closeStandardKeyWindow(_ window: NSWindow?) -> Bool {
+        guard let window, window.styleMask.contains(.closable) else { return false }
+        window.performClose(nil)
+        return true
     }
 
     @objc func togglePinAction() {

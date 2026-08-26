@@ -438,14 +438,22 @@ public class FloatingWindow: NSWindow {
         return super.validateMenuItem(menuItem)
     }
 
-    // 重写 performKeyEquivalent(with:) 拦截快捷键事件，支持不带 Shift 的 cmd + = / , / . 快捷键响应
+    // 重写 performKeyEquivalent(with:)：内容缩放仍响应不带 Shift 的 ⌘=；增大/缩小箔走 ⇧⌘+/-；⌘, 始终打开设置。
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let delegate = NSApplication.shared.delegate as? AppDelegate
 
         if modifiers == [.command, .control],
            event.charactersIgnoringModifiers?.lowercased() == "f",
            let controller = windowController as? FloatingWindowController {
             controller.toggleFullScreen()
+            return true
+        }
+
+        // ⌘, 打开设置；内容视图（尤其是网页）不得吞掉该系统偏好快捷键。
+        if modifiers == .command,
+           event.charactersIgnoringModifiers == "," {
+            delegate?.showSettingsAction()
             return true
         }
 
@@ -456,11 +464,19 @@ public class FloatingWindow: NSWindow {
             }
         }
 
-        // 键盘快捷键 ⇧⌘v (Shift + Command + V) 用于从剪贴板打开图片，确保所有模式窗口都可响应。
+        // ⇧⌘v 从剪贴板打开图片；⇧⌘+/- 增大/缩小箔，确保各内容模式窗口都可响应。
         if modifiers == [.command, .shift],
-           event.charactersIgnoringModifiers?.lowercased() == "v" {
-            if let delegate = NSApplication.shared.delegate as? AppDelegate,
-               delegate.openClipboardImageInNewWindow() {
+           let chars = event.charactersIgnoringModifiers {
+            let key = chars.lowercased()
+            if key == "v" {
+                if delegate?.openClipboardImageInNewWindow() == true {
+                    return true
+                }
+            } else if key == "=" || key == "+" {
+                delegate?.zoomInWindowAction()
+                return true
+            } else if key == "-" {
+                delegate?.zoomOutWindowAction()
                 return true
             }
         }
@@ -471,34 +487,6 @@ public class FloatingWindow: NSWindow {
                 if chars == "=" {
                     if let controller = self.windowController as? FloatingWindowController {
                         controller.zoomIn()
-                        return true
-                    }
-                } else if chars == "," {
-                    if let controller = self.windowController as? FloatingWindowController {
-                        let isImageMode = controller.appState.imageURL != nil && controller.appState.webURL == nil
-                        if isImageMode {
-                            if controller.appState.showBorder {
-                                controller.zoomOutWindow()
-                            } else {
-                                controller.zoomOut()
-                            }
-                        } else {
-                            controller.zoomOutWindow()
-                        }
-                        return true
-                    }
-                } else if chars == "." {
-                    if let controller = self.windowController as? FloatingWindowController {
-                        let isImageMode = controller.appState.imageURL != nil && controller.appState.webURL == nil
-                        if isImageMode {
-                            if controller.appState.showBorder {
-                                controller.zoomInWindow()
-                            } else {
-                                controller.zoomIn()
-                            }
-                        } else {
-                            controller.zoomInWindow()
-                        }
                         return true
                     }
                 } else if chars == "[" {

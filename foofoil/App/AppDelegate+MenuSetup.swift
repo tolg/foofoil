@@ -327,15 +327,16 @@ extension AppDelegate {
         fitImageToWidthItem.target = self
         viewMenu.addItem(fitImageToWidthItem)
 
-        let zoomOutWindowItem = NSMenuItem(title: NSLocalizedString("Zoom Out Window", comment: ""), action: #selector(zoomOutWindowAction), keyEquivalent: "<")
+        // 增大/缩小箔使用 ⇧⌘+/-，避免 ⌘<（即 ⇧⌘,）与设置的 ⌘, 冲突。
+        let zoomOutWindowItem = NSMenuItem(title: NSLocalizedString("Zoom Out Window", comment: ""), action: #selector(zoomOutWindowAction), keyEquivalent: "-")
         zoomOutWindowItem.withSymbol("rectangle.compress.vertical")
-        zoomOutWindowItem.keyEquivalentModifierMask = [.command]
+        zoomOutWindowItem.keyEquivalentModifierMask = [.command, .shift]
         zoomOutWindowItem.target = self
         viewMenu.addItem(zoomOutWindowItem)
 
-        let zoomInWindowItem = NSMenuItem(title: NSLocalizedString("Zoom In Window", comment: ""), action: #selector(zoomInWindowAction), keyEquivalent: ">")
+        let zoomInWindowItem = NSMenuItem(title: NSLocalizedString("Zoom In Window", comment: ""), action: #selector(zoomInWindowAction), keyEquivalent: "+")
         zoomInWindowItem.withSymbol("rectangle.expand.vertical")
-        zoomInWindowItem.keyEquivalentModifierMask = [.command]
+        zoomInWindowItem.keyEquivalentModifierMask = [.command, .shift]
         zoomInWindowItem.target = self
         viewMenu.addItem(zoomInWindowItem)
 

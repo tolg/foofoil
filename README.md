@@ -49,6 +49,8 @@ Right-click a window to access the most relevant actions for its current content
 | Toggle always on top | <kbd>⌘ T</kbd> |
 | Toggle border | <kbd>⌘ B</kbd> |
 | Zoom content in/out | <kbd>⌘ +</kbd> / <kbd>⌘ −</kbd> |
+| Zoom window in/out | <kbd>⇧ ⌘ +</kbd> / <kbd>⇧ ⌘ −</kbd> |
+| Open Settings | <kbd>⌘ ,</kbd> |
 | Reset content size | <kbd>⌘ 0</kbd> |
 | Reset the current window | <kbd>⌘ K</kbd> |
 | Close the current window | <kbd>⌘ W</kbd> |
