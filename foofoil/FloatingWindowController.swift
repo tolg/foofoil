@@ -271,7 +271,11 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                         return
                     }
                     if let size = self.imageContentSize(at: url) {
-                        self.initializeImageLayout(imageSize: size, animated: !isFirst)
+                        if !isFirst, self.shouldPreserveImageListDisplayArea {
+                            self.applyImageListSuccessorLayout(imageSize: size, animated: true)
+                        } else {
+                            self.initializeImageLayout(imageSize: size, animated: !isFirst)
+                        }
                     }
                 }
             }
@@ -942,6 +946,47 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         setWindowSize(targetWindowSize, keepWidth: false, animated: animated)
     }
 
+    private var shouldPreserveImageListDisplayArea: Bool {
+        appState.fileList?.isPresentable == true
+            && appState.fileList?.kind == .image
+            && !appState.isExternalMediaDocument
+            && !appState.isPDFDocument
+    }
+
+    /// 列表内切图：保持上一张的显示面积，并贴导航栏所在侧垂直居中。
+    private func applyImageListSuccessorLayout(imageSize: NSSize, animated: Bool) {
+        guard let window = window, imageSize.width > 0, imageSize.height > 0 else {
+            initializeImageLayout(imageSize: imageSize, animated: animated)
+            return
+        }
+        let inset = appState.showBorder ? borderedImageInset : 0
+        let currentFrame = window.frame
+        let previousDisplay = NSSize(
+            width: max(1, currentFrame.width - inset),
+            height: max(1, currentFrame.height - inset)
+        )
+        let nextDisplay = Self.sizeMatchingContentArea(previous: previousDisplay, content: imageSize)
+        appState.imageScale = AppState.clampImageScale(Double(nextDisplay.width / imageSize.width))
+        let displaySize = displaySize(for: imageSize, scale: appState.imageScale)
+        let alignment: WindowSizeAlignment = appState.navigatorPanelSide == .left ? .leading : .trailing
+        setWindowSize(
+            NSSize(width: displaySize.width + inset, height: displaySize.height + inset),
+            keepWidth: false,
+            animated: animated,
+            alignment: alignment
+        )
+    }
+
+    /// 下一张图按自身比例缩放，使显示面积与上一张相同。
+    static func sizeMatchingContentArea(previous: NSSize, content: NSSize) -> NSSize {
+        guard previous.width > 0, previous.height > 0, content.width > 0, content.height > 0 else {
+            return previous
+        }
+        let area = previous.width * previous.height
+        let ratio = content.width / content.height
+        return NSSize(width: sqrt(area * ratio), height: sqrt(area / ratio))
+    }
+
     private func initialImageWindowSize(imageSize: NSSize, inset: CGFloat) -> (size: NSSize, scale: CGFloat) {
         var maximumContentWidth = imageSize.width
         var maximumContentHeight = imageSize.height
@@ -962,7 +1007,21 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         )
     }
 
-    func setWindowSize(_ size: NSSize, keepWidth: Bool, animated: Bool, showBorderOverride: Bool? = nil) {
+    enum WindowSizeAlignment {
+        case center
+        /// 保持左缘，垂直居中。
+        case leading
+        /// 保持右缘，垂直居中。
+        case trailing
+    }
+
+    func setWindowSize(
+        _ size: NSSize,
+        keepWidth: Bool,
+        animated: Bool,
+        showBorderOverride: Bool? = nil,
+        alignment: WindowSizeAlignment = .center
+    ) {
         guard let window = window else { return }
         guard !appState.isFullScreen, !isTransitioningFullScreen else { return }
         var newWidth = size.width
@@ -984,20 +1043,36 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             newWidth = currentFrame.width
         }
 
-        // 保持当前窗口的中心点不变
-        let currentCenter = NSPoint(
-            x: currentFrame.minX + currentFrame.width / 2.0,
-            y: currentFrame.minY + currentFrame.height / 2.0
-        )
-
-        let newFrame = NSRect(
-            x: currentCenter.x - newWidth / 2.0,
-            y: currentCenter.y - newHeight / 2.0,
-            width: newWidth,
-            height: newHeight
+        let newFrame = Self.alignedFrame(
+            current: currentFrame,
+            size: NSSize(width: newWidth, height: newHeight),
+            alignment: alignment
         )
 
         window.setFrame(newFrame, display: true, animate: animated)
+    }
+
+    /// 按对齐方式计算新窗口框：列表切图时贴导航栏一侧，其余缩放仍绕中心。
+    static func alignedFrame(current: NSRect, size: NSSize, alignment: WindowSizeAlignment) -> NSRect {
+        let origin: NSPoint
+        switch alignment {
+        case .center:
+            origin = NSPoint(
+                x: current.midX - size.width / 2,
+                y: current.midY - size.height / 2
+            )
+        case .leading:
+            origin = NSPoint(
+                x: current.minX,
+                y: current.midY - size.height / 2
+            )
+        case .trailing:
+            origin = NSPoint(
+                x: current.maxX - size.width,
+                y: current.midY - size.height / 2
+            )
+        }
+        return NSRect(origin: origin, size: size)
     }
 
     func resizeWindowForPinch(magnification: CGFloat) {

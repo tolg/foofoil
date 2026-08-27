@@ -422,6 +422,54 @@ struct FoofoilTests {
         #expect(abs(photo.width / photo.height - 1.5) < 0.001)
     }
 
+    @Test func testImageListSuccessorKeepsDisplayAreaAndAlignsToNavigatorSide() {
+        let previous = NSSize(width: 400, height: 300)
+        let previousArea = previous.width * previous.height
+
+        let wide = FloatingWindowController.sizeMatchingContentArea(
+            previous: previous,
+            content: NSSize(width: 1920, height: 1080)
+        )
+        #expect(abs(wide.width * wide.height - previousArea) < 0.001)
+        #expect(abs(wide.width / wide.height - 16.0 / 9.0) < 0.001)
+
+        let tall = FloatingWindowController.sizeMatchingContentArea(
+            previous: previous,
+            content: NSSize(width: 600, height: 1200)
+        )
+        #expect(abs(tall.width * tall.height - previousArea) < 0.001)
+        #expect(abs(tall.width / tall.height - 0.5) < 0.001)
+
+        let current = NSRect(x: 100, y: 200, width: 400, height: 300)
+        let nextSize = NSSize(width: 500, height: 240)
+
+        let leftAligned = FloatingWindowController.alignedFrame(
+            current: current,
+            size: nextSize,
+            alignment: .leading
+        )
+        #expect(leftAligned.minX == current.minX)
+        #expect(abs(leftAligned.midY - current.midY) < 0.001)
+        #expect(leftAligned.size == nextSize)
+
+        let rightAligned = FloatingWindowController.alignedFrame(
+            current: current,
+            size: nextSize,
+            alignment: .trailing
+        )
+        #expect(rightAligned.maxX == current.maxX)
+        #expect(abs(rightAligned.midY - current.midY) < 0.001)
+        #expect(rightAligned.size == nextSize)
+
+        let centered = FloatingWindowController.alignedFrame(
+            current: current,
+            size: nextSize,
+            alignment: .center
+        )
+        #expect(abs(centered.midX - current.midX) < 0.001)
+        #expect(abs(centered.midY - current.midY) < 0.001)
+    }
+
     @Test func testWindowEdgeResizeChangesHeightAndKeepsOppositeEdgeFixed() {
         let initialFrame = NSRect(x: 100, y: 200, width: 400, height: 300)
 
