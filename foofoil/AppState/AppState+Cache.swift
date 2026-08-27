@@ -244,6 +244,10 @@ extension AppState {
         }
 
         public func loadImage(from url: URL) -> NSImage? {
+            if let cached = loadedImageCache, cached.url == url {
+                return cached.image
+            }
+
             guard let image = NSImage(contentsOf: url) else { return nil }
 
             if url.pathExtension.lowercased() == "heic",
@@ -274,6 +278,7 @@ extension AppState {
                     }
                 }
             }
+            loadedImageCache = (url, image)
             return image
         }
 

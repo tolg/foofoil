@@ -760,6 +760,31 @@ struct FoofoilTests {
         #expect(state.textFontSize == AppState.maxTextFontSize)
     }
 
+    @Test func testLoadedImageIsReusedAcrossScaleChanges() throws {
+        let state = AppState()
+        let imageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-image-cache-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let image = NSImage(size: NSSize(width: 16, height: 16))
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSRect(x: 0, y: 0, width: 16, height: 16).fill()
+        image.unlockFocus()
+        let pngData = try #require(
+            image.tiffRepresentation
+                .flatMap(NSBitmapImageRep.init(data:))?
+                .representation(using: .png, properties: [:])
+        )
+        try pngData.write(to: imageURL)
+
+        let first = try #require(state.loadImage(from: imageURL))
+        state.imageScale = 2
+        let second = try #require(state.loadImage(from: imageURL))
+
+        #expect(first === second)
+    }
+
     @Test func testWindowConfigDecodesLegacyScaleDefaults() async throws {
         let json = """
         {

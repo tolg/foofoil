@@ -24,6 +24,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     public var id: UUID
     var sourceFingerprint: String?
     public var isInteractiveZooming: Bool = false
+    /// 缓存当前解码图片，避免缩放重绘时反复从磁盘创建 NSImage。
+    var loadedImageCache: (url: URL, image: NSImage)?
     var isBatchUpdating = false
     /// 递增的拖拽代次，用于丢弃过期异步回调，避免“打开以前的东西”或并发覆盖。
     var currentDropGeneration: UInt64 = 0
@@ -111,6 +113,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
 
     @Published public var imageURL: URL? {
         didSet {
+            loadedImageCache = nil
             if let url = imageURL {
                 // 视频/音频不复制到应用缓存目录，仅记录原始文件路径。
                 if !Self.isExternalMediaFile(url: url) {
