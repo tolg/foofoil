@@ -106,7 +106,7 @@ extension AppState {
         let items = unique.map(makeFileListItem)
         fileList = FileListState(kind: kind, items: items, currentID: items[0].id)
         sourceFingerprint = nil
-        isVideoLooping = true
+        mediaPlaybackMode = .sequentialLoop
         isBatchUpdating = false
         presentFileListItem(id: items[0].id, rotatesIdentity: false)
     }
@@ -286,8 +286,25 @@ extension AppState {
     }
 
     func advanceFileListAfterPlayback() {
-        guard !isVideoLooping else { return }
-        activateAdjacentFileListItem(delta: 1)
+        guard fileList?.isPresentable == true else { return }
+        switch mediaPlaybackMode {
+        case .singleLoop:
+            return
+        case .sequential:
+            activateAdjacentFileListItem(delta: 1, wraps: false)
+        case .sequentialLoop:
+            activateAdjacentFileListItem(delta: 1, wraps: true)
+        case .shuffle:
+            activateShuffledFileListItem()
+        }
+    }
+
+    /// 随机切到另一项；仅一项时保持当前项。
+    func activateShuffledFileListItem() {
+        guard let list = fileList, list.isPresentable else { return }
+        let candidates = list.items.filter { $0.id != list.currentID }
+        guard let next = candidates.randomElement() else { return }
+        presentFileListItem(id: next.id, rotatesIdentity: false)
     }
 
     func handleFileListNavigatorAction(_ action: NavigatorAction) {

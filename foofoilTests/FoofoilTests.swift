@@ -1766,6 +1766,135 @@ struct FoofoilTests {
         #expect(listAfter.fileList?.items.count == 2)
     }
 
+    @Test func mediaPlaybackModeCyclesAndAdvancesFileList() throws {
+        let first = try writeTestMedia(name: "mode-a.mp3")
+        let second = try writeTestMedia(name: "mode-b.mp3")
+        let third = try writeTestMedia(name: "mode-c.mp3")
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+            try? FileManager.default.removeItem(at: third)
+        }
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.installFileList(kind: .audio, urls: [first, second, third], preservesIdentity: true)
+
+        #expect(state.mediaPlaybackMode == .sequentialLoop)
+        #expect(!state.shouldLoopCurrentItem)
+        #expect(state.toConfig().mediaPlaybackMode == .sequentialLoop)
+
+        let ids = try #require(state.fileList?.items.map(\.id))
+        #expect(ids.count == 3)
+        let firstID = ids[0]
+        let secondID = ids[1]
+        let thirdID = ids[2]
+        #expect(state.fileList?.currentID == firstID)
+
+        state.advanceFileListAfterPlayback()
+        #expect(state.fileList?.currentID == secondID)
+        state.presentFileListItem(id: thirdID, rotatesIdentity: false)
+        state.advanceFileListAfterPlayback()
+        #expect(state.fileList?.currentID == firstID)
+
+        state.mediaPlaybackMode = .sequential
+        state.presentFileListItem(id: thirdID, rotatesIdentity: false)
+        state.advanceFileListAfterPlayback()
+        #expect(state.fileList?.currentID == thirdID)
+        state.presentFileListItem(id: firstID, rotatesIdentity: false)
+        state.advanceFileListAfterPlayback()
+        #expect(state.fileList?.currentID == secondID)
+
+        state.mediaPlaybackMode = .singleLoop
+        #expect(state.shouldLoopCurrentItem)
+        state.advanceFileListAfterPlayback()
+        #expect(state.fileList?.currentID == secondID)
+
+        state.mediaPlaybackMode = .shuffle
+        #expect(!state.shouldLoopCurrentItem)
+        state.advanceFileListAfterPlayback()
+        #expect(state.fileList?.currentID != secondID)
+        #expect(ids.contains(try #require(state.fileList?.currentID)))
+
+        state.mediaPlaybackMode = .sequential
+        state.cycleMediaPlaybackMode()
+        #expect(state.mediaPlaybackMode == .sequentialLoop)
+        state.cycleMediaPlaybackMode()
+        #expect(state.mediaPlaybackMode == .shuffle)
+        state.cycleMediaPlaybackMode()
+        #expect(state.mediaPlaybackMode == .singleLoop)
+        state.cycleMediaPlaybackMode()
+        #expect(state.mediaPlaybackMode == .sequential)
+    }
+
+    @Test func windowConfigDecodesLegacyLoopingAndRoundTripsPlaybackMode() throws {
+        let first = FileListItem(id: "a", path: "/tmp/a.mp3", bookmark: nil, displayName: "a.mp3")
+        let second = FileListItem(id: "b", path: "/tmp/b.mp3", bookmark: nil, displayName: "b.mp3")
+        let list = FileListState(kind: .audio, items: [first, second], currentID: "a")
+
+        let listedLooping = WindowConfig(
+            id: UUID(),
+            imagePath: "/tmp/a.mp3",
+            originalImageName: "a.mp3",
+            contentKind: .audio,
+            mediaPlaybackMode: .singleLoop,
+            fileList: list
+        )
+        let listedEncoded = try JSONEncoder().encode(listedLooping)
+        var listedObject = try #require(JSONSerialization.jsonObject(with: listedEncoded) as? [String: Any])
+        listedObject.removeValue(forKey: "mediaPlaybackMode")
+        listedObject["isVideoLooping"] = true
+        let listedLegacy = try JSONDecoder().decode(
+            WindowConfig.self,
+            from: JSONSerialization.data(withJSONObject: listedObject)
+        )
+        #expect(listedLegacy.mediaPlaybackMode == .sequentialLoop)
+
+        var sequentialObject = listedObject
+        sequentialObject["isVideoLooping"] = false
+        let sequentialLegacy = try JSONDecoder().decode(
+            WindowConfig.self,
+            from: JSONSerialization.data(withJSONObject: sequentialObject)
+        )
+        #expect(sequentialLegacy.mediaPlaybackMode == .sequential)
+
+        let singleEncoded = try JSONEncoder().encode(WindowConfig(
+            id: UUID(),
+            imagePath: "/tmp/a.mp3",
+            originalImageName: "a.mp3",
+            contentKind: .audio
+        ))
+        var singleObject = try #require(JSONSerialization.jsonObject(with: singleEncoded) as? [String: Any])
+        singleObject.removeValue(forKey: "mediaPlaybackMode")
+        singleObject.removeValue(forKey: "fileList")
+        singleObject["isVideoLooping"] = true
+        let singleLoopLegacy = try JSONDecoder().decode(
+            WindowConfig.self,
+            from: JSONSerialization.data(withJSONObject: singleObject)
+        )
+        #expect(singleLoopLegacy.mediaPlaybackMode == .singleLoop)
+        #expect(singleLoopLegacy.fileList == nil)
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("foofoil-playback-mode-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = try HistoryDatabase(databaseURL: directory.appendingPathComponent("history.sqlite3"))
+
+        for mode in MediaPlaybackMode.allCases {
+            let config = WindowConfig(
+                id: UUID(),
+                imagePath: "/tmp/a.mp3",
+                originalImageName: "a.mp3",
+                contentKind: .audio,
+                mediaPlaybackMode: mode,
+                fileList: list
+            )
+            try database.upsert(config)
+            let stored = try #require(try database.config(id: config.id))
+            #expect(stored.mediaPlaybackMode == mode)
+        }
+    }
+
     private func writeTestPNG(name: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("foofoil-\(UUID().uuidString)-\(name)")
         let image = NSImage(size: NSSize(width: 2, height: 2))
@@ -1777,6 +1906,12 @@ struct FoofoilTests {
         let rep = try #require(NSBitmapImageRep(data: tiff))
         let data = try #require(rep.representation(using: .png, properties: [:]))
         try data.write(to: url)
+        return url
+    }
+
+    private func writeTestMedia(name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("foofoil-\(UUID().uuidString)-\(name)")
+        try Data("fake media".utf8).write(to: url)
         return url
     }
 }

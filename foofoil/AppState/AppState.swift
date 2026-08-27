@@ -270,11 +270,20 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         }
     }
 
-    /// 视频/音频循环播放开关；仅媒体模式生效，默认开启。
-    @Published public var isVideoLooping: Bool {
+    /// 视频/音频播放模式；仅媒体模式生效，默认顺序循环。
+    @Published public var mediaPlaybackMode: MediaPlaybackMode {
         didSet {
             saveState()
         }
+    }
+
+    /// 当前项播完后是否由播放器自己从头循环（单曲循环，或无列表时的顺序/随机循环）。
+    var shouldLoopCurrentItem: Bool {
+        mediaPlaybackMode.shouldLoopCurrentItem(hasPresentableFileList: fileList?.isPresentable == true)
+    }
+
+    func cycleMediaPlaybackMode() {
+        mediaPlaybackMode = mediaPlaybackMode.cycled
     }
 
     /// 视频/音频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问。
@@ -322,7 +331,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.createdAt = config.createdAt
         self.svgColor = config.svgColor
         self.backgroundColorHex = config.backgroundColorHex
-        self.isVideoLooping = config.isVideoLooping
+        self.mediaPlaybackMode = config.mediaPlaybackMode
         self.extensionSession = nil
         self.extensionFallbackProviderID = nil
         self.extensionStateReference = config.extensionStateReference
@@ -406,7 +415,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         self.createdAt = Date()
         self.svgColor = nil
         self.backgroundColorHex = nil
-        self.isVideoLooping = true
+        self.mediaPlaybackMode = .sequentialLoop
         self.extensionSession = nil
         self.extensionFallbackProviderID = nil
         self.extensionStateReference = nil

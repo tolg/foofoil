@@ -37,7 +37,7 @@ struct VideoModeView: View {
         self.appState = appState
         self.url = url
         self.shouldHideBorder = shouldHideBorder
-        _controller = StateObject(wrappedValue: VideoPlayerController(appStateID: appState.id, url: url, isLooping: appState.isVideoLooping))
+        _controller = StateObject(wrappedValue: VideoPlayerController(appStateID: appState.id, url: url, isLooping: appState.shouldLoopCurrentItem))
     }
 
     var body: some View {
@@ -45,7 +45,7 @@ struct VideoModeView: View {
             PlayerView(player: controller.player)
 
             if isHovering {
-                // 底部控制条：播放/暂停 + 时间 + 进度条 + 静音 + 循环。
+                // 底部控制条：播放/暂停 + 时间 + 进度条 + 静音 + 播放模式。
                 // 整个控制条区域不触发窗口拖动，控制条以外区域拖拽仍可移动窗口。
                 VStack {
                     Spacer(minLength: 0)
@@ -63,14 +63,16 @@ struct VideoModeView: View {
         }
         // 与图片有边框模式保持一致的 8pt 内容边距
         .padding(shouldHideBorder ? 0 : 8)
-        .onAppear { controller.play() }
+        .onAppear {
+            controller.isLooping = appState.shouldLoopCurrentItem
+            controller.play()
+        }
         .onDisappear { controller.pause() }
         .onChange(of: url) {
             controller.load(url: url)
         }
-        // 右键菜单或控制条上的循环开关变化时同步到播放器
-        .onChange(of: appState.isVideoLooping) {
-            controller.isLooping = appState.isVideoLooping
+        .onChange(of: appState.shouldLoopCurrentItem) {
+            controller.isLooping = appState.shouldLoopCurrentItem
         }
     }
 }

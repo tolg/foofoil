@@ -21,7 +21,7 @@ struct AudioModeView: View {
         self.appState = appState
         self.url = url
         self.shouldHideBorder = shouldHideBorder
-        _controller = StateObject(wrappedValue: VideoPlayerController(appStateID: appState.id, url: url, isLooping: appState.isVideoLooping))
+        _controller = StateObject(wrappedValue: VideoPlayerController(appStateID: appState.id, url: url, isLooping: appState.shouldLoopCurrentItem))
         _info = State(initialValue: AudioTrackInfo.fallback(fileName: url.lastPathComponent))
     }
 
@@ -53,15 +53,18 @@ struct AudioModeView: View {
             }
         }
         .padding(shouldHideBorder ? 0 : 8)
-        .onAppear { controller.play() }
+        .onAppear {
+            controller.isLooping = appState.shouldLoopCurrentItem
+            controller.play()
+        }
         .onDisappear { controller.pause() }
         .onChange(of: url) {
             controller.load(url: url)
             info = AudioTrackInfo.fallback(fileName: url.lastPathComponent)
             Task { info = await AudioMetadataLoader.load(from: url) }
         }
-        .onChange(of: appState.isVideoLooping) {
-            controller.isLooping = appState.isVideoLooping
+        .onChange(of: appState.shouldLoopCurrentItem) {
+            controller.isLooping = appState.shouldLoopCurrentItem
         }
         .task(id: url) {
             info = await AudioMetadataLoader.load(from: url)

@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 nonisolated final class HistoryDatabase {
-    static let schemaVersion = 8
+    static let schemaVersion = 9
 
     private let queue = DispatchQueue(label: "com.foofoil.history.database", qos: .utility)
     private var connection: OpaquePointer?
@@ -126,7 +126,7 @@ nonisolated final class HistoryDatabase {
                         config.imageSource?.rawValue, config.text, config.isPinned, config.opacity,
                         config.windowFrame, config.showBorder, config.imageScale, config.textFontSize,
                         config.isMarkdownPreview, config.svgColor, config.backgroundColorHex,
-                        createdAt, now, now, config.sourceFingerprint, 0, 1, config.isVideoLooping,
+                        createdAt, now, now, config.sourceFingerprint, 0, 1, config.mediaPlaybackMode.sqliteValue,
                         config.videoBookmark?.base64EncodedString(), config.extensionID,
                         config.extensionStateReference, config.navigatorPanelSide.rawValue,
                         config.navigatorPanelVisibilityMode.rawValue, config.navigatorPanelWidth,
@@ -353,6 +353,13 @@ nonisolated final class HistoryDatabase {
         }
         // 即使用户库的 user_version 落后于实际列，也按列是否存在补 file_list，避免 INSERT 引用缺失列。
         try addColumnIfMissing("file_list", definition: "file_list TEXT")
+        if previousVersion >= 1 && previousVersion < 9 {
+            // v9：旧列表 video_looping=1 是单曲循环开关；迁成顺序循环，使列表能自动续播。
+            try execute("""
+                UPDATE history_items SET video_looping = 2
+                WHERE video_looping = 1 AND file_list IS NOT NULL AND length(file_list) > 0
+                """)
+        }
         try execute("PRAGMA user_version = \(Self.schemaVersion)")
         // 新库明确不读取旧历史；初始化成功后移除旧键，避免旧路径复活。
         UserDefaults.standard.removeObject(forKey: "historyConfigs")
@@ -518,7 +525,7 @@ nonisolated final class HistoryDatabase {
                     sourceFingerprint: optionalText(statement, columns["source_fingerprint"]!),
                     storedDisplayTitle: text(statement, columns["display_title"]!),
                     thumbnailPath: optionalText(statement, columns["thumbnail_path"]!),
-                    isVideoLooping: sqlite3_column_int(statement, columns["video_looping"]!) != 0,
+                    mediaPlaybackMode: MediaPlaybackMode(sqliteValue: Int(sqlite3_column_int(statement, columns["video_looping"]!))),
                     videoBookmark: optionalText(statement, columns["video_bookmark"]!).flatMap { Data(base64Encoded: $0) },
                     extensionID: optionalText(statement, columns["extension_id"]!),
                     extensionStateReference: optionalText(statement, columns["extension_state_reference"]!),

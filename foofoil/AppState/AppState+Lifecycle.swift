@@ -34,7 +34,7 @@ extension AppState {
             self.id = UUID()
             self.createdAt = Date()
             self.svgColor = nil
-            self.isVideoLooping = true
+            self.mediaPlaybackMode = .sequentialLoop
             self.videoBookmarkData = nil
             self.extensionSession = nil
             self.extensionFallbackProviderID = nil

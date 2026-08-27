@@ -11,6 +11,78 @@ nonisolated public enum ImageSource: String, Codable {
     case clipboard
 }
 
+/// 音视频播放模式：顺序播放、顺序循环、随机播放、单曲循环。
+public nonisolated enum MediaPlaybackMode: String, Codable, CaseIterable, Sendable {
+    case sequential
+    case sequentialLoop
+    case shuffle
+    case singleLoop
+
+    /// 控制条按钮按此顺序切换。
+    var cycled: MediaPlaybackMode {
+        switch self {
+        case .sequential: .sequentialLoop
+        case .sequentialLoop: .shuffle
+        case .shuffle: .singleLoop
+        case .singleLoop: .sequential
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .sequential: "repeat.badge.xmark"
+        case .sequentialLoop: "repeat"
+        case .shuffle: "shuffle"
+        case .singleLoop: "repeat.1"
+        }
+    }
+
+    var localizationKey: String {
+        switch self {
+        case .sequential: "Sequential Playback"
+        case .sequentialLoop: "Sequential Loop"
+        case .shuffle: "Shuffle Playback"
+        case .singleLoop: "Repeat One"
+        }
+    }
+
+    /// SQLite `video_looping`：0 顺序、1 单曲循环（旧 true）、2 顺序循环、3 随机。
+    var sqliteValue: Int {
+        switch self {
+        case .sequential: 0
+        case .singleLoop: 1
+        case .sequentialLoop: 2
+        case .shuffle: 3
+        }
+    }
+
+    init(sqliteValue: Int) {
+        switch sqliteValue {
+        case 0: self = .sequential
+        case 2: self = .sequentialLoop
+        case 3: self = .shuffle
+        default: self = .singleLoop
+        }
+    }
+
+    /// 旧布尔开关：关=顺序播放；开时单文件为单曲循环，列表为顺序循环以便续播。
+    static func fromLegacyLooping(_ looping: Bool, hasPresentableFileList: Bool) -> MediaPlaybackMode {
+        if !looping { return .sequential }
+        return hasPresentableFileList ? .sequentialLoop : .singleLoop
+    }
+
+    func shouldLoopCurrentItem(hasPresentableFileList: Bool) -> Bool {
+        switch self {
+        case .singleLoop:
+            true
+        case .sequential:
+            false
+        case .sequentialLoop, .shuffle:
+            !hasPresentableFileList
+        }
+    }
+}
+
 nonisolated public struct WindowConfig: Codable, Identifiable {
     public let id: UUID
     public var imagePath: String?
@@ -40,7 +112,9 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     /// 预先生成并单独存储的 HEIC 缩略图路径，仅用作历史列表展示，不作为窗口内容来源。
     public var thumbnailPath: String?
     public var webZoom: Double
-    /// 视频/音频是否循环播放；仅媒体模式生效，默认开启。
+    /// 视频/音频播放模式；仅媒体模式生效，默认顺序循环。
+    public var mediaPlaybackMode: MediaPlaybackMode
+    /// 旧字段：仅表示是否单曲循环，随 `mediaPlaybackMode` 写入以兼容旧解码。
     public var isVideoLooping: Bool
     /// 视频/音频原始文件的安全范围书签；沙盒授权仅随进程有效，靠它在 app 重启后恢复访问权限。
     public var videoBookmark: Data?
@@ -79,7 +153,8 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         storedDisplayTitle: String? = nil,
         thumbnailPath: String? = nil,
         webZoom: Double = 1.0,
-        isVideoLooping: Bool = true,
+        mediaPlaybackMode: MediaPlaybackMode = .sequentialLoop,
+        isVideoLooping: Bool? = nil,
         videoBookmark: Data? = nil,
         extensionID: String? = nil,
         extensionStateReference: String? = nil,
@@ -111,7 +186,8 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         self.storedDisplayTitle = storedDisplayTitle
         self.thumbnailPath = thumbnailPath
         self.webZoom = webZoom
-        self.isVideoLooping = isVideoLooping
+        self.mediaPlaybackMode = mediaPlaybackMode
+        self.isVideoLooping = isVideoLooping ?? (mediaPlaybackMode == .singleLoop)
         self.videoBookmark = videoBookmark
         self.extensionID = extensionID
         self.extensionStateReference = extensionStateReference
@@ -122,7 +198,7 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, isVideoLooping, videoBookmark, extensionID, extensionStateReference, navigatorPanelSide, navigatorPanelVisibilityMode, navigatorPanelWidth, fileList
+        case id, imagePath, webURLString, actualWebURLString, originalImageName, imageSource, text, isPinned, opacity, windowFrame, showBorder, imageScale, textFontSize, isMarkdownPreview, createdAt, svgColor, backgroundColorHex, textPath, contentKind, sourceFingerprint, storedDisplayTitle, thumbnailPath, webZoom, mediaPlaybackMode, isVideoLooping, videoBookmark, extensionID, extensionStateReference, navigatorPanelSide, navigatorPanelVisibilityMode, navigatorPanelWidth, fileList
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,8 +226,6 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         storedDisplayTitle = try container.decodeIfPresent(String.self, forKey: .storedDisplayTitle)
         thumbnailPath = try container.decodeIfPresent(String.self, forKey: .thumbnailPath)
         webZoom = try container.decodeIfPresent(Double.self, forKey: .webZoom) ?? 1.0
-        // 旧数据没有循环播放字段；解码时默认开启。
-        isVideoLooping = try container.decodeIfPresent(Bool.self, forKey: .isVideoLooping) ?? true
         videoBookmark = try container.decodeIfPresent(Data.self, forKey: .videoBookmark)
         extensionID = try container.decodeIfPresent(String.self, forKey: .extensionID)
         extensionStateReference = try container.decodeIfPresent(String.self, forKey: .extensionStateReference)
@@ -165,6 +239,17 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
         )
         let decodedList = try container.decodeIfPresent(FileListState.self, forKey: .fileList)
         fileList = decodedList?.isPresentable == true ? decodedList : nil
+        if let mode = try container.decodeIfPresent(MediaPlaybackMode.self, forKey: .mediaPlaybackMode) {
+            mediaPlaybackMode = mode
+        } else {
+            // 旧数据只有布尔循环开关；缺省视为开启。列表开启时迁到顺序循环以自动续播。
+            let looping = try container.decodeIfPresent(Bool.self, forKey: .isVideoLooping) ?? true
+            mediaPlaybackMode = MediaPlaybackMode.fromLegacyLooping(
+                looping,
+                hasPresentableFileList: fileList != nil
+            )
+        }
+        isVideoLooping = mediaPlaybackMode == .singleLoop
     }
 
     public var historyMenuSymbolName: String {

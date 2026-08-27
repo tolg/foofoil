@@ -465,6 +465,8 @@ struct ExtensionKitTests {
         object.removeValue(forKey: "navigatorPanelVisibilityMode")
         object.removeValue(forKey: "navigatorPanelWidth")
         object.removeValue(forKey: "fileList")
+        object.removeValue(forKey: "mediaPlaybackMode")
+        object.removeValue(forKey: "isVideoLooping")
         let decoded = try JSONDecoder().decode(
             WindowConfig.self,
             from: JSONSerialization.data(withJSONObject: object)
@@ -476,6 +478,7 @@ struct ExtensionKitTests {
         #expect(decoded.navigatorPanelVisibilityMode == .onHover)
         #expect(decoded.navigatorPanelWidth == NavigatorPanelMetrics.defaultWidth)
         #expect(decoded.fileList == nil)
+        #expect(decoded.mediaPlaybackMode == .singleLoop)
         #expect(decoded.text == "legacy")
     }
 

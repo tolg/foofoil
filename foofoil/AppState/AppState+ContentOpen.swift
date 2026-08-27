@@ -91,8 +91,8 @@ extension AppState {
             }
             self.imageScale = 1.0
             if clearsFileList {
-                // 新打开的媒体恢复默认的循环播放；列表内切项保留用户选择
-                self.isVideoLooping = true
+                // 新打开的媒体恢复默认顺序循环；列表内切项保留用户选择
+                self.mediaPlaybackMode = .sequentialLoop
             }
             self.createdAt = Date()
             self.webURL = nil

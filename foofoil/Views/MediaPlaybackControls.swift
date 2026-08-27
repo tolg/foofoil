@@ -18,7 +18,7 @@ final class VideoPlayerController: ObservableObject {
     @Published var duration: Double = 0
     @Published private(set) var isMuted = false
     @Published private(set) var volume: Float = 1.0
-    /// 播放到结尾后是否循环播放；由窗口状态同步，默认开启。
+    /// 播放到结尾后是否由播放器自己循环当前项；由窗口播放模式同步。
     var isLooping: Bool
     /// 拖动进度条期间屏蔽时间观察者的回写，避免滑块抖动。
     var isScrubbing = false
@@ -47,7 +47,7 @@ final class VideoPlayerController: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self, notification.object as? AVPlayerItem === self.player.currentItem else { return }
                 if self.isLooping {
-                    // 循环播放：回到片头继续播放
+                    // 单曲循环：回到片头继续播放
                     self.player.seek(to: .zero)
                     self.currentTime = 0
                     self.player.play()
@@ -319,7 +319,7 @@ struct WheelIconButton: NSViewRepresentable {
     }
 }
 
-/// 底部播放控制条：播放/暂停 + 当前时间 + 进度 + 总时长 + 音量 + 循环；视频与音频共用。
+/// 底部播放控制条：播放/暂停 + 当前时间 + 进度 + 总时长 + 音量 + 播放模式；视频与音频共用。
 struct MediaPlaybackBar: View {
     /// 单行播放条所需的最小窗口宽度，含时间标签、滑块与按钮，避免音视频窗口缩到控件放不下。
     static let minimumWindowWidth: CGFloat = 380
@@ -337,7 +337,7 @@ struct MediaPlaybackBar: View {
             progressSlider
             durationLabel
             volumeControl
-            loopButton
+            playbackModeButton
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -464,18 +464,19 @@ struct MediaPlaybackBar: View {
             }
     }
 
-    private var loopButton: some View {
-        Button {
-            appState.isVideoLooping.toggle()
+    private var playbackModeButton: some View {
+        let mode = appState.mediaPlaybackMode
+        let title = NSLocalizedString(mode.localizationKey, comment: "")
+        return Button {
+            appState.cycleMediaPlaybackMode()
         } label: {
-            Image(systemName: "repeat")
+            Image(systemName: mode.symbolName)
                 .font(.system(size: 13))
                 .frame(width: 20)
-                // 循环开启时用强调色高亮，关闭时置灰
-                .foregroundStyle(appState.isVideoLooping ? Color.accentColor : Color.secondary)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString("Loop Playback", comment: ""))
+        .help(title)
+        .accessibilityLabel(title)
     }
 }

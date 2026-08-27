@@ -48,7 +48,7 @@ extension AppState {
             self.createdAt = config.createdAt
             self.svgColor = config.svgColor
             self.backgroundColorHex = config.backgroundColorHex
-            self.isVideoLooping = config.isVideoLooping
+            self.mediaPlaybackMode = config.mediaPlaybackMode
             self.extensionStateReference = config.extensionStateReference
             self.navigatorPanelSide = config.navigatorPanelSide
             self.navigatorPanelVisibilityMode = config.navigatorPanelVisibilityMode
@@ -157,7 +157,7 @@ extension AppState {
                 )),
                 sourceFingerprint: sourceFingerprint,
                 webZoom: webZoom,
-                isVideoLooping: isVideoLooping,
+                mediaPlaybackMode: mediaPlaybackMode,
                 videoBookmark: videoBookmarkData,
                 extensionID: extensionSession?.extensionID,
                 extensionStateReference: extensionStateReference,
