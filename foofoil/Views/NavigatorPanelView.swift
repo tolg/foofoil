@@ -123,6 +123,7 @@ struct NavigatorPanelView: View {
 
     private func navigatorRow(_ row: VisibleRow, contribution: NavigatorContribution) -> some View {
         let isSelected = contribution.selectedItemIDs.contains(row.item.id)
+        let thumbnailPath = imageThumbnailPath(for: row.item.id, contribution: contribution)
         return HStack(spacing: 7) {
             Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
 
@@ -155,7 +156,13 @@ struct NavigatorPanelView: View {
                 )
             } label: {
                 HStack(spacing: 8) {
-                    if let symbolName = row.item.symbolName {
+                    if let thumbnailPath {
+                        NavigatorImageThumbnail(
+                            path: thumbnailPath,
+                            fallbackSymbolName: row.item.symbolName ?? "photo",
+                            isCurrent: row.item.isCurrent
+                        )
+                    } else if let symbolName = row.item.symbolName {
                         Image(systemName: symbolName)
                             .frame(width: 16)
                             .foregroundStyle(row.item.isCurrent ? Color.accentColor : Color.secondary)
@@ -210,6 +217,13 @@ struct NavigatorPanelView: View {
             in: RoundedRectangle(cornerRadius: 7, style: .continuous)
         )
         .background(NonMovableBackground())
+    }
+
+    private func imageThumbnailPath(for itemID: String, contribution: NavigatorContribution) -> String? {
+        guard contribution.id == AppState.fileListNavigatorID,
+              let list = appState.fileList,
+              list.kind == .image else { return nil }
+        return list.items.first(where: { $0.id == itemID })?.path
     }
 
     /// 桌面伴随窗口拖外侧（左挂左缘、右挂右缘）；全屏覆盖层只能拖贴着箔片的内侧。
@@ -288,5 +302,30 @@ struct NavigatorPanelView: View {
         if !contributions.contains(where: { $0.id == appState.activeNavigatorContributionID }) {
             appState.activeNavigatorContributionID = contributions[0].id
         }
+    }
+}
+
+private struct NavigatorImageThumbnail: View {
+    let path: String
+    let fallbackSymbolName: String
+    let isCurrent: Bool
+    @StateObject private var thumbnail = HistorySearchThumbnailLoader()
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color.secondary.opacity(0.12))
+            if let image = thumbnail.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: fallbackSymbolName)
+                    .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+            }
+        }
+        .frame(width: 36, height: 36)
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .task(id: path) { await thumbnail.load(path: path) }
     }
 }
