@@ -10,6 +10,8 @@ import Foundation
 import AppKit
 import AVFoundation
 import CoreGraphics
+import UniformTypeIdentifiers
+import SwiftUI
 @testable import foofoil
 
 @MainActor
@@ -1300,6 +1302,168 @@ struct FoofoilTests {
         #expect(state.navigatorContributions.isEmpty)
         #expect(state.isNavigatorPanelExplicitlyVisible == false)
         #expect(state.id == originalID)
+    }
+
+    @Test func imageDropAppendsImagesAndIgnoresOtherFileTypes() throws {
+        let first = try writeTestPNG(name: "drop-list-a.png")
+        let second = try writeTestPNG(name: "drop-list-b.png")
+        let video = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-\(UUID().uuidString)-ignored.mp4")
+        let text = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-\(UUID().uuidString)-ignored.txt")
+        try Data().write(to: video)
+        try Data("ignored".utf8).write(to: text)
+        defer {
+            for url in [first, second, video, text] {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+
+        #expect(state.appendMatchingDroppedFiles(urls: [video, second, text]))
+        #expect(state.fileList?.items.map(\.displayName).contains(second.lastPathComponent) == true)
+        #expect(state.fileList?.items.contains(where: { $0.path == video.path || $0.path == text.path }) == false)
+
+        let itemCount = state.fileList?.items.count
+        #expect(!state.appendMatchingDroppedFiles(urls: [video, text]))
+        #expect(state.fileList?.items.count == itemCount)
+    }
+
+    @Test func openedContentOnlyAcceptsMatchingDroppedFileType() throws {
+        let image = try writeTestPNG(name: "type-lock.png")
+        let text = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-\(UUID().uuidString)-type-lock.txt")
+        try Data("text".utf8).write(to: text)
+        defer {
+            try? FileManager.default.removeItem(at: image)
+            try? FileManager.default.removeItem(at: text)
+        }
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: text)
+
+        #expect(state.matchingDroppedFiles(urls: [image]).isEmpty)
+        #expect(state.matchingDroppedFiles(urls: [image, text]) == [text])
+    }
+
+    @Test func dockDropUsesTheSameImageFilteringAsInWindowDrop() throws {
+        let first = try writeTestPNG(name: "dock-list-a.png")
+        let second = try writeTestPNG(name: "dock-list-b.png")
+        let text = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-\(UUID().uuidString)-dock-ignored.txt")
+        try Data("ignored".utf8).write(to: text)
+        defer {
+            for url in [first, second, text] {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+
+        AppDelegate().openDroppedFiles([text, second], into: state)
+
+        #expect(state.fileList?.items.count == 2)
+        #expect(state.fileList?.items.contains(where: { $0.path == text.path }) == false)
+    }
+
+    @Test func inWindowDropAppendsOnlyImagesToCurrentImage() async throws {
+        let first = try writeTestPNG(name: "window-list-a.png")
+        let second = try writeTestPNG(name: "window-list-b.png")
+        let text = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-\(UUID().uuidString)-window-ignored.txt")
+        try Data("ignored".utf8).write(to: text)
+        defer {
+            for url in [first, second, text] {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+        let providers = [text, second].map { url in
+            let provider = NSItemProvider()
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.fileURL.identifier,
+                visibility: .all
+            ) { completion in
+                completion(url.absoluteString.data(using: .utf8), nil)
+                return nil
+            }
+            return provider
+        }
+        let accepted = await withCheckedContinuation { continuation in
+            state.handleDrop(providers: providers) { success in
+                continuation.resume(returning: success)
+            }
+        }
+
+        #expect(accepted)
+        #expect(state.fileList?.items.count == 2)
+        #expect(state.fileList?.items.contains(where: { $0.path == text.path }) == false)
+    }
+
+    @Test func windowFileDropCreatesAndExtendsImageListsInAllThreeStates() throws {
+        let first = try writeTestPNG(name: "native-drop-a.png")
+        let second = try writeTestPNG(name: "native-drop-b.png")
+        let third = try writeTestPNG(name: "native-drop-c.png")
+        let fourth = try writeTestPNG(name: "native-drop-d.png")
+        let text = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-\(UUID().uuidString)-native-drop.txt")
+        try Data("ignored".utf8).write(to: text)
+        defer {
+            for url in [first, second, third, fourth, text] {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        let blank = AppState()
+        defer { HistoryManager.shared.removeFromHistory(blank.toConfig()) }
+        #expect(blank.handleDroppedFileURLs([first, text, second]))
+        #expect(blank.fileList?.items.map(\.displayName) == [first.lastPathComponent, second.lastPathComponent])
+        #expect(blank.fileList?.items.contains(where: { $0.path == text.path }) == false)
+
+        let single = AppState()
+        defer { HistoryManager.shared.removeFromHistory(single.toConfig()) }
+        single.openFile(url: first)
+        #expect(single.handleDroppedFileURLs([text, second]))
+        #expect(single.fileList?.items.count == 2)
+
+        #expect(single.handleDroppedFileURLs([third, text, fourth]))
+        #expect(single.fileList?.items.count == 4)
+        #expect(single.fileList?.items.contains(where: { $0.path == text.path }) == false)
+    }
+
+    @Test func rootHostingViewOwnsNativeFileDropDestination() {
+        let state = AppState()
+        let hostingView = FileDropHostingView(rootView: ContentView(appState: state), appState: state)
+        #expect(hostingView.responds(to: NSSelectorFromString("draggingEntered:")))
+        #expect(hostingView.responds(to: NSSelectorFromString("performDragOperation:")))
+        #expect(hostingView.registeredDraggedTypes.contains(.fileURL))
+    }
+
+    @Test func navigatorRowsAreNotTreatedAsWindowDragBackgrounds() {
+        #expect(NavigatorPanel.shouldDragAttachedFoofoil(
+            commandPressed: false,
+            onResizeHandle: false,
+            hitView: MovableWindowBackgroundNSView()
+        ))
+        #expect(!NavigatorPanel.shouldDragAttachedFoofoil(
+            commandPressed: false,
+            onResizeHandle: false,
+            hitView: NSButton()
+        ))
+        #expect(!NavigatorPanel.shouldDragAttachedFoofoil(
+            commandPressed: false,
+            onResizeHandle: false,
+            hitView: NSView()
+        ))
     }
 
     @Test func fileListKeyDownNavigatesAdjacentItems() throws {

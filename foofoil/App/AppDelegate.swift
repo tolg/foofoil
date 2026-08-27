@@ -24,6 +24,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     var windowMenu: NSMenu?
     var contentModeCancellables = Set<AnyCancellable>()
     var didOpenFiles = false
+    weak var lastActiveWindowController: FloatingWindowController?
 
     // 获取当前活跃（Key）窗口对应的 AppState
     var activeWindowController: FloatingWindowController? {
@@ -61,7 +62,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     public func application(_ sender: NSApplication, openFiles filenames: [String]) {
         didOpenFiles = true
         let urls = filenames.map { URL(fileURLWithPath: $0) }
-        openGroupedFiles(urls, into: availableBlankWindowController?.appState, append: false)
+        let target = activeWindowController?.appState
+            ?? lastActiveWindowController?.appState
+            ?? availableBlankWindowController?.appState
+        openDroppedFiles(urls, into: target)
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -165,6 +169,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func handleKeyWindowChanged(_ notification: Notification) {
+        if notification.name == NSWindow.didBecomeKeyNotification,
+           let changedWindow = notification.object as? NSWindow,
+           let controller = windowControllers.first(where: { $0.owns(changedWindow) }) {
+            lastActiveWindowController = controller
+        }
         // 交由下一轮事件循环执行，确保 AppKit 已更新 keyWindow。
         DispatchQueue.main.async { [weak self] in
             self?.updateGoMenuVisibility()

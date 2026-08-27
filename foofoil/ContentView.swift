@@ -6,12 +6,10 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 import Combine
 
 public struct ContentView: View {
     @ObservedObject var appState: AppState
-    @State private var isDropTargeted = false // 拖放高亮状态
     @State private var isResizingWindowWithPinch = false
     @State private var pdfPageIndicator: String?
     @State private var pdfPageIndicatorDismissTask: DispatchWorkItem?
@@ -111,15 +109,11 @@ public struct ContentView: View {
             FullScreenNavigatorOverlay(appState: appState)
         }
         .frame(minWidth: minimumWidth, minHeight: minimumLength)
-        // 直接在最外层容器上处理拖放逻辑，避免使用覆盖整窗的透明交互层拦截正常点击事件
-        .onDrop(of: [.image, .fileURL, .url, .text], isTargeted: $isDropTargeted) { providers in
-            self.appState.handleDrop(providers: providers)
-            return true
-        }
+        // Finder 文件由 FloatingWindow 直接读取粘贴板，确保多选批次不会被 SwiftUI 拆丢。
         // 增加高精细度细微边框，且拖拽时显示蓝色高亮边框
         .overlay(
             RoundedRectangle(cornerRadius: shouldHideBorder ? 0 : 12)
-                .stroke(isDropTargeted ? Color.blue.opacity(0.8) : (shouldHideBorder ? Color.clear : Color.white.opacity(0.15)), lineWidth: isDropTargeted ? 3 : 1)
+                .stroke(appState.isFileDropTargeted ? Color.blue.opacity(0.8) : (shouldHideBorder ? Color.clear : Color.white.opacity(0.15)), lineWidth: appState.isFileDropTargeted ? 3 : 1)
         )
         .overlay(alignment: .bottom) {
             if let pdfPageIndicator {

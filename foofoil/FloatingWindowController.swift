@@ -10,6 +10,103 @@ import SwiftUI
 import Combine
 import AVFoundation
 
+/// 根内容视图作为 AppKit 拖放目标，鼠标位于任意箔片内容上时都能取得 Finder 的完整文件批次。
+final class FileDropHostingView<Content: View>: NSHostingView<Content> {
+    private let appState: AppState
+
+    init(rootView: Content, appState: AppState) {
+        self.appState = appState
+        super.init(rootView: rootView)
+        registerForDraggedTypes([.fileURL, .URL, .string, .tiff, .png])
+    }
+
+    @available(*, unavailable)
+    required init(rootView: Content) {
+        fatalError("init(rootView:) has not been implemented")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard canAcceptDrop(from: sender) else { return [] }
+        appState.isFileDropTargeted = true
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard canAcceptDrop(from: sender) else { return [] }
+        appState.isFileDropTargeted = true
+        return .copy
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        appState.isFileDropTargeted = false
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { appState.isFileDropTargeted = false }
+        let urls = droppedFileURLs(from: sender)
+        if !urls.isEmpty {
+            return appState.handleDroppedFileURLs(urls)
+        }
+
+        let providers = droppedItemProviders(from: sender)
+        guard !providers.isEmpty else { return false }
+        appState.handleDrop(providers: providers)
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
+        appState.isFileDropTargeted = false
+    }
+
+    private func droppedFileURLs(from sender: any NSDraggingInfo) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) ?? []
+        return objects.compactMap { object in
+            if let url = object as? URL { return url }
+            if let url = object as? NSURL { return url as URL }
+            return nil
+        }
+    }
+
+    private func canAcceptDrop(from sender: any NSDraggingInfo) -> Bool {
+        if !droppedFileURLs(from: sender).isEmpty { return true }
+        return sender.draggingPasteboard.canReadItem(withDataConformingToTypes: [
+            NSPasteboard.PasteboardType.URL.rawValue,
+            NSPasteboard.PasteboardType.string.rawValue,
+            NSPasteboard.PasteboardType.tiff.rawValue,
+            NSPasteboard.PasteboardType.png.rawValue
+        ])
+    }
+
+    /// 非文件内容仍转回既有 NSItemProvider 管线，保留网页 URL、文字和位图拖放能力。
+    private func droppedItemProviders(from sender: any NSDraggingInfo) -> [NSItemProvider] {
+        (sender.draggingPasteboard.pasteboardItems ?? []).compactMap { item in
+            let representations = item.types.compactMap { type -> (String, Data)? in
+                guard let data = item.data(forType: type) else { return nil }
+                return (type.rawValue, data)
+            }
+            guard !representations.isEmpty else { return nil }
+
+            let provider = NSItemProvider()
+            for (typeIdentifier, data) in representations {
+                provider.registerDataRepresentation(
+                    forTypeIdentifier: typeIdentifier,
+                    visibility: .all
+                ) { completion in
+                    completion(data, nil)
+                    return nil
+                }
+            }
+            return provider
+        }
+    }
+}
+
 public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
     public let appState: AppState
@@ -69,7 +166,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
         // 装载 SwiftUI 视图
         let contentView = ContentView(appState: appState)
-        let hostingView = NSHostingView(rootView: contentView)
+        let hostingView = FileDropHostingView(rootView: contentView, appState: appState)
         window.contentView = hostingView
         window.installResizeCursorTracking(in: hostingView)
 

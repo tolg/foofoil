@@ -59,6 +59,16 @@ public nonisolated enum FileOpenKind: Equatable, Sendable {
     case other
 }
 
+enum DroppedFileKind: Equatable {
+    case image
+    case video
+    case audio
+    case pdf
+    case web
+    case text
+    case other(String)
+}
+
 public nonisolated struct FileListItem: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public var path: String
@@ -99,6 +109,20 @@ public nonisolated struct FileListGroup: Equatable, Sendable {
 }
 
 public enum FileListGrouper {
+    static func dropKind(url: URL) -> DroppedFileKind {
+        switch classify(url: url) {
+        case .listable(.image): return .image
+        case .listable(.video): return .video
+        case .listable(.audio): return .audio
+        case .other:
+            let ext = url.pathExtension.lowercased()
+            if ext == "pdf" { return .pdf }
+            if ["html", "htm", "webarchive", "xhtml"].contains(ext) { return .web }
+            if let type = UTType(filenameExtension: ext), type.conforms(to: .text) { return .text }
+            return .other(ext)
+        }
+    }
+
     /// 按扩展名快速分类；PDF / 文本 / 网页不进列表。
     static func classify(url: URL) -> FileOpenKind {
         let name = url.lastPathComponent

@@ -27,6 +27,35 @@ extension AppState {
             handleDrop(providers: providers, appendToFileList: true, completion: completion)
         }
 
+        /// 窗口从 Finder 粘贴板一次性取得完整文件批次后直接处理，避免 NSItemProvider 丢失多选项。
+        @discardableResult
+        func handleDroppedFileURLs(_ urls: [URL]) -> Bool {
+            let fileURLs = urls.filter(\.isFileURL)
+            guard !fileURLs.isEmpty else { return false }
+
+            if listableKind != nil {
+                return appendMatchingDroppedFiles(urls: fileURLs)
+            }
+
+            let openable = matchingDroppedFiles(urls: fileURLs)
+            guard !openable.isEmpty else { return false }
+
+            if currentDroppedFileKind != nil {
+                if openable.count == 1, let url = openable.first {
+                    openFile(url: url)
+                } else {
+                    postGroupedFileOpen(urls: openable, append: false)
+                }
+                return true
+            }
+
+            // 空白箔片的第一组直接在当前状态中打开，图片批次会立即安装为列表。
+            let groups = FileListGrouper.groups(from: openable)
+            guard let first = groups.first else { return false }
+            openFileGroup(first, preservesIdentity: true)
+            return true
+        }
+
         func handleDrop(providers: [NSItemProvider], appendToFileList: Bool, completion: @escaping (Bool) -> Void) {
             NSLog("handleDrop started for \(providers.count) providers append=\(appendToFileList)")
             for (index, p) in providers.enumerated() {
@@ -37,13 +66,18 @@ extension AppState {
             currentDropGeneration &+= 1
             let generation = currentDropGeneration
 
-            if appendToFileList || providers.count > 1 {
+            // 非空箔片的单文件拖放也先经过类型锁定，不能用其它类型替换当前内容。
+            if appendToFileList || providers.count > 1 || currentDroppedFileKind != nil {
                 loadDroppedFileURLs(from: providers, generation: generation) { [weak self] urls in
                     guard let self, self.isCurrentDrop(generation) else {
                         completion(false)
                         return
                     }
-                    let openable = urls.filter { self.canOpenFile(url: $0) }
+                    if self.listableKind != nil {
+                        completion(self.appendMatchingDroppedFiles(urls: urls))
+                        return
+                    }
+                    let openable = self.matchingDroppedFiles(urls: urls)
                     if appendToFileList, !openable.isEmpty {
                         self.postGroupedFileOpen(urls: openable, append: true)
                         completion(true)
@@ -54,6 +88,8 @@ extension AppState {
                         completion(true)
                     } else if let url = openable.first {
                         self.openDroppedURL(url, generation: generation, completion: completion)
+                    } else if self.currentDroppedFileKind != nil {
+                        completion(false)
                     } else {
                         self.tryLoadProviders(providers, index: 0, generation: generation, completion: completion)
                     }
@@ -97,12 +133,13 @@ extension AppState {
             var collected: [URL?] = Array(repeating: nil, count: providers.count)
             let group = DispatchGroup()
             for (index, provider) in providers.enumerated() {
-                guard provider.canLoadObject(ofClass: URL.self) else { continue }
                 group.enter()
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    defer { group.leave() }
-                    if let url, url.isFileURL {
-                        collected[index] = url
+                loadDroppedFileURL(from: provider) { url in
+                    DispatchQueue.main.async {
+                        if let url, url.isFileURL {
+                            collected[index] = url
+                        }
+                        group.leave()
                     }
                 }
             }
@@ -113,6 +150,52 @@ extension AppState {
                 }
                 completion(collected.compactMap { $0 })
             }
+        }
+
+        /// Finder 多选拖放通常只提供 public.file-url，而不支持 loadObject(URL.self)。
+        func loadDroppedFileURL(from provider: NSItemProvider, completion: @escaping (URL?) -> Void) {
+            func loadURLObjectFallback() {
+                guard provider.canLoadObject(ofClass: URL.self) else {
+                    completion(nil)
+                    return
+                }
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    completion(url?.isFileURL == true ? url : nil)
+                }
+            }
+
+            let fileURLType = UTType.fileURL.identifier
+            guard provider.hasItemConformingToTypeIdentifier(fileURLType) else {
+                loadURLObjectFallback()
+                return
+            }
+            provider.loadItem(forTypeIdentifier: fileURLType, options: nil) { item, _ in
+                if let url = Self.fileURL(from: item) {
+                    completion(url)
+                } else {
+                    loadURLObjectFallback()
+                }
+            }
+        }
+
+        static func fileURL(from item: NSSecureCoding?) -> URL? {
+            if let url = item as? URL, url.isFileURL { return url }
+            if let url = item as? NSURL, let value = url as URL?, value.isFileURL { return value }
+
+            let text: String?
+            if let data = item as? Data {
+                text = String(data: data, encoding: .utf8)
+            } else if let value = item as? String {
+                text = value
+            } else if let value = item as? NSString {
+                text = value as String
+            } else {
+                text = nil
+            }
+            guard let text else { return nil }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
+            guard let url = URL(string: trimmed), url.isFileURL else { return nil }
+            return url
         }
 
         func tryLoadProviders(_ providers: [NSItemProvider], index: Int, generation: UInt64, completion: @escaping (Bool) -> Void) {

@@ -48,6 +48,7 @@ public class FloatingWindow: NSWindow {
 
         // 默认普通层级
         self.level = .normal
+
     }
 
     // 【重点说明】

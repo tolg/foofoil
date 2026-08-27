@@ -391,6 +391,36 @@ extension AppDelegate {
         }
     }
 
+    /// Finder 拖到 Dock 图标时与箔片内拖放保持一致：非空箔片只接收当前类型。
+    func openDroppedFiles(_ urls: [URL], into target: AppState?) {
+        guard let target else {
+            let state = AppState()
+            guard state.handleDroppedFileURLs(urls) else { return }
+            showNewWindow(with: state)
+            return
+        }
+
+        if isBlank(target) {
+            guard target.handleDroppedFileURLs(urls) else { return }
+            if let controller = windowControllers.first(where: { $0.appState === target }) {
+                activateWindow(controller)
+            }
+            return
+        }
+
+        if target.listableKind != nil {
+            guard target.appendMatchingDroppedFiles(urls: urls) else { return }
+        } else {
+            let matching = target.matchingDroppedFiles(urls: urls)
+            guard !matching.isEmpty else { return }
+            openGroupedFiles(matching, into: target, append: false)
+        }
+
+        if let controller = windowControllers.first(where: { $0.appState === target }) {
+            activateWindow(controller)
+        }
+    }
+
     func openGroupInNewWindow(_ group: FileListGroup) {
         let state = AppState()
         state.openFileGroup(group, preservesIdentity: true)

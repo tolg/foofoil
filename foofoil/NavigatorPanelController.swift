@@ -50,12 +50,23 @@ final class NavigatorPanel: NSPanel {
             width: frame.width,
             draggingLeftEdge: widthResizeOnLeadingEdge
         )
-        if command { return true }
+        let hit = contentView?.hitTest(event.locationInWindow)
+        return Self.shouldDragAttachedFoofoil(
+            commandPressed: command,
+            onResizeHandle: onResizeHandle,
+            hitView: hit
+        )
+    }
+
+    static func shouldDragAttachedFoofoil(
+        commandPressed: Bool,
+        onResizeHandle: Bool,
+        hitView: NSView?
+    ) -> Bool {
+        if commandPressed { return true }
         if onResizeHandle { return false }
-        guard let contentView else { return true }
-        guard let hit = contentView.hitTest(event.locationInWindow) else { return true }
-        if hit is NSControl { return false }
-        return hit.mouseDownCanMoveWindow
+        guard let hitView else { return true }
+        return hitView is ExplicitlyMovableWindowBackground
     }
 
     /// 拖父窗口，子窗口随相对位置一起走；事件坐标换算到箔片，避免 performDrag 跳一下。

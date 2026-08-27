@@ -26,7 +26,21 @@ extension AppState {
         if isPDFDocument { return nil }
         if isVideoDocument { return .video }
         if isAudioDocument { return .audio }
-        if imageURL != nil, webURL == nil, imageSource != .clipboard { return .image }
+        if imageURL != nil, webURL == nil { return .image }
+        return nil
+    }
+
+    /// 非空箔片锁定其文件类型，拖放不能用其它类型替换当前内容。
+    var currentDroppedFileKind: DroppedFileKind? {
+        if webURL != nil { return .web }
+        if isPDFDocument { return .pdf }
+        if isVideoDocument { return .video }
+        if isAudioDocument { return .audio }
+        if imageURL != nil { return .image }
+        if textURL != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .text }
+        if extensionSession != nil {
+            return .other((originalImageName as NSString?)?.pathExtension.lowercased() ?? "")
+        }
         return nil
     }
 
@@ -129,6 +143,27 @@ extension AppState {
         syncFileListNavigator()
         saveState()
         return leftover
+    }
+
+    /// 已显示可列表内容时，拖放只接收当前类型；混入的其它文件直接忽略。
+    @discardableResult
+    func appendMatchingDroppedFiles(urls: [URL]) -> Bool {
+        guard let kind = listableKind else { return false }
+        let matching = urls.filter {
+            canOpenFile(url: $0) && FileListGrouper.classify(url: $0) == .listable(kind)
+        }
+        guard !matching.isEmpty else { return false }
+        appendToFileList(urls: matching)
+        return true
+    }
+
+    func matchingDroppedFiles(urls: [URL]) -> [URL] {
+        guard let kind = currentDroppedFileKind else {
+            return urls.filter { canOpenFile(url: $0) }
+        }
+        return urls.filter {
+            canOpenFile(url: $0) && FileListGrouper.dropKind(url: $0) == kind
+        }
     }
 
     func presentFileListItem(id: String, rotatesIdentity: Bool) {
