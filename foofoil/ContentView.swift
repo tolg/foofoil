@@ -88,6 +88,7 @@ public struct ContentView: View {
                         .transition(.opacity)
                 } else if let imageURL = appState.imageURL, let nsImage = appState.loadImage(from: imageURL) {
                     ImageModeView(appState: appState, nsImage: nsImage, shouldHideBorder: shouldHideBorder)
+                        .id(appState.fileList?.currentID ?? imageURL.path)
                         .transition(.opacity)
                 } else if appState.isCSVDocument {
                     CSVTableView(content: appState.text, fontSize: appState.textFontSize)
@@ -99,6 +100,10 @@ public struct ContentView: View {
                 }
             }
             .padding(contentPadding)
+            .animation(
+                appState.fileList?.kind == .image ? ImageListSlideshow.transitionAnimation : nil,
+                value: appState.fileList?.currentID
+            )
 
             // 截图闪白覆盖层
             Color.white
@@ -208,6 +213,15 @@ public struct ContentView: View {
                     Label(NSLocalizedString("Border (ContextMenu)", comment: ""), systemImage: "rectangle")
                 }
                     .keyboardShortcut("b", modifiers: [.command])
+            }
+
+            if appState.canToggleImageListSlideshow {
+                Toggle(isOn: Binding(
+                    get: { appState.fileList?.isSlideshowEnabled == true },
+                    set: { appState.setImageListSlideshowEnabled($0) }
+                )) {
+                    Label(NSLocalizedString("Slideshow (ContextMenu)", comment: ""), systemImage: "play.rectangle")
+                }
             }
 
             if appState.imageURL != nil, appState.webURL == nil {

@@ -55,6 +55,7 @@ extension AppState {
             self.navigatorPanelWidth = NavigatorPanelMetrics.clampWidth(config.navigatorPanelWidth)
             self.fileList = nil
             self.fileListRevision = 0
+            self.stopImageListSlideshow()
             self.builtInNavigatorContributions = []
             self.builtInNavigatorActionHandler = nil
             self.isNavigatorPanelExplicitlyVisible = false

@@ -113,6 +113,7 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         guard let appState = activeAppState else {
             // 没有活跃窗口时，默认隐藏图片专用和网页专用菜单项
             setMenuItem(withAction: #selector(toggleShowBorderAction), in: menu, isHidden: true)
+            setMenuItem(withAction: #selector(toggleImageListSlideshowAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(reloadPageAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(captureImageFoofoilAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(backgroundColorAction), in: menu, isHidden: true)
@@ -134,6 +135,12 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             withAction: #selector(toggleShowBorderAction),
             in: menu,
             isHidden: appState.isFullScreen || !(isImageMode || isWebMode)
+        )
+
+        setMenuItem(
+            withAction: #selector(toggleImageListSlideshowAction),
+            in: menu,
+            isHidden: !appState.canToggleImageListSlideshow
         )
 
         // 1.5 Reload Page 菜单项
@@ -290,6 +297,15 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
         if menuItem.action == #selector(previousFileListItemAction) ||
             menuItem.action == #selector(nextFileListItemAction) {
             return activeAppState?.fileList?.isPresentable == true
+        }
+
+        if menuItem.action == #selector(toggleImageListSlideshowAction) {
+            guard let appState = activeAppState, appState.canToggleImageListSlideshow else {
+                menuItem.state = .off
+                return false
+            }
+            menuItem.state = appState.fileList?.isSlideshowEnabled == true ? .on : .off
+            return true
         }
 
 

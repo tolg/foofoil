@@ -963,6 +963,7 @@ struct FoofoilTests {
         #expect(tabController.tabStyle == .toolbar)
         #expect(tabController.tabViewItems.map(\.label) == [
             NSLocalizedString("General", comment: ""),
+            NSLocalizedString("Types", comment: ""),
             NSLocalizedString("Keyboard Shortcuts", comment: ""),
             NSLocalizedString("Extensions", comment: "")
         ])
@@ -978,7 +979,14 @@ struct FoofoilTests {
         #expect(generalHeight <= SettingsWindowMetrics.maxHeight + 0.5)
         #expect(generalHeight < SettingsWindowMetrics.maxHeight - 1)
 
-        tabController.selectedTabViewItemIndex = 2
+        tabController.selectedTabViewItemIndex = 1
+        controller.applySelectedTabAppearance(animated: false)
+        #expect(window.title == NSLocalizedString("Types", comment: ""))
+        let typesHeight = window.contentLayoutRect.height
+        #expect(typesHeight > generalHeight)
+        #expect(typesHeight <= SettingsWindowMetrics.maxHeight + 0.5)
+
+        tabController.selectedTabViewItemIndex = 3
         controller.applySelectedTabAppearance(animated: false)
         #expect(window.title == NSLocalizedString("Extensions", comment: ""))
         #expect(window.contentLayoutRect.height <= SettingsWindowMetrics.maxHeight + 0.5)
@@ -1586,6 +1594,97 @@ struct FoofoilTests {
         #expect(state.fileList?.currentID == firstID)
     }
 
+    @Test func imageListSlideshowDefaultsOffAndWrapsForward() throws {
+        let first = try writeTestPNG(name: "slide-a.png")
+        let second = try writeTestPNG(name: "slide-b.png")
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+        }
+        let state = AppState()
+        let previousInterval = SettingsStore.shared.imageListSlideshowInterval
+        defer {
+            state.stopImageListSlideshow()
+            SettingsStore.shared.imageListSlideshowInterval = previousInterval
+            HistoryManager.shared.removeFromHistory(state.toConfig())
+        }
+        state.installFileList(kind: .image, urls: [first, second], preservesIdentity: true)
+        #expect(state.fileList?.isSlideshowEnabled == false)
+        #expect(state.fileList?.slideshowInterval == ImageListSlideshow.defaultInterval)
+        #expect(state.canToggleImageListSlideshow)
+
+        let firstID = try #require(state.fileList?.currentID)
+        let secondID = try #require(state.fileList?.items.first(where: { $0.id != firstID })?.id)
+        state.presentFileListItem(id: secondID, rotatesIdentity: false)
+        state.activateAdjacentFileListItem(delta: 1)
+        #expect(state.fileList?.currentID == secondID)
+
+        state.activateAdjacentFileListItem(delta: 1, wraps: true)
+        #expect(state.fileList?.currentID == firstID)
+
+        state.setImageListSlideshowEnabled(true)
+        #expect(state.fileList?.isSlideshowEnabled == true)
+        #expect(state.toConfig().fileList?.isSlideshowEnabled == true)
+
+        state.setImageListSlideshowInterval(0.5)
+        #expect(SettingsStore.shared.imageListSlideshowInterval == ImageListSlideshow.minInterval)
+        #expect(state.fileList?.slideshowInterval == ImageListSlideshow.minInterval)
+        state.setImageListSlideshowInterval(120)
+        #expect(SettingsStore.shared.imageListSlideshowInterval == ImageListSlideshow.maxInterval)
+        #expect(state.fileList?.slideshowInterval == ImageListSlideshow.maxInterval)
+        state.setImageListSlideshowInterval(ImageListSlideshow.defaultInterval)
+        #expect(SettingsStore.shared.imageListSlideshowInterval == ImageListSlideshow.defaultInterval)
+        #expect(state.fileList?.slideshowInterval == ImageListSlideshow.defaultInterval)
+    }
+
+    @Test func settingsStoreClampsImageListSlideshowInterval() {
+        let store = SettingsStore.shared
+        let previous = store.imageListSlideshowInterval
+        defer { store.imageListSlideshowInterval = previous }
+
+        store.imageListSlideshowInterval = ImageListSlideshow.defaultInterval
+        #expect(store.imageListSlideshowInterval == ImageListSlideshow.defaultInterval)
+        store.imageListSlideshowInterval = 0.2
+        #expect(store.imageListSlideshowInterval == ImageListSlideshow.minInterval)
+        store.imageListSlideshowInterval = 90
+        #expect(store.imageListSlideshowInterval == ImageListSlideshow.maxInterval)
+        store.imageListSlideshowInterval = 12
+        #expect(store.imageListSlideshowInterval == 12)
+    }
+
+    @Test func imageListSlideshowDecodesLegacyFileListWithoutSlideshowKeys() throws {
+        let first = FileListItem(id: "a", path: "/tmp/a.png", bookmark: nil, displayName: "a.png")
+        let second = FileListItem(id: "b", path: "/tmp/b.png", bookmark: nil, displayName: "b.png")
+        let list = FileListState(kind: .image, items: [first, second], currentID: "b", isSlideshowEnabled: true, slideshowInterval: 8)
+        let encoded = try JSONEncoder().encode(list)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "isSlideshowEnabled")
+        object.removeValue(forKey: "slideshowInterval")
+        let decoded = try JSONDecoder().decode(FileListState.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(decoded.isSlideshowEnabled == false)
+        #expect(decoded.slideshowInterval == ImageListSlideshow.defaultInterval)
+        #expect(decoded.currentID == "b")
+
+        let stored = try JSONDecoder().decode(FileListState.self, from: encoded)
+        #expect(stored.isSlideshowEnabled == true)
+        #expect(stored.slideshowInterval == 8)
+    }
+
+    @Test func viewMenuIncludesSlideshowToggleForImageLists() throws {
+        let appDelegate = AppDelegate()
+        appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        guard let viewMenu = NSApplication.shared.mainMenu?.items.first(where: {
+            $0.submenu?.title == NSLocalizedString("View", comment: "")
+        })?.submenu else {
+            #expect(Bool(false), "View menu not setup")
+            return
+        }
+        let item = viewMenu.items.first { $0.action == #selector(AppDelegate.toggleImageListSlideshowAction) }
+        #expect(item != nil)
+        appDelegate.updateViewMenu(viewMenu)
+        #expect(item?.isHidden == true)
+    }
+
     @Test func goMenuArrowKeysAreNotBoundUntilContentOwnsThem() {
         let appDelegate = AppDelegate()
         appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
@@ -1643,6 +1742,8 @@ struct FoofoilTests {
         let decoded = try JSONDecoder().decode(WindowConfig.self, from: encoded)
         #expect(decoded.fileList?.items.map(\.id) == ["a", "b"])
         #expect(decoded.fileList?.currentID == "b")
+        #expect(decoded.fileList?.isSlideshowEnabled == false)
+        #expect(decoded.fileList?.slideshowInterval == ImageListSlideshow.defaultInterval)
         #expect(decoded.historyMenuDisplayName.contains("2"))
 
         let database = try HistoryDatabase(databaseURL: directory.appendingPathComponent("history.sqlite3"))

@@ -9,6 +9,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import AVFoundation
+import QuartzCore
 
 /// 根内容视图作为 AppKit 拖放目标，鼠标位于任意箔片内容上时都能取得 Finder 的完整文件批次。
 final class FileDropHostingView<Content: View>: NSHostingView<Content> {
@@ -187,6 +188,12 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         // 绑定状态监听
         setupBindings()
         setupNavigatorPanelBindings()
+        NotificationCenter.default.publisher(for: .imageListSlideshowIntervalDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.appState.scheduleImageListSlideshowAdvance()
+            }
+            .store(in: &cancellables)
     }
 
     required init?(coder: NSCoder) {
@@ -973,7 +980,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             NSSize(width: displaySize.width + inset, height: displaySize.height + inset),
             keepWidth: false,
             animated: animated,
-            alignment: alignment
+            alignment: alignment,
+            animationDuration: ImageListSlideshow.transitionDuration
         )
     }
 
@@ -1020,7 +1028,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         keepWidth: Bool,
         animated: Bool,
         showBorderOverride: Bool? = nil,
-        alignment: WindowSizeAlignment = .center
+        alignment: WindowSizeAlignment = .center,
+        animationDuration: TimeInterval? = nil
     ) {
         guard let window = window else { return }
         guard !appState.isFullScreen, !isTransitioningFullScreen else { return }
@@ -1049,7 +1058,15 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             alignment: alignment
         )
 
-        window.setFrame(newFrame, display: true, animate: animated)
+        if animated, let animationDuration {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = animationDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(newFrame, display: true)
+            }
+        } else {
+            window.setFrame(newFrame, display: true, animate: animated)
+        }
     }
 
     /// 按对齐方式计算新窗口框：列表切图时贴导航栏一侧，其余缩放仍绕中心。

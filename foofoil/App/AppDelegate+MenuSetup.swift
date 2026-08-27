@@ -289,6 +289,15 @@ extension AppDelegate {
         toggleBorderItem.target = self
         viewMenu.addItem(toggleBorderItem)
 
+        let slideshowItem = NSMenuItem(
+            title: NSLocalizedString("Slideshow", comment: ""),
+            action: #selector(toggleImageListSlideshowAction),
+            keyEquivalent: ""
+        )
+        slideshowItem.withSymbol("play.rectangle")
+        slideshowItem.target = self
+        viewMenu.addItem(slideshowItem)
+
         let toggleFullScreenItem = NSMenuItem(
             title: NSLocalizedString("Enter Full Screen", comment: ""),
             action: #selector(toggleFullScreenAction),

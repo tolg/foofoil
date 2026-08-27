@@ -47,6 +47,7 @@ extension AppState {
     func resetFileList() {
         fileList = nil
         fileListRevision = 0
+        stopImageListSlideshow()
         builtInNavigatorContributions = []
         builtInNavigatorActionHandler = nil
         isNavigatorPanelExplicitlyVisible = false
@@ -75,6 +76,7 @@ extension AppState {
         fileList = list
         sourceFingerprint = nil
         syncFileListNavigator()
+        scheduleImageListSlideshowAdvance()
     }
 
     func openFileGroup(_ group: FileListGroup, preservesIdentity: Bool) {
@@ -174,6 +176,7 @@ extension AppState {
         guard let url = resolvedURL(for: item) else {
             syncFileListNavigator()
             saveState()
+            scheduleImageListSlideshowAdvance()
             return
         }
 
@@ -193,14 +196,63 @@ extension AppState {
             applyExternalMedia(url: url, holdsSecurityAccess: false, rotatesIdentity: rotatesIdentity, clearsFileList: false)
         }
         syncFileListNavigator()
+        scheduleImageListSlideshowAdvance()
     }
 
-    func activateAdjacentFileListItem(delta: Int) {
+    func activateAdjacentFileListItem(delta: Int, wraps: Bool = false) {
         guard let list = fileList, list.isPresentable,
               let index = list.items.firstIndex(where: { $0.id == list.currentID }) else { return }
-        let next = index + delta
-        guard list.items.indices.contains(next) else { return }
+        let count = list.items.count
+        let next: Int
+        if wraps {
+            next = ((index + delta) % count + count) % count
+        } else {
+            next = index + delta
+            guard list.items.indices.contains(next) else { return }
+        }
         presentFileListItem(id: list.items[next].id, rotatesIdentity: false)
+    }
+
+    var canToggleImageListSlideshow: Bool {
+        fileList?.isPresentable == true && fileList?.kind == .image
+    }
+
+    func setImageListSlideshowEnabled(_ enabled: Bool) {
+        guard var list = fileList, list.kind == .image, list.isPresentable else { return }
+        list.isSlideshowEnabled = enabled
+        list.slideshowInterval = SettingsStore.shared.imageListSlideshowInterval
+        fileList = list
+        saveState()
+        scheduleImageListSlideshowAdvance()
+    }
+
+    func toggleImageListSlideshow() {
+        setImageListSlideshowEnabled(!(fileList?.isSlideshowEnabled ?? false))
+    }
+
+    func setImageListSlideshowInterval(_ interval: TimeInterval) {
+        SettingsStore.shared.imageListSlideshowInterval = interval
+        guard var list = fileList, list.kind == .image else { return }
+        list.slideshowInterval = SettingsStore.shared.imageListSlideshowInterval
+        fileList = list
+        saveState()
+    }
+
+    func stopImageListSlideshow() {
+        imageListSlideshowWorkItem?.cancel()
+        imageListSlideshowWorkItem = nil
+    }
+
+    /// 到点后循环切到下一项；手动切图或开关变化会重置计时。
+    func scheduleImageListSlideshowAdvance() {
+        stopImageListSlideshow()
+        guard canToggleImageListSlideshow, fileList?.isSlideshowEnabled == true else { return }
+        let interval = SettingsStore.shared.imageListSlideshowInterval
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.activateAdjacentFileListItem(delta: 1, wraps: true)
+        }
+        imageListSlideshowWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: workItem)
     }
 
     /// 右/下/⌃N/⌃F 下一项，左/上/⌃P/⌃B 上一项。
@@ -271,6 +323,7 @@ extension AppState {
                 }
             }
             saveState()
+            scheduleImageListSlideshowAdvance()
             return
         }
 
@@ -284,6 +337,7 @@ extension AppState {
         fileList = list
         syncFileListNavigator()
         saveState()
+        scheduleImageListSlideshowAdvance()
     }
 
     func currentListableFileURL() -> URL? {

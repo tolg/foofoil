@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 import UniformTypeIdentifiers
 
 public nonisolated enum FileListKind: String, Codable, Sendable {
@@ -85,10 +86,30 @@ public nonisolated struct FileListItem: Codable, Equatable, Identifiable, Sendab
     }
 }
 
+/// 图片列表轮播：默认 5 秒，设置里可调，数值走 clamp。
+public nonisolated enum ImageListSlideshow {
+    public static let defaultInterval: TimeInterval = 5
+    public static let minInterval: TimeInterval = 1
+    public static let maxInterval: TimeInterval = 60
+    public static let transitionDuration: TimeInterval = 0.45
+
+    public static var transitionAnimation: Animation {
+        .easeInOut(duration: transitionDuration)
+    }
+
+    public static func clampInterval(_ value: TimeInterval) -> TimeInterval {
+        min(max(value, minInterval), maxInterval)
+    }
+}
+
 public nonisolated struct FileListState: Codable, Equatable, Sendable {
     public var kind: FileListKind
     public var items: [FileListItem]
     public var currentID: String
+    /// 仅图片列表使用；默认关闭，随列表一起持久化。
+    public var isSlideshowEnabled: Bool
+    /// 轮播间隔秒数快照；实际计时以 SettingsStore 全局偏好为准。
+    public var slideshowInterval: TimeInterval
 
     public var isPresentable: Bool { items.count >= 2 }
 
@@ -96,10 +117,33 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
         items.first(where: { $0.id == currentID }) ?? items.first
     }
 
-    public init(kind: FileListKind, items: [FileListItem], currentID: String) {
+    public init(
+        kind: FileListKind,
+        items: [FileListItem],
+        currentID: String,
+        isSlideshowEnabled: Bool = false,
+        slideshowInterval: TimeInterval = ImageListSlideshow.defaultInterval
+    ) {
         self.kind = kind
         self.items = items
         self.currentID = currentID
+        self.isSlideshowEnabled = isSlideshowEnabled
+        self.slideshowInterval = ImageListSlideshow.clampInterval(slideshowInterval)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, items, currentID, isSlideshowEnabled, slideshowInterval
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(FileListKind.self, forKey: .kind)
+        items = try container.decode([FileListItem].self, forKey: .items)
+        currentID = try container.decode(String.self, forKey: .currentID)
+        isSlideshowEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSlideshowEnabled) ?? false
+        slideshowInterval = ImageListSlideshow.clampInterval(
+            try container.decodeIfPresent(TimeInterval.self, forKey: .slideshowInterval) ?? ImageListSlideshow.defaultInterval
+        )
     }
 }
 

@@ -636,6 +636,10 @@ extension AppDelegate {
         activeAppState?.activateAdjacentFileListItem(delta: 1)
     }
 
+    @objc func toggleImageListSlideshowAction() {
+        activeAppState?.toggleImageListSlideshow()
+    }
+
     @objc func goToPDFPageAction() {
         postPDFNavigationNotification(.shouldPromptForPDFPage)
     }

@@ -60,6 +60,14 @@ final class SettingsWindowController: NSWindowController {
         )
         tabController.addTabViewItem(
             makeTab(
+                identifier: "types",
+                title: NSLocalizedString("Types", comment: ""),
+                symbolName: "square.stack",
+                rootView: ContentTypesSettingsView()
+            )
+        )
+        tabController.addTabViewItem(
+            makeTab(
                 identifier: "keyboardShortcuts",
                 title: NSLocalizedString("Keyboard Shortcuts", comment: ""),
                 symbolName: "keyboard",

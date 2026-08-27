@@ -41,6 +41,7 @@ extension AppState {
             self.extensionStateReference = nil
             self.fileList = nil
             self.fileListRevision = 0
+            self.stopImageListSlideshow()
             self.builtInNavigatorContributions = []
             self.builtInNavigatorActionHandler = nil
             self.isNavigatorPanelExplicitlyVisible = false

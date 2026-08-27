@@ -1833,6 +1833,40 @@
         }
       }
     },
+    "Slideshow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slideshow"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动轮播"
+          }
+        }
+      }
+    },
+    "Slideshow (ContextMenu)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slideshow"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动轮播"
+          }
+        }
+      }
+    },
     "This will clear history and cached content for closed windows, plus WebKit website cache, cookies, and stored website data.": {
       "extractionState": "manual",
       "localizations": {
@@ -2567,6 +2601,41 @@
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "General"}},
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "通用"}}
+      }
+    },
+    "Types": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Types"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "类型"}}
+      }
+    },
+    "Images": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Images"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "图片"}}
+      }
+    },
+    "Slideshow Interval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Slideshow Interval"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "轮播间隔"}}
+      }
+    },
+    "Slideshow Interval Seconds Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "%d seconds"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "%d 秒"}}
+      }
+    },
+    "Slideshow Interval Footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "How long each image stays on screen before the next one."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "每张图片显示这么久后，再切换到下一张。"}}
       }
     },
     "Keyboard Shortcuts": {

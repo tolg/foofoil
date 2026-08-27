@@ -158,6 +158,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     }
 
     var saveTask: Task<Void, Never>?
+    var imageListSlideshowWorkItem: DispatchWorkItem?
 
     @Published public var text: String {
         didSet {
@@ -421,6 +422,7 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     deinit {
         renderTask?.cancel()
         saveTask?.cancel()
+        imageListSlideshowWorkItem?.cancel()
         stopVideoAccess()
         if let extensionID = extensionSession?.extensionID {
             ExtensionHost.shared.releaseSession(extensionID: extensionID)

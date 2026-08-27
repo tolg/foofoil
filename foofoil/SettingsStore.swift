@@ -258,7 +258,8 @@ public class SettingsStore {
             Keys.navigatorPanelWidth: NavigatorPanelMetrics.defaultWidth,
             Keys.extensionAutoCheckUpdates: true,
             Keys.extensionAutoDownloadUpdates: false,
-            Keys.extensionAutoInstallCompatibleMinorUpdates: false
+            Keys.extensionAutoInstallCompatibleMinorUpdates: false,
+            Keys.imageListSlideshowInterval: ImageListSlideshow.defaultInterval
         ])
     }
 
@@ -277,6 +278,7 @@ public class SettingsStore {
         static let extensionAutoCheckUpdates = "extensionAutoCheckUpdates"
         static let extensionAutoDownloadUpdates = "extensionAutoDownloadUpdates"
         static let extensionAutoInstallCompatibleMinorUpdates = "extensionAutoInstallCompatibleMinorUpdates"
+        static let imageListSlideshowInterval = "imageListSlideshowInterval"
     }
 
     var navigatorPanelSide: NavigatorPanelSide {
@@ -324,6 +326,23 @@ public class SettingsStore {
     var extensionAutoInstallCompatibleMinorUpdates: Bool {
         get { userDefaults.bool(forKey: Keys.extensionAutoInstallCompatibleMinorUpdates) }
         set { userDefaults.set(newValue, forKey: Keys.extensionAutoInstallCompatibleMinorUpdates) }
+    }
+
+    /// 图片列表轮播间隔（秒）；全局偏好，打开的列表共用。
+    var imageListSlideshowInterval: TimeInterval {
+        get {
+            guard userDefaults.object(forKey: Keys.imageListSlideshowInterval) != nil else {
+                return ImageListSlideshow.defaultInterval
+            }
+            return ImageListSlideshow.clampInterval(userDefaults.double(forKey: Keys.imageListSlideshowInterval))
+        }
+        set {
+            let clamped = ImageListSlideshow.clampInterval(newValue)
+            let current = imageListSlideshowInterval
+            guard abs(current - clamped) > 0.001 else { return }
+            userDefaults.set(clamped, forKey: Keys.imageListSlideshowInterval)
+            NotificationCenter.default.post(name: .imageListSlideshowIntervalDidChange, object: nil)
+        }
     }
 
     public var windowConfigs: [WindowConfig] {
