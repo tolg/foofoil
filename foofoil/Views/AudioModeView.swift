@@ -14,7 +14,6 @@ struct AudioModeView: View {
     let url: URL
     let shouldHideBorder: Bool
     @StateObject private var controller: VideoPlayerController
-    @State private var isHovering = false
     @State private var info: AudioTrackInfo
 
     init(appState: AppState, url: URL, shouldHideBorder: Bool) {
@@ -33,11 +32,11 @@ struct AudioModeView: View {
             metadataBlock
                 .padding(.horizontal, shouldHideBorder ? 20 : 16)
                 .padding(.top, 12)
-                .padding(.bottom, isHovering ? MediaPlaybackBar.overlayBottomInset : 12)
+                .padding(.bottom, appState.isMediaPlaybackControlsVisible ? MediaPlaybackBar.overlayBottomInset : 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: info.artwork == nil ? .center : .bottomLeading)
                 .clipped()
 
-            if isHovering {
+            if appState.isMediaPlaybackControlsVisible {
                 VStack {
                     Spacer(minLength: 0)
                     MediaPlaybackBar(appState: appState, controller: controller)
@@ -46,12 +45,7 @@ struct AudioModeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovering = hovering
-            }
-        }
+        .animation(.easeInOut(duration: 0.15), value: appState.isMediaPlaybackControlsVisible)
         .padding(shouldHideBorder ? 0 : 8)
         .onAppear {
             controller.isLooping = appState.shouldLoopCurrentItem

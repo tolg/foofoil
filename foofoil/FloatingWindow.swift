@@ -97,6 +97,13 @@ public class FloatingWindow: NSWindow {
             }
         }
 
+        if event.type == .mouseMoved
+            || event.type == .leftMouseDragged
+            || event.type == .leftMouseDown
+            || event.type == .scrollWheel {
+            (windowController as? FloatingWindowController)?.handleMediaPointerActivity(at: event.locationInWindow)
+        }
+
         if event.type == .mouseEntered || event.type == .mouseMoved || event.type == .cursorUpdate {
             if let controller = self.windowController as? FloatingWindowController {
                 controller.updateNavigatorEdgeHover(at: event.locationInWindow)

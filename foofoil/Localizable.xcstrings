@@ -2706,6 +2706,34 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "每张图片显示这么久后，再切换到下一张。"}}
       }
     },
+    "Audio and Video": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Audio & Video"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "音频与视频"}}
+      }
+    },
+    "Playback Controls Hide Delay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Hide Controls After"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "控制条隐藏延迟"}}
+      }
+    },
+    "Playback Controls Hide Delay Seconds Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "%d seconds"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "%d 秒"}}
+      }
+    },
+    "Playback Controls Hide Delay Footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Controls hide after the pointer stays still, and reappear as soon as it moves."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "鼠标静止达到设定时间后隐藏控制条，移动时立即重新显示。"}}
+      }
+    },
     "Keyboard Shortcuts": {
       "extractionState": "manual",
       "localizations": {

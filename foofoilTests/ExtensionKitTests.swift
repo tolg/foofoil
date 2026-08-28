@@ -335,6 +335,57 @@ struct ExtensionKitTests {
         controller.close()
     }
 
+    @Test func windowHoverRemainsAvailableWithoutNavigatorContent() throws {
+        let state = AppState()
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+
+        let interior = NSPoint(x: foilWindow.frame.width / 2, y: foilWindow.frame.height / 2)
+        controller.updateNavigatorEdgeHover(at: interior)
+        #expect(state.isPointerInsideWindow)
+
+        let away = NSPoint(x: foilWindow.frame.maxX + 2400, y: foilWindow.frame.minY - 2400)
+        controller.refreshNavigatorHoverFromPointer(screenPoint: away)
+        #expect(state.isPointerInsideWindow == false)
+
+        controller.close()
+    }
+
+    @Test func mediaControlsAppearOnPointerActivityAndHideAfterInactivity() async throws {
+        let state = AppState()
+        state.originalImageName = "foofoil-hover-test.mp3"
+        state.imageURL = URL(fileURLWithPath: "/tmp/foofoil-hover-test.mp3")
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+        let interior = NSPoint(x: foilWindow.frame.width / 2, y: foilWindow.frame.height / 2)
+
+        controller.updateNavigatorEdgeHover(at: interior)
+        controller.handleMediaPointerActivity(at: interior, autoHideInterval: 0.01)
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(state.isPointerInsideWindow)
+        #expect(state.isMediaPlaybackControlsVisible == false)
+
+        controller.handleMediaPointerActivity(at: interior, autoHideInterval: 1)
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        let away = NSPoint(x: foilWindow.frame.maxX + 2400, y: foilWindow.frame.minY - 2400)
+        controller.refreshNavigatorHoverFromPointer(screenPoint: away)
+        #expect(state.isPointerInsideWindow == false)
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        controller.handleMediaPointerExit(autoHideInterval: 0.01)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(state.isMediaPlaybackControlsVisible == false)
+        controller.close()
+    }
+
+    @Test func mediaControlsAutoHideIntervalIsClamped() {
+        #expect(MediaPlaybackControlsAutoHide.clampInterval(0) == MediaPlaybackControlsAutoHide.minInterval)
+        #expect(MediaPlaybackControlsAutoHide.clampInterval(99) == MediaPlaybackControlsAutoHide.maxInterval)
+    }
+
     @Test func fullScreenLifecycleKeepsWindowedBorderAndFramePreferences() throws {
         let state = AppState()
         state.showBorder = true

@@ -32,4 +32,5 @@ extension Notification.Name {
     public static let mediaPlaybackDidFinish = Notification.Name("mediaPlaybackDidFinish")
     public static let openGroupedFiles = Notification.Name("openGroupedFiles")
     public static let imageListSlideshowIntervalDidChange = Notification.Name("imageListSlideshowIntervalDidChange")
+    public static let mediaPlaybackControlsAutoHideIntervalDidChange = Notification.Name("mediaPlaybackControlsAutoHideIntervalDidChange")
 }

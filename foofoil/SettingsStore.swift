@@ -83,6 +83,17 @@ public nonisolated enum MediaPlaybackMode: String, Codable, CaseIterable, Sendab
     }
 }
 
+/// 音视频控制条的鼠标静止自动隐藏时间；全局偏好统一钳制，避免异常值造成永久驻留。
+public nonisolated enum MediaPlaybackControlsAutoHide {
+    public static let defaultInterval: TimeInterval = 2
+    public static let minInterval: TimeInterval = 1
+    public static let maxInterval: TimeInterval = 10
+
+    public static func clampInterval(_ value: TimeInterval) -> TimeInterval {
+        min(max(value, minInterval), maxInterval)
+    }
+}
+
 nonisolated public struct WindowConfig: Codable, Identifiable {
     public let id: UUID
     public var imagePath: String?
@@ -344,7 +355,8 @@ public class SettingsStore {
             Keys.extensionAutoCheckUpdates: true,
             Keys.extensionAutoDownloadUpdates: false,
             Keys.extensionAutoInstallCompatibleMinorUpdates: false,
-            Keys.imageListSlideshowInterval: ImageListSlideshow.defaultInterval
+            Keys.imageListSlideshowInterval: ImageListSlideshow.defaultInterval,
+            Keys.mediaPlaybackControlsAutoHideInterval: MediaPlaybackControlsAutoHide.defaultInterval
         ])
     }
 
@@ -364,6 +376,7 @@ public class SettingsStore {
         static let extensionAutoDownloadUpdates = "extensionAutoDownloadUpdates"
         static let extensionAutoInstallCompatibleMinorUpdates = "extensionAutoInstallCompatibleMinorUpdates"
         static let imageListSlideshowInterval = "imageListSlideshowInterval"
+        static let mediaPlaybackControlsAutoHideInterval = "mediaPlaybackControlsAutoHideInterval"
     }
 
     var navigatorPanelSide: NavigatorPanelSide {
@@ -427,6 +440,24 @@ public class SettingsStore {
             guard abs(current - clamped) > 0.001 else { return }
             userDefaults.set(clamped, forKey: Keys.imageListSlideshowInterval)
             NotificationCenter.default.post(name: .imageListSlideshowIntervalDidChange, object: nil)
+        }
+    }
+
+    /// 音视频控制条在鼠标静止后的隐藏延迟（秒）；修改后立即通知所有已打开窗口。
+    var mediaPlaybackControlsAutoHideInterval: TimeInterval {
+        get {
+            guard userDefaults.object(forKey: Keys.mediaPlaybackControlsAutoHideInterval) != nil else {
+                return MediaPlaybackControlsAutoHide.defaultInterval
+            }
+            return MediaPlaybackControlsAutoHide.clampInterval(
+                userDefaults.double(forKey: Keys.mediaPlaybackControlsAutoHideInterval)
+            )
+        }
+        set {
+            let clamped = MediaPlaybackControlsAutoHide.clampInterval(newValue)
+            guard abs(mediaPlaybackControlsAutoHideInterval - clamped) > 0.001 else { return }
+            userDefaults.set(clamped, forKey: Keys.mediaPlaybackControlsAutoHideInterval)
+            NotificationCenter.default.post(name: .mediaPlaybackControlsAutoHideIntervalDidChange, object: nil)
         }
     }
 

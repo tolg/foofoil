@@ -31,7 +31,6 @@ struct VideoModeView: View {
     let url: URL
     let shouldHideBorder: Bool
     @StateObject private var controller: VideoPlayerController
-    @State private var isHovering = false
 
     init(appState: AppState, url: URL, shouldHideBorder: Bool) {
         self.appState = appState
@@ -44,7 +43,7 @@ struct VideoModeView: View {
         ZStack {
             PlayerView(player: controller.player)
 
-            if isHovering {
+            if appState.isMediaPlaybackControlsVisible {
                 // 底部控制条：播放/暂停 + 时间 + 进度条 + 静音 + 播放模式。
                 // 整个控制条区域不触发窗口拖动，控制条以外区域拖拽仍可移动窗口。
                 VStack {
@@ -55,12 +54,7 @@ struct VideoModeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovering = hovering
-            }
-        }
+        .animation(.easeInOut(duration: 0.15), value: appState.isMediaPlaybackControlsVisible)
         // 与图片有边框模式保持一致的 8pt 内容边距
         .padding(shouldHideBorder ? 0 : 8)
         .onAppear {

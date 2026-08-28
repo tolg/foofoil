@@ -136,6 +136,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private let navigatorPanelController: NavigatorPanelController
     private var pendingNavigatorPanelHide: DispatchWorkItem?
     private var pendingNavigatorWidthCommit: DispatchWorkItem?
+    private var pendingMediaPlaybackControlsHide: DispatchWorkItem?
     private var navigatorHoverLocalMonitor: Any?
     private var navigatorHoverGlobalMonitor: Any?
     private var isTransitioningFullScreen = false
@@ -194,6 +195,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 self?.appState.scheduleImageListSlideshowAdvance()
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .mediaPlaybackControlsAutoHideIntervalDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.appState.isMediaPlaybackControlsVisible else { return }
+                self.scheduleMediaPlaybackControlsHide()
+            }
+            .store(in: &cancellables)
     }
 
     required init?(coder: NSCoder) {
@@ -209,6 +217,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 guard let self = self else { return }
                 DispatchQueue.main.async {
                     guard let url = imageURL else {
+                        self.hideMediaPlaybackControls()
                         self.currentImageSize = nil
                         self.currentMediaSize = nil
                         return
@@ -216,11 +225,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                     self.applyWindowSizeLimits()
                     if self.appState.isExternalMediaDocument {
                         self.currentImageSize = nil
+                        self.revealMediaPlaybackControlsIfPointerIsInside()
                         self.fetchMediaPresentationSize(for: url) { size in
                             guard self.appState.imageURL == url else { return }
                             self.currentMediaSize = size
                         }
                     } else {
+                        self.hideMediaPlaybackControls()
                         self.currentMediaSize = nil
                         if let image = self.appState.loadImage(from: url) {
                             self.currentImageSize = AudioMetadataLoader.layoutSize(image)
@@ -650,6 +661,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func refreshNavigatorHoverFromPointer(windowPoint: NSPoint? = nil, screenPoint: NSPoint? = nil) {
+        refreshWindowHoverFromPointer(windowPoint: windowPoint, screenPoint: screenPoint)
         guard let window, !appState.navigatorContributions.isEmpty else {
             if appState.isNavigatorEdgeHovered || appState.isNavigatorPanelHovered {
                 appState.isNavigatorEdgeHovered = false
@@ -685,6 +697,78 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         } else {
             updateNavigatorHoverMonitors()
         }
+    }
+
+    /// SwiftUI 子视图增删会改变自身 tracking area；始终以窗口坐标判断，避免 hover 瞬时丢失。
+    private func refreshWindowHoverFromPointer(windowPoint: NSPoint? = nil, screenPoint: NSPoint? = nil) {
+        guard let window else {
+            appState.isPointerInsideWindow = false
+            return
+        }
+        let insideFromEvent = windowPoint.map {
+            $0.x >= 0 && $0.y >= 0 && $0.x <= window.frame.width && $0.y <= window.frame.height
+        } ?? false
+        let inside = insideFromEvent || window.frame.contains(screenPoint ?? NSEvent.mouseLocation)
+        let wasInside = appState.isPointerInsideWindow
+        if wasInside != inside {
+            appState.isPointerInsideWindow = inside
+        }
+        if inside {
+            if !wasInside { revealMediaPlaybackControls() }
+        } else if wasInside {
+            handleMediaPointerExit()
+        }
+    }
+
+    /// 只由真实指针输入调用；SwiftUI tracking area 重建产生的 entered/exited 不会让控制条自行复现。
+    func handleMediaPointerActivity(at point: NSPoint, autoHideInterval: TimeInterval? = nil) {
+        guard let window,
+              appState.isExternalMediaDocument,
+              point.x >= 0, point.y >= 0,
+              point.x <= window.frame.width, point.y <= window.frame.height else { return }
+        revealMediaPlaybackControls(autoHideInterval: autoHideInterval)
+    }
+
+    /// 离开窗口与窗口内静止采用同一延迟；重新进入前控制条仍平滑保留。
+    func handleMediaPointerExit(autoHideInterval: TimeInterval? = nil) {
+        guard appState.isExternalMediaDocument,
+              appState.isMediaPlaybackControlsVisible else { return }
+        scheduleMediaPlaybackControlsHide(after: autoHideInterval)
+    }
+
+    private func revealMediaPlaybackControlsIfPointerIsInside() {
+        guard appState.isPointerInsideWindow else {
+            hideMediaPlaybackControls()
+            return
+        }
+        revealMediaPlaybackControls()
+    }
+
+    private func revealMediaPlaybackControls(autoHideInterval: TimeInterval? = nil) {
+        guard appState.isExternalMediaDocument else {
+            hideMediaPlaybackControls()
+            return
+        }
+        appState.isMediaPlaybackControlsVisible = true
+        scheduleMediaPlaybackControlsHide(after: autoHideInterval)
+    }
+
+    private func scheduleMediaPlaybackControlsHide(after interval: TimeInterval? = nil) {
+        pendingMediaPlaybackControlsHide?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.appState.isMediaPlaybackControlsVisible = false
+            self.pendingMediaPlaybackControlsHide = nil
+        }
+        pendingMediaPlaybackControlsHide = workItem
+        let delay = interval ?? SettingsStore.shared.mediaPlaybackControlsAutoHideInterval
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay), execute: workItem)
+    }
+
+    private func hideMediaPlaybackControls() {
+        pendingMediaPlaybackControlsHide?.cancel()
+        pendingMediaPlaybackControlsHide = nil
+        appState.isMediaPlaybackControlsVisible = false
     }
 
     private func updateNavigatorHoverMonitors() {
@@ -1345,6 +1429,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         pendingZoomCommit?.cancel()
         pendingNavigatorPanelHide?.cancel()
         pendingNavigatorWidthCommit?.cancel()
+        pendingMediaPlaybackControlsHide?.cancel()
         removeNavigatorHoverMonitors()
         navigatorPanelController.detachAndClose()
         pinchImageBaseScale = nil
