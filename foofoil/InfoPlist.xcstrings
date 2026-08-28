@@ -87,6 +87,40 @@
         }
       }
     },
+    "Related Audio": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related Audio"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关联音频"
+          }
+        }
+      }
+    },
+    "Cue Sheet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cue Sheet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CUE 列表"
+          }
+        }
+      }
+    },
     "PDF Document": {
       "extractionState": "manual",
       "localizations": {

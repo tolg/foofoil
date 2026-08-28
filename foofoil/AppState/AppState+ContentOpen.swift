@@ -70,7 +70,13 @@ extension AppState {
             applyExternalMedia(url: url, holdsSecurityAccess: holdsSecurityAccess, rotatesIdentity: true, clearsFileList: true)
         }
 
-        func applyExternalMedia(url: URL, holdsSecurityAccess: Bool, rotatesIdentity: Bool, clearsFileList: Bool) {
+        func applyExternalMedia(
+            url: URL,
+            holdsSecurityAccess: Bool,
+            rotatesIdentity: Bool,
+            clearsFileList: Bool,
+            originalName: String? = nil
+        ) {
             isBatchUpdating = true
             defer {
                 isBatchUpdating = false
@@ -83,7 +89,10 @@ extension AppState {
                 resetFileList()
             }
             stopVideoAccess()
-            self.originalImageName = url.lastPathComponent
+            if let item = fileList?.currentItem, item.cue != nil {
+                beginCueRelatedAccess(for: item)
+            }
+            self.originalImageName = originalName ?? url.lastPathComponent
             self.sourceFingerprint = fileList == nil ? Self.localSourceFingerprint(for: url) : nil
             self.imageSource = nil
             if clearsFileList || imageURL == nil {
@@ -117,6 +126,12 @@ extension AppState {
         func stopVideoAccess() {
             accessingVideoURL?.stopAccessingSecurityScopedResource()
             accessingVideoURL = nil
+            accessingCueURL?.stopAccessingSecurityScopedResource()
+            accessingCueURL = nil
+            if let presenter = cueRelatedPresenter {
+                NSFileCoordinator.removeFilePresenter(presenter)
+                cueRelatedPresenter = nil
+            }
         }
 
         /// 从历史配置恢复视频文件的沙盒访问：优先解析安全范围书签重新授权；
@@ -265,6 +280,9 @@ extension AppState {
 
         func isTextFile(url: URL) -> Bool {
             let ext = url.pathExtension.lowercased()
+            if FileListGrouper.isCueFile(url) {
+                return false
+            }
             let webExtensions = ["html", "htm", "webarchive", "xhtml"]
             if webExtensions.contains(ext) {
                 return false
@@ -290,6 +308,10 @@ extension AppState {
 
             if ExtensionHost.shared.canOpen(url: url) { return true }
 
+            if FileListGrouper.isCueFile(url) {
+                return true
+            }
+
             let ext = url.pathExtension.lowercased()
             if ["html", "htm", "webarchive", "xhtml"].contains(ext) || isTextFile(url: url) {
                 return true
@@ -305,6 +327,11 @@ extension AppState {
 
         public func openFile(url: URL) {
             guard canOpenFile(url: url) else { return }
+
+            if FileListGrouper.isCueFile(url) {
+                installCueSheets(urls: [url], preservesIdentity: false)
+                return
+            }
 
             resetFileList()
 

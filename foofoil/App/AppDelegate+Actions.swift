@@ -314,6 +314,9 @@ extension AppDelegate {
         panel.canChooseFiles = true
 
         var types: [UTType] = [.image, .pdf, .html, .text, .movie, .audio]
+        if let cueType = UTType(filenameExtension: "cue") {
+            types.append(cueType)
+        }
         if let testExtensionType = UTType("app.foofoil.test-document") {
             types.append(testExtensionType)
         }
@@ -365,11 +368,28 @@ extension AppDelegate {
 
         if append, let target {
             if let kind = target.listableKind {
-                let matching = groups.filter { $0.kind == .listable(kind) }.flatMap(\.urls)
+                let matching: [URL]
+                if kind == .audio {
+                    let cues = groups.filter { $0.kind == .cueSheets }.flatMap(\.urls)
+                    matching = cues.isEmpty
+                        ? groups.filter { $0.kind == .listable(.audio) }.flatMap(\.urls)
+                        : cues
+                } else {
+                    matching = groups.filter { $0.kind == .listable(kind) }.flatMap(\.urls)
+                }
                 if !matching.isEmpty {
                     target.appendToFileList(urls: matching)
                 }
-                groups.removeAll { $0.kind == .listable(kind) }
+                groups.removeAll { group in
+                    switch group.kind {
+                    case .cueSheets:
+                        return kind == .audio
+                    case .listable(let listKind):
+                        return listKind == kind
+                    case .other:
+                        return false
+                    }
+                }
             }
             for group in groups {
                 openGroupInNewWindow(group)

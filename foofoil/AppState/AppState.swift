@@ -294,6 +294,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     public var videoBookmarkData: Data?
     /// 当前已通过书签持有访问授权的媒体 URL，切换内容或销毁时需停止访问。
     var accessingVideoURL: URL?
+    /// 播放 CUE 曲目时保持对 CUE 文件的安全范围访问，以便读取同目录音频。
+    var accessingCueURL: URL?
+    var cueRelatedPresenter: CueRelatedFilePresenter?
 
     var renderTask: Task<Void, Never>?
 

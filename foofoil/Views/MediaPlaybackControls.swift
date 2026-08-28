@@ -9,9 +9,28 @@ import SwiftUI
 import Combine
 import AVFoundation
 
+@MainActor
+protocol MediaTransportControlling: ObservableObject {
+    var isPlaying: Bool { get }
+    var currentTime: Double { get }
+    var duration: Double { get }
+    var isMuted: Bool { get }
+    var volume: Float { get }
+    var volumeIconName: String { get }
+    var isScrubbing: Bool { get set }
+    func play()
+    func pause()
+    func togglePlayPause()
+    func toggleMute()
+    func setVolume(_ newValue: Float)
+    func seek(to time: Double)
+    func adjustTime(by delta: Double)
+    func adjustVolume(by delta: Float)
+}
+
 /// 媒体播放状态控制：负责播放器生命周期、进度汇报与播放/暂停切换。视频与音频共用。
 @MainActor
-final class VideoPlayerController: ObservableObject {
+final class VideoPlayerController: ObservableObject, MediaTransportControlling {
     let player: AVPlayer
     @Published var isPlaying = false
     @Published var currentTime: Double = 0
@@ -25,20 +44,30 @@ final class VideoPlayerController: ObservableObject {
 
     private let appStateID: UUID
     private var timeObserver: Any?
+    private var boundaryObserver: Any?
     private var observers: [NSObjectProtocol] = []
+    /// CUE 曲目起点，CMTime timescale 75。
+    private var rangeStart: CMTime = .zero
+    /// CUE 曲目终点；空表示用文件总时长。
+    private var rangeEnd: CMTime?
+    private var fileDuration: CMTime = .invalid
+    private var isHandlingEnd = false
+    private var seekGeneration: UInt64 = 0
 
-    init(appStateID: UUID, url: URL, isLooping: Bool) {
+    init(appStateID: UUID, url: URL, isLooping: Bool, range: MediaPlaybackRange? = nil) {
         self.appStateID = appStateID
         self.isLooping = isLooping
         self.player = AVPlayer(url: url)
+        apply(range)
+        loadFileDuration()
 
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
+            forInterval: CMTime(value: 1, timescale: CueTime.timescale),
             queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, !self.isScrubbing, time.seconds.isFinite else { return }
-                self.currentTime = time.seconds
+                guard let self, !self.isScrubbing else { return }
+                self.handlePlayerTime(time)
             }
         }
 
@@ -46,19 +75,7 @@ final class VideoPlayerController: ObservableObject {
         observers.append(center.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] notification in
             MainActor.assumeIsolated {
                 guard let self, notification.object as? AVPlayerItem === self.player.currentItem else { return }
-                if self.isLooping {
-                    // 单曲循环：回到片头继续播放
-                    self.player.seek(to: .zero)
-                    self.currentTime = 0
-                    self.player.play()
-                } else {
-                    self.isPlaying = false
-                    NotificationCenter.default.post(
-                        name: .mediaPlaybackDidFinish,
-                        object: nil,
-                        userInfo: ["id": self.appStateID]
-                    )
-                }
+                self.handleItemEnd()
             }
         })
         // 窗口级空格键事件经通知路由到这里，与 PDF 翻页的处理方式一致。
@@ -69,19 +86,29 @@ final class VideoPlayerController: ObservableObject {
             }
         })
 
-        loadDuration()
+        seek(to: 0)
     }
 
     deinit {
         if let timeObserver { player.removeTimeObserver(timeObserver) }
+        if let boundaryObserver { player.removeTimeObserver(boundaryObserver) }
         observers.forEach(NotificationCenter.default.removeObserver)
     }
 
     func play() {
         // 已播到结尾时再次播放从头开始。
         if duration > 0, currentTime >= duration - 0.05 {
-            player.seek(to: .zero)
-            currentTime = 0
+            seek(to: 0, thenPlay: true)
+            return
+        }
+        let playerTime = player.currentTime()
+        if CMTIME_IS_NUMERIC(rangeStart), CMTimeCompare(rangeStart, .zero) > 0 {
+            let expected = CMTimeAdd(rangeStart, CMTime(seconds: currentTime, preferredTimescale: CueTime.timescale))
+            if CMTIME_IS_NUMERIC(playerTime),
+               abs(CMTimeGetSeconds(CMTimeSubtract(playerTime, expected))) > 0.05 {
+                seek(to: currentTime, thenPlay: true)
+                return
+            }
         }
         player.play()
         isPlaying = true
@@ -122,8 +149,39 @@ final class VideoPlayerController: ObservableObject {
     }
 
     func seek(to time: Double) {
-        currentTime = time
-        player.seek(to: CMTime(seconds: time, preferredTimescale: 600))
+        seek(to: time, thenPlay: nil)
+    }
+
+    func seek(to time: Double, thenPlay: Bool?) {
+        var absolute = CMTimeAdd(
+            rangeStart,
+            CMTime(seconds: max(0, time), preferredTimescale: CueTime.timescale)
+        )
+        if let end = effectiveRangeEnd, CMTimeCompare(absolute, end) > 0 {
+            absolute = end
+        }
+        if CMTimeCompare(absolute, rangeStart) < 0 {
+            absolute = rangeStart
+        }
+        currentTime = max(0, CMTimeGetSeconds(CMTimeSubtract(absolute, rangeStart)))
+        seekGeneration &+= 1
+        let generation = seekGeneration
+        player.seek(
+            to: absolute,
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        ) { [weak self] finished in
+            DispatchQueue.main.async {
+                guard let self, self.seekGeneration == generation, finished else { return }
+                if thenPlay == true {
+                    self.player.play()
+                    self.isPlaying = true
+                } else if thenPlay == false {
+                    self.pause()
+                }
+                self.isHandlingEnd = false
+            }
+        }
     }
 
     /// 滚轮微调播放进度（秒），自动钳制到有效范围。
@@ -166,22 +224,100 @@ final class VideoPlayerController: ObservableObject {
         return String(format: "%d:%02d", minutes, remainder)
     }
 
-    /// 同一窗口内换片时替换播放内容并自动开始播放。
-    func load(url: URL) {
-        guard (player.currentItem?.asset as? AVURLAsset)?.url != url else { return }
-        player.replaceCurrentItem(with: AVPlayerItem(url: url))
-        currentTime = 0
-        duration = 0
-        loadDuration()
-        play()
+    /// 同一窗口内换片时替换播放内容并自动开始播放。同一文件的 CUE 曲目只切换区间。
+    func load(url: URL, range: MediaPlaybackRange? = nil) {
+        let currentURL = (player.currentItem?.asset as? AVURLAsset)?.url
+        if currentURL != url {
+            player.replaceCurrentItem(with: AVPlayerItem(url: url))
+            fileDuration = .invalid
+            duration = 0
+            loadFileDuration()
+        }
+        apply(range)
+        seek(to: 0, thenPlay: true)
     }
 
-    private func loadDuration() {
+    func apply(_ range: MediaPlaybackRange?) {
+        if let range {
+            rangeStart = CueTime.time(range.startCueFrames)
+            rangeEnd = range.endCueFrames.map(CueTime.time)
+        } else {
+            rangeStart = .zero
+            rangeEnd = nil
+        }
+        updateDisplayedDuration()
+        updateBoundaryObserver()
+    }
+
+    private var effectiveRangeEnd: CMTime? {
+        if let rangeEnd, CMTIME_IS_NUMERIC(rangeEnd), CMTimeCompare(rangeEnd, rangeStart) > 0 {
+            return rangeEnd
+        }
+        if CMTIME_IS_NUMERIC(fileDuration), CMTimeCompare(fileDuration, rangeStart) > 0 {
+            return fileDuration
+        }
+        return nil
+    }
+
+    private func handlePlayerTime(_ time: CMTime) {
+        guard CMTIME_IS_NUMERIC(time) else { return }
+        if let end = effectiveRangeEnd, CMTimeCompare(time, end) >= 0 {
+            currentTime = duration
+            if isPlaying {
+                handleItemEnd()
+            }
+            return
+        }
+        currentTime = max(0, CMTimeGetSeconds(CMTimeSubtract(time, rangeStart)))
+    }
+
+    private func handleItemEnd() {
+        guard !isHandlingEnd else { return }
+        isHandlingEnd = true
+        if isLooping {
+            seek(to: 0, thenPlay: true)
+        } else {
+            pause()
+            currentTime = duration
+            NotificationCenter.default.post(
+                name: .mediaPlaybackDidFinish,
+                object: nil,
+                userInfo: ["id": appStateID]
+            )
+            isHandlingEnd = false
+        }
+    }
+
+    private func updateDisplayedDuration() {
+        guard let end = effectiveRangeEnd else { return }
+        duration = max(0, CMTimeGetSeconds(CMTimeSubtract(end, rangeStart)))
+    }
+
+    private func updateBoundaryObserver() {
+        if let boundaryObserver {
+            player.removeTimeObserver(boundaryObserver)
+            self.boundaryObserver = nil
+        }
+        guard let end = effectiveRangeEnd else { return }
+        boundaryObserver = player.addBoundaryTimeObserver(
+            forTimes: [NSValue(time: end)],
+            queue: .main
+        ) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.handleItemEnd()
+            }
+        }
+    }
+
+    /// 末轨终点用 AVAsset.duration；分轨起点仍是 CUE 的 1/75 秒 CMTime。
+    private func loadFileDuration() {
         guard let asset = player.currentItem?.asset else { return }
         Task { [weak self] in
             guard let duration = try? await asset.load(.duration),
                   duration.isNumeric, duration.seconds > 0 else { return }
-            self?.duration = duration.seconds
+            self?.fileDuration = duration
+            self?.updateDisplayedDuration()
+            self?.updateBoundaryObserver()
         }
     }
 }
@@ -320,14 +456,17 @@ struct WheelIconButton: NSViewRepresentable {
 }
 
 /// 底部播放控制条：播放/暂停 + 当前时间 + 进度 + 总时长 + 音量 + 播放模式；视频与音频共用。
-struct MediaPlaybackBar: View {
+enum MediaPlaybackBarMetrics {
     /// 单行播放条所需的最小窗口宽度，含时间标签、滑块与按钮，避免音视频窗口缩到控件放不下。
     static let minimumWindowWidth: CGFloat = 380
     /// 悬浮控制条占用的底部空间，供音频元数据避让。
     static let overlayBottomInset: CGFloat = 56
+}
+
+struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
 
     @ObservedObject var appState: AppState
-    @ObservedObject var controller: VideoPlayerController
+    @ObservedObject var controller: Controller
     @State private var isVolumeHovering = false
 
     var body: some View {

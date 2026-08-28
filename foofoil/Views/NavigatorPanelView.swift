@@ -183,11 +183,6 @@ struct NavigatorPanelView: View {
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
-                    if row.item.isCurrent {
-                        Image(systemName: "play.fill")
-                            .font(.caption2)
-                            .foregroundStyle(Color.accentColor)
-                    }
                 }
                 .contentShape(Rectangle())
             }

@@ -29,7 +29,7 @@ public struct ContentView: View {
         let minimumLength: CGFloat = usesCompactMinimumSize ? 80 : 150
         // 音视频窗口再抬高最小宽度，保证底部播放条单行能放下。
         let minimumWidth = appState.isExternalMediaDocument
-            ? max(minimumLength, MediaPlaybackBar.minimumWindowWidth)
+            ? max(minimumLength, MediaPlaybackBarMetrics.minimumWindowWidth)
             : minimumLength
         // PDF 显示边框时，四周保留 12pt 的边框区域。
         let isMarkdownPreview = appState.isMarkdownPreview && appState.isMarkdownDocument

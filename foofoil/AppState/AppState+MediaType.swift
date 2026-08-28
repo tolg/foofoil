@@ -33,6 +33,8 @@ extension AppState {
 
         /// 当前内容是否为音频文档（复用图片内容通道，但不经缓存）。
         public var isAudioDocument: Bool {
+            if fileList?.kind == .audio { return true }
+            if let url = imageURL, Self.isAudioFileName(url.lastPathComponent) { return true }
             guard let name = originalImageName else { return false }
             return Self.isAudioFileName(name)
         }

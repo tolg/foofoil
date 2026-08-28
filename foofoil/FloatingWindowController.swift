@@ -1577,7 +1577,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private func minimumWindowSize(showBorderOverride: Bool? = nil) -> NSSize {
         let length = minimumWindowLength(showBorderOverride: showBorderOverride)
         let width = appState.isExternalMediaDocument
-            ? max(length, MediaPlaybackBar.minimumWindowWidth)
+            ? max(length, MediaPlaybackBarMetrics.minimumWindowWidth)
             : length
         return NSSize(width: width, height: length)
     }

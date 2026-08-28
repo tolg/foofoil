@@ -7,6 +7,7 @@
 
 import AppKit
 import AVFoundation
+import AudioToolbox
 import UniformTypeIdentifiers
 
 /// 从音频文件提取的展示信息；封面优先使用内嵌 artwork，其次同目录匹配的封面图。
@@ -43,6 +44,20 @@ nonisolated struct AudioTrackInfo {
             width: contentSize.width * scale + inset,
             height: contentSize.height * scale + inset
         )
+    }
+}
+
+/// 以文件头采样数为准的播放时钟。AVAsset.duration 对 FLAC 常偏短，导致 CUE 后几段起点漂移、末段进度条提前走满。
+nonisolated struct AudioPlaybackTiming: Equatable, Sendable {
+    var duration: Double
+    var sampleRate: Double
+    var sampleCount: Int64
+    var timescale: CMTimeScale
+
+    func time(from seconds: Double) -> CMTime {
+        let scale = max(1, timescale)
+        let value = Int64((max(0, seconds) * Double(scale)).rounded())
+        return CMTime(value: value, timescale: scale)
     }
 }
 
@@ -93,6 +108,72 @@ nonisolated enum AudioMetadataLoader {
             return size
         }
         return AudioTrackInfo.fallbackPresentationSize
+    }
+
+    /// 用 AudioFile 的采样帧数计算真实时长；FLAC 不要用 AVAsset.duration。
+    static func playbackTiming(for url: URL) -> AudioPlaybackTiming? {
+        if let timing = timingFromAVAudioFile(url) { return timing }
+        return timingFromAudioFile(url)
+    }
+
+    private static func timingFromAVAudioFile(_ url: URL) -> AudioPlaybackTiming? {
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let sampleRate = file.processingFormat.sampleRate > 0
+            ? file.processingFormat.sampleRate
+            : file.fileFormat.sampleRate
+        let frames = file.length
+        guard sampleRate > 0, frames > 0 else { return nil }
+        return makeTiming(duration: Double(frames) / sampleRate, sampleRate: sampleRate, sampleCount: frames)
+    }
+
+    private static func timingFromAudioFile(_ url: URL) -> AudioPlaybackTiming? {
+        var fileID: AudioFileID?
+        guard AudioFileOpenURL(url as CFURL, .readPermission, 0, &fileID) == noErr, let fileID else {
+            return nil
+        }
+        defer { AudioFileClose(fileID) }
+
+        var asbd = AudioStreamBasicDescription()
+        var asbdSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        guard AudioFileGetProperty(fileID, kAudioFilePropertyDataFormat, &asbdSize, &asbd) == noErr,
+              asbd.mSampleRate > 0 else {
+            return nil
+        }
+
+        var duration: TimeInterval = 0
+        var durationSize = UInt32(MemoryLayout<TimeInterval>.size)
+        if AudioFileGetProperty(fileID, kAudioFilePropertyEstimatedDuration, &durationSize, &duration) == noErr,
+           duration > 0 {
+            return makeTiming(
+                duration: duration,
+                sampleRate: asbd.mSampleRate,
+                sampleCount: Int64((duration * asbd.mSampleRate).rounded())
+            )
+        }
+
+        var packetCount: UInt64 = 0
+        var packetSize = UInt32(MemoryLayout<UInt64>.size)
+        guard AudioFileGetProperty(fileID, kAudioFilePropertyAudioDataPacketCount, &packetSize, &packetCount) == noErr,
+              packetCount > 0 else {
+            return nil
+        }
+        let framesPerPacket = max(1, asbd.mFramesPerPacket)
+        let sampleCount = Int64(packetCount * UInt64(framesPerPacket))
+        return makeTiming(
+            duration: Double(sampleCount) / asbd.mSampleRate,
+            sampleRate: asbd.mSampleRate,
+            sampleCount: sampleCount
+        )
+    }
+
+    private static func makeTiming(duration: Double, sampleRate: Double, sampleCount: Int64) -> AudioPlaybackTiming {
+        let timescale = CMTimeScale(clamping: max(1, Int(sampleRate.rounded())))
+        return AudioPlaybackTiming(
+            duration: duration,
+            sampleRate: sampleRate,
+            sampleCount: sampleCount,
+            timescale: timescale
+        )
     }
 
     /// 优先用像素尺寸，避免内嵌封面 NSImage.size 尚未就绪或被 DPI 压成 0/1。

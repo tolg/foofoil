@@ -70,6 +70,16 @@ extension AppState {
             }
             return resolved
         }
+        list.sections = list.sections.map { section in
+            var resolved = section
+            if let bookmark = section.cueSheetBookmark, let url = Self.resolveVideoBookmark(bookmark) {
+                resolved.cueSheetPath = url.path
+                if url.path != section.cueSheetPath {
+                    resolved.cueSheetBookmark = Self.makeSecurityScopedBookmark(for: url) ?? bookmark
+                }
+            }
+            return resolved
+        }
         if list.currentItem == nil, let first = list.items.first {
             list.currentID = first.id
         }
@@ -81,6 +91,8 @@ extension AppState {
 
     func openFileGroup(_ group: FileListGroup, preservesIdentity: Bool) {
         switch group.kind {
+        case .cueSheets:
+            installCueSheets(urls: group.urls, preservesIdentity: preservesIdentity)
         case .listable(let kind) where group.urls.count >= 2:
             installFileList(kind: kind, urls: group.urls, preservesIdentity: preservesIdentity)
         case .listable, .other:
@@ -88,6 +100,11 @@ extension AppState {
                 openFile(url: url)
             }
         }
+    }
+
+    /// 当前 CUE 曲目的播放区间；普通音频为空。
+    var currentPlaybackRange: MediaPlaybackRange? {
+        fileList?.currentItem?.cue?.playbackRange
     }
 
     func installFileList(kind: FileListKind, urls: [URL], preservesIdentity: Bool) {
@@ -115,6 +132,18 @@ extension AppState {
     @discardableResult
     func appendToFileList(urls: [URL]) -> [URL] {
         guard let kind = listableKind else { return urls }
+        if kind == .audio {
+            let cueURLs = uniqueExistingURLs(urls).filter(FileListGrouper.isCueFile)
+            if !cueURLs.isEmpty {
+                appendCueSheets(urls: cueURLs)
+                return urls.filter { url in
+                    !cueURLs.contains(where: {
+                        $0.resolvingSymlinksInPath().standardizedFileURL.path
+                            == url.resolvingSymlinksInPath().standardizedFileURL.path
+                    })
+                }
+            }
+        }
         let incoming = uniqueExistingURLs(urls).filter { FileListGrouper.classify(url: $0) == .listable(kind) }
         let leftover = urls.filter { url in
             !incoming.contains(where: { $0.resolvingSymlinksInPath().standardizedFileURL.path == url.resolvingSymlinksInPath().standardizedFileURL.path })
@@ -147,12 +176,14 @@ extension AppState {
         return leftover
     }
 
-    /// 已显示可列表内容时，拖放只接收当前类型；混入的其它文件直接忽略。
+    /// 已显示可列表内容时，拖放只接收当前类型；混入的其它文件直接忽略。批次含 CUE 时只收 CUE。
     @discardableResult
     func appendMatchingDroppedFiles(urls: [URL]) -> Bool {
         guard let kind = listableKind else { return false }
-        let matching = urls.filter {
-            canOpenFile(url: $0) && FileListGrouper.classify(url: $0) == .listable(kind)
+        let preferred = FileListGrouper.preferredOpenableURLs(from: urls.filter { canOpenFile(url: $0) })
+        let matching = preferred.filter { url in
+            if kind == .audio, FileListGrouper.isCueFile(url) { return true }
+            return FileListGrouper.classify(url: url) == .listable(kind)
         }
         guard !matching.isEmpty else { return false }
         appendToFileList(urls: matching)
@@ -160,12 +191,12 @@ extension AppState {
     }
 
     func matchingDroppedFiles(urls: [URL]) -> [URL] {
+        let openable = urls.filter { canOpenFile(url: $0) }
+        let preferred = FileListGrouper.preferredOpenableURLs(from: openable)
         guard let kind = currentDroppedFileKind else {
-            return urls.filter { canOpenFile(url: $0) }
+            return preferred
         }
-        return urls.filter {
-            canOpenFile(url: $0) && FileListGrouper.dropKind(url: $0) == kind
-        }
+        return preferred.filter { FileListGrouper.dropKind(url: $0) == kind }
     }
 
     func presentFileListItem(id: String, rotatesIdentity: Bool) {
@@ -193,7 +224,12 @@ extension AppState {
                 cacheToken: item.id
             )
         case .video, .audio:
-            applyExternalMedia(url: url, holdsSecurityAccess: false, rotatesIdentity: rotatesIdentity, clearsFileList: false)
+            applyExternalMedia(
+                url: url,
+                holdsSecurityAccess: false,
+                rotatesIdentity: rotatesIdentity,
+                clearsFileList: false
+            )
         }
         syncFileListNavigator()
         scheduleImageListSlideshowAdvance()
@@ -311,10 +347,20 @@ extension AppState {
         switch action.kind {
         case .activate:
             if let id = action.itemIDs.first {
-                presentFileListItem(id: id, rotatesIdentity: false)
+                if let first = fileList?.items.first(where: { $0.cue?.sectionID == id }) {
+                    presentFileListItem(id: first.id, rotatesIdentity: false)
+                } else {
+                    presentFileListItem(id: id, rotatesIdentity: false)
+                }
             }
         case .remove:
-            removeFileListItems(ids: action.itemIDs)
+            var ids = action.itemIDs
+            if let list = fileList {
+                for id in action.itemIDs where list.sections.contains(where: { $0.id == id }) {
+                    ids.append(contentsOf: list.items.compactMap { $0.cue?.sectionID == id ? $0.id : nil })
+                }
+            }
+            removeFileListItems(ids: ids)
         case .move:
             break
         }
@@ -325,6 +371,8 @@ extension AppState {
         let removing = Set(ids)
         let removedCurrent = removing.contains(list.currentID)
         list.items.removeAll { removing.contains($0.id) }
+        let remainingSectionIDs = Set(list.items.compactMap(\.cue?.sectionID))
+        list.sections.removeAll { !remainingSectionIDs.contains($0.id) }
 
         if list.items.count < 2 {
             let remaining = list.items.first
@@ -389,22 +437,39 @@ extension AppState {
         }
 
         fileListRevision &+= 1
-        let items = list.items.map { item in
-            let accessible = resolvedURL(for: item) != nil
-            return NavigatorItem(
-                id: item.id,
-                title: item.displayName,
-                subtitle: accessible ? nil : NSLocalizedString("File List Item Unavailable", comment: ""),
-                symbolName: list.kind.itemSymbolName,
-                isEnabled: accessible,
-                isCurrent: item.id == list.currentID
-            )
+        let useOutline = list.sections.count >= 2
+        if useOutline {
+            expandedNavigatorItemIDs.formUnion(list.sections.map(\.id))
+        }
+        let items: [NavigatorItem]
+        if useOutline {
+            var rows: [NavigatorItem] = []
+            for section in list.sections {
+                rows.append(
+                    NavigatorItem(
+                        id: section.id,
+                        title: section.title,
+                        symbolName: "opticaldisc",
+                        isEnabled: true,
+                        isCurrent: false
+                    )
+                )
+                for item in list.items where item.cue?.sectionID == section.id {
+                    rows.append(makeNavigatorItem(for: item, in: list, parentID: section.id))
+                }
+            }
+            for item in list.items where item.cue?.sectionID == nil {
+                rows.append(makeNavigatorItem(for: item, in: list, parentID: nil))
+            }
+            items = rows
+        } else {
+            items = list.items.map { makeNavigatorItem(for: $0, in: list, parentID: nil) }
         }
         builtInNavigatorContributions = [
             NavigatorContribution(
                 id: Self.fileListNavigatorID,
                 titleLocalizationKey: list.kind.navigatorTitleKey,
-                style: .flat,
+                style: useOutline ? .outline : .flat,
                 selectionMode: .single,
                 items: items,
                 selectedItemIDs: [list.currentID],
@@ -418,6 +483,48 @@ extension AppState {
         if activeNavigatorContributionID == nil {
             activeNavigatorContributionID = Self.fileListNavigatorID
         }
+    }
+
+    func makeNavigatorItem(for item: FileListItem, in list: FileListState, parentID: String?) -> NavigatorItem {
+        let accessible = resolvedURL(for: item) != nil
+        return NavigatorItem(
+            id: item.id,
+            parentID: parentID,
+            title: item.displayName,
+            subtitle: accessible ? item.cue?.artist : NSLocalizedString("File List Item Unavailable", comment: ""),
+            symbolName: list.kind.itemSymbolName,
+            badge: cueSegmentDurationBadge(for: item),
+            isEnabled: accessible,
+            isCurrent: item.id == list.currentID
+        )
+    }
+
+    /// CUE 曲目在列表末尾显示分段时长，不显示序号。
+    func cueSegmentDurationBadge(for item: FileListItem) -> String? {
+        guard let seconds = cueSegmentDurationSeconds(for: item) else { return nil }
+        return AudioMetadataLoader.formatDuration(seconds)
+    }
+
+    func cueSegmentDurationSeconds(for item: FileListItem) -> Double? {
+        guard let cue = item.cue else { return nil }
+        if let endFrames = cue.endCueFrames, endFrames > cue.startCueFrames {
+            return CueTime.seconds(from: endFrames - cue.startCueFrames)
+        }
+        let audioURL = resolvedURL(for: item) ?? item.url
+        let timing: AudioPlaybackTiming?
+        if let path = cue.cueSheetPath {
+            timing = CueSheetLoader.playbackTiming(
+                audioURL: audioURL,
+                cueURL: URL(fileURLWithPath: path)
+            )
+        } else {
+            let accessed = audioURL.startAccessingSecurityScopedResource()
+            defer { if accessed { audioURL.stopAccessingSecurityScopedResource() } }
+            timing = AudioMetadataLoader.playbackTiming(for: audioURL)
+        }
+        guard let timing, timing.sampleRate > 0 else { return nil }
+        let startSamples = CueTime.sampleFrame(cueFrames: cue.startCueFrames, sampleRate: timing.sampleRate)
+        return Double(max(0, timing.sampleCount - startSamples)) / timing.sampleRate
     }
 
     func makeFileListItem(url: URL) -> FileListItem {
@@ -458,9 +565,148 @@ extension AppState {
         case .listable(.image):
             applyImage(url: url, originalName: item.displayName, rotatesIdentity: false, clearsFileList: false, cacheToken: item.id)
         case .listable(.video), .listable(.audio):
-            applyExternalMedia(url: url, holdsSecurityAccess: false, rotatesIdentity: false, clearsFileList: false)
+            applyExternalMedia(
+                url: url,
+                holdsSecurityAccess: false,
+                rotatesIdentity: false,
+                clearsFileList: false
+            )
+        case .cueSheets:
+            installCueSheets(urls: [url], preservesIdentity: true)
         case .other:
             openFile(url: url)
         }
+    }
+
+    func installCueSheets(urls: [URL], preservesIdentity: Bool) {
+        let sheets = loadedCueSheets(from: urls)
+        let items = sheets.flatMap(\.items)
+        guard !items.isEmpty else { return }
+
+        isBatchUpdating = true
+        if !preservesIdentity, hasOpenedContent {
+            id = UUID()
+        }
+        fileList = FileListState(
+            kind: .audio,
+            items: items,
+            currentID: items[0].id,
+            sections: sheets.map(\.section)
+        )
+        sourceFingerprint = nil
+        mediaPlaybackMode = .sequentialLoop
+        isBatchUpdating = false
+        presentFileListItem(id: items[0].id, rotatesIdentity: false)
+    }
+
+    func appendCueSheets(urls: [URL]) {
+        let sheets = loadedCueSheets(from: urls)
+        guard !sheets.isEmpty else { return }
+
+        var list = fileList ?? FileListState(kind: .audio, items: [], currentID: "")
+        if list.items.isEmpty, let currentURL = currentListableFileURL() {
+            let currentItem = makeFileListItem(url: currentURL)
+            list.items = [currentItem]
+            list.currentID = currentItem.id
+        }
+
+        var existingCuePaths = Set(
+            list.sections.compactMap { $0.cueSheetPath }.map {
+                URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path
+            }
+        )
+        for sheet in sheets {
+            let key = sheet.section.cueSheetPath.map {
+                URL(fileURLWithPath: $0).resolvingSymlinksInPath().standardizedFileURL.path
+            }
+            if let key, existingCuePaths.contains(key) { continue }
+            list.sections.append(sheet.section)
+            list.items.append(contentsOf: sheet.items)
+            if let key { existingCuePaths.insert(key) }
+        }
+
+        guard list.items.count >= 2 || list.items.contains(where: { $0.cue != nil }) else { return }
+
+        let previousID = id
+        if list.currentID.isEmpty, let first = list.items.first {
+            list.currentID = first.id
+        }
+        fileList = list
+        sourceFingerprint = nil
+        id = previousID
+        syncFileListNavigator()
+        saveState()
+    }
+
+    func loadedCueSheets(from urls: [URL]) -> [(section: FileListSection, items: [FileListItem])] {
+        uniqueExistingURLs(urls).compactMap { url in
+            guard let sheet = CueSheetLoader.load(from: url) else { return nil }
+            let section = makeCueSection(from: sheet)
+            let items = makeCueItems(from: sheet, sectionID: section.id)
+            guard !items.isEmpty else { return nil }
+            return (section, items)
+        }
+    }
+
+    func makeCueSection(from sheet: CueSheet) -> FileListSection {
+        let accessed = sheet.url.startAccessingSecurityScopedResource()
+        let bookmark = Self.makeSecurityScopedBookmark(for: sheet.url)
+        if accessed { sheet.url.stopAccessingSecurityScopedResource() }
+        return FileListSection(
+            id: UUID().uuidString.lowercased(),
+            title: sheet.displayTitle,
+            cueSheetPath: sheet.url.path,
+            cueSheetBookmark: bookmark
+        )
+    }
+
+    func makeCueItems(from sheet: CueSheet, sectionID: String) -> [FileListItem] {
+        sheet.tracks.compactMap { track in
+            guard let audioURL = track.fileURL else { return nil }
+            let accessed = audioURL.startAccessingSecurityScopedResource()
+            let bookmark = Self.makeSecurityScopedBookmark(for: audioURL)
+            if accessed { audioURL.stopAccessingSecurityScopedResource() }
+            let title = track.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = (title?.isEmpty == false ? title : nil)
+                ?? audioURL.deletingPathExtension().lastPathComponent
+            return FileListItem(
+                id: UUID().uuidString.lowercased(),
+                path: audioURL.path,
+                bookmark: bookmark,
+                displayName: displayName,
+                cue: FileListCueInfo(
+                    startCueFrames: track.startCueFrames,
+                    endCueFrames: track.endCueFrames,
+                    title: title,
+                    artist: track.performer,
+                    album: sheet.title,
+                    composer: track.songwriter ?? sheet.songwriter,
+                    genre: sheet.genre,
+                    year: sheet.date,
+                    trackNumber: "\(track.number)",
+                    sectionID: sectionID,
+                    cueSheetPath: sheet.url.path
+                )
+            )
+        }
+    }
+
+    func beginCueRelatedAccess(for item: FileListItem) {
+        guard let cuePath = item.cue?.cueSheetPath else { return }
+        let cueURL: URL
+        if let section = fileList?.sections.first(where: { $0.id == item.cue?.sectionID }),
+           let bookmark = section.cueSheetBookmark,
+           let resolved = Self.resolveVideoBookmark(bookmark) {
+            cueURL = resolved
+        } else {
+            cueURL = URL(fileURLWithPath: cuePath)
+        }
+        let audioURL = resolvedURL(for: item) ?? item.url
+        if cueURL.startAccessingSecurityScopedResource() {
+            accessingCueURL = cueURL
+        }
+        let presenter = CueRelatedFilePresenter(primary: cueURL, related: audioURL)
+        NSFileCoordinator.addFilePresenter(presenter)
+        cueRelatedPresenter = presenter
     }
 }

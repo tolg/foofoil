@@ -606,7 +606,7 @@ struct FoofoilTests {
         #expect(VideoPlayerController.formatPlaybackTime(185) == "3:05")
         #expect(VideoPlayerController.formatPlaybackTime(3723) == "1:02:03")
         #expect(VideoPlayerController.formatPlaybackTime(12, includeHours: true) == "0:00:12")
-        #expect(MediaPlaybackBar.minimumWindowWidth >= 360)
+        #expect(MediaPlaybackBarMetrics.minimumWindowWidth >= 360)
     }
 
     @Test func testVideoScrollWheelStepCalculation() {
@@ -1289,8 +1289,10 @@ struct FoofoilTests {
         #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.png")) == .listable(.image))
         #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.mp3")) == .listable(.audio))
         #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.mp4")) == .listable(.video))
+        #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.cue")) == .cueSheets)
         #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.pdf")) == .other)
         #expect(FileListGrouper.classify(url: URL(fileURLWithPath: "/tmp/a.txt")) == .other)
+        #expect(FileListGrouper.dropKind(url: URL(fileURLWithPath: "/tmp/a.cue")) == .audio)
     }
 
     @Test func appendingFilesKeepsWindowIdentityAndUpdatesHistoryTitle() throws {

@@ -13,15 +13,20 @@ struct AudioModeView: View {
     @ObservedObject var appState: AppState
     let url: URL
     let shouldHideBorder: Bool
-    @StateObject private var controller: VideoPlayerController
+    @StateObject private var controller: AudioPlaybackController
     @State private var info: AudioTrackInfo
 
     init(appState: AppState, url: URL, shouldHideBorder: Bool) {
         self.appState = appState
         self.url = url
         self.shouldHideBorder = shouldHideBorder
-        _controller = StateObject(wrappedValue: VideoPlayerController(appStateID: appState.id, url: url, isLooping: appState.shouldLoopCurrentItem))
-        _info = State(initialValue: AudioTrackInfo.fallback(fileName: url.lastPathComponent))
+        _controller = StateObject(wrappedValue: AudioPlaybackController(
+            appStateID: appState.id,
+            url: url,
+            isLooping: appState.shouldLoopCurrentItem,
+            range: appState.currentPlaybackRange
+        ))
+        _info = State(initialValue: Self.overlay(AudioTrackInfo.fallback(fileName: url.lastPathComponent), with: appState.fileList?.currentItem?.cue))
     }
 
     var body: some View {
@@ -32,7 +37,7 @@ struct AudioModeView: View {
             metadataBlock
                 .padding(.horizontal, shouldHideBorder ? 20 : 16)
                 .padding(.top, 12)
-                .padding(.bottom, appState.isMediaPlaybackControlsVisible ? MediaPlaybackBar.overlayBottomInset : 12)
+                .padding(.bottom, appState.isMediaPlaybackControlsVisible ? MediaPlaybackBarMetrics.overlayBottomInset : 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: info.artwork == nil ? .center : .bottomLeading)
                 .clipped()
 
@@ -53,15 +58,16 @@ struct AudioModeView: View {
         }
         .onDisappear { controller.pause() }
         .onChange(of: url) {
-            controller.load(url: url)
-            info = AudioTrackInfo.fallback(fileName: url.lastPathComponent)
-            Task { info = await AudioMetadataLoader.load(from: url) }
+            applyCurrentTrack()
+        }
+        .onChange(of: appState.fileList?.currentID) {
+            applyCurrentTrack()
         }
         .onChange(of: appState.shouldLoopCurrentItem) {
             controller.isLooping = appState.shouldLoopCurrentItem
         }
-        .task(id: url) {
-            info = await AudioMetadataLoader.load(from: url)
+        .task(id: presentationID) {
+            info = Self.overlay(await AudioMetadataLoader.load(from: url), with: appState.fileList?.currentItem?.cue)
         }
     }
 
@@ -182,10 +188,54 @@ struct AudioModeView: View {
         ])
     }
 
+    private var presentationID: String {
+        let track = appState.fileList?.currentID ?? ""
+        let start = appState.currentPlaybackRange?.startCueFrames ?? 0
+        return "\(url.path)|\(track)|\(start)"
+    }
+
+    private func applyCurrentTrack() {
+        controller.isLooping = appState.shouldLoopCurrentItem
+        controller.load(url: url, range: appState.currentPlaybackRange)
+        info = Self.overlay(
+            AudioTrackInfo.fallback(fileName: url.lastPathComponent),
+            with: appState.fileList?.currentItem?.cue
+        )
+        Task { info = Self.overlay(await AudioMetadataLoader.load(from: url), with: appState.fileList?.currentItem?.cue) }
+    }
+
     private func joined(_ parts: [String?]) -> String? {
         let values = parts
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return values.isEmpty ? nil : values.joined(separator: "  ·  ")
+    }
+
+    /// 箔内展示 CUE 段落元数据，封面与格式信息仍取自音频文件。
+    private static func overlay(_ info: AudioTrackInfo, with cue: FileListCueInfo?) -> AudioTrackInfo {
+        guard let cue else { return info }
+        var merged = info
+        if let title = cue.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            merged.title = title
+        }
+        if let artist = cue.artist?.trimmingCharacters(in: .whitespacesAndNewlines), !artist.isEmpty {
+            merged.artist = artist
+        }
+        if let album = cue.album?.trimmingCharacters(in: .whitespacesAndNewlines), !album.isEmpty {
+            merged.album = album
+        }
+        if let composer = cue.composer?.trimmingCharacters(in: .whitespacesAndNewlines), !composer.isEmpty {
+            merged.composer = composer
+        }
+        if let genre = cue.genre?.trimmingCharacters(in: .whitespacesAndNewlines), !genre.isEmpty {
+            merged.genre = genre
+        }
+        if let year = cue.year?.trimmingCharacters(in: .whitespacesAndNewlines), !year.isEmpty {
+            merged.year = year
+        }
+        if let trackNumber = cue.trackNumber?.trimmingCharacters(in: .whitespacesAndNewlines), !trackNumber.isEmpty {
+            merged.trackNumber = trackNumber
+        }
+        return merged
     }
 }
