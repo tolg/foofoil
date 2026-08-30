@@ -1793,6 +1793,11 @@ struct FoofoilTests {
         let thirdID = ids[2]
         #expect(state.fileList?.currentID == firstID)
 
+        #expect(state.activateMediaListItem(delta: -1))
+        #expect(state.fileList?.currentID == thirdID)
+        #expect(state.activateMediaListItem(delta: 1))
+        #expect(state.fileList?.currentID == firstID)
+
         state.advanceFileListAfterPlayback()
         #expect(state.fileList?.currentID == secondID)
         state.presentFileListItem(id: thirdID, rotatesIdentity: false)

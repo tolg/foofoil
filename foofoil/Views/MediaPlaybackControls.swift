@@ -26,6 +26,8 @@ protocol MediaTransportControlling: ObservableObject {
     func seek(to time: Double)
     func adjustTime(by delta: Double)
     func adjustVolume(by delta: Float)
+    func playPreviousItem() -> Bool
+    func playNextItem() -> Bool
 }
 
 /// 媒体播放状态控制：负责播放器生命周期、进度汇报与播放/暂停切换。视频与音频共用。
@@ -53,10 +55,23 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
     private var fileDuration: CMTime = .invalid
     private var isHandlingEnd = false
     private var seekGeneration: UInt64 = 0
+    private var mediaTitle: String
+    private let previousItemAction: @MainActor () -> Bool
+    private let nextItemAction: @MainActor () -> Bool
 
-    init(appStateID: UUID, url: URL, isLooping: Bool, range: MediaPlaybackRange? = nil) {
+    init(
+        appStateID: UUID,
+        url: URL,
+        isLooping: Bool,
+        range: MediaPlaybackRange? = nil,
+        previousItemAction: @escaping @MainActor () -> Bool = { false },
+        nextItemAction: @escaping @MainActor () -> Bool = { false }
+    ) {
         self.appStateID = appStateID
         self.isLooping = isLooping
+        self.mediaTitle = url.deletingPathExtension().lastPathComponent
+        self.previousItemAction = previousItemAction
+        self.nextItemAction = nextItemAction
         self.player = AVPlayer(url: url)
         apply(range)
         loadFileDuration()
@@ -96,6 +111,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
     }
 
     func play() {
+        MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
         // 已播到结尾时再次播放从头开始。
         if duration > 0, currentTime >= duration - 0.05 {
             seek(to: 0, thenPlay: true)
@@ -112,11 +128,13 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
         }
         player.play()
         isPlaying = true
+        MediaRemoteCommandCoordinator.shared.update(self)
     }
 
     func pause() {
         player.pause()
         isPlaying = false
+        MediaRemoteCommandCoordinator.shared.update(self)
     }
 
     func togglePlayPause() {
@@ -150,6 +168,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
 
     func seek(to time: Double) {
         seek(to: time, thenPlay: nil)
+        MediaRemoteCommandCoordinator.shared.update(self)
     }
 
     func seek(to time: Double, thenPlay: Bool?) {
@@ -176,6 +195,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
                 if thenPlay == true {
                     self.player.play()
                     self.isPlaying = true
+                    MediaRemoteCommandCoordinator.shared.update(self)
                 } else if thenPlay == false {
                     self.pause()
                 }
@@ -193,6 +213,14 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
     /// 滚轮微调音量大小，自动钳制到 0...1。
     func adjustVolume(by delta: Float) {
         setVolume(volume + delta)
+    }
+
+    func playPreviousItem() -> Bool {
+        previousItemAction()
+    }
+
+    func playNextItem() -> Bool {
+        nextItemAction()
     }
 
     /// 进度滚轮步进（秒）：触摸板精细滚动小步长，鼠标滚轮整格大步长。
@@ -226,6 +254,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
 
     /// 同一窗口内换片时替换播放内容并自动开始播放。同一文件的 CUE 曲目只切换区间。
     func load(url: URL, range: MediaPlaybackRange? = nil) {
+        mediaTitle = url.deletingPathExtension().lastPathComponent
         let currentURL = (player.currentItem?.asset as? AVURLAsset)?.url
         if currentURL != url {
             player.replaceCurrentItem(with: AVPlayerItem(url: url))
@@ -234,6 +263,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
             loadFileDuration()
         }
         apply(range)
+        MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
         seek(to: 0, thenPlay: true)
     }
 
@@ -318,6 +348,9 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
             self?.fileDuration = duration
             self?.updateDisplayedDuration()
             self?.updateBoundaryObserver()
+            if let self {
+                MediaRemoteCommandCoordinator.shared.update(self)
+            }
         }
     }
 }

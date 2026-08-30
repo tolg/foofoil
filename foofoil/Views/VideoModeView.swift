@@ -36,7 +36,13 @@ struct VideoModeView: View {
         self.appState = appState
         self.url = url
         self.shouldHideBorder = shouldHideBorder
-        _controller = StateObject(wrappedValue: VideoPlayerController(appStateID: appState.id, url: url, isLooping: appState.shouldLoopCurrentItem))
+        _controller = StateObject(wrappedValue: VideoPlayerController(
+            appStateID: appState.id,
+            url: url,
+            isLooping: appState.shouldLoopCurrentItem,
+            previousItemAction: { appState.activateMediaListItem(delta: -1) },
+            nextItemAction: { appState.activateMediaListItem(delta: 1) }
+        ))
     }
 
     var body: some View {
@@ -61,7 +67,10 @@ struct VideoModeView: View {
             controller.isLooping = appState.shouldLoopCurrentItem
             controller.play()
         }
-        .onDisappear { controller.pause() }
+        .onDisappear {
+            controller.pause()
+            MediaRemoteCommandCoordinator.shared.deactivate(controller)
+        }
         .onChange(of: url) {
             controller.load(url: url)
         }

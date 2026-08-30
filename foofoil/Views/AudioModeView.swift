@@ -24,7 +24,9 @@ struct AudioModeView: View {
             appStateID: appState.id,
             url: url,
             isLooping: appState.shouldLoopCurrentItem,
-            range: appState.currentPlaybackRange
+            range: appState.currentPlaybackRange,
+            previousItemAction: { appState.activateMediaListItem(delta: -1) },
+            nextItemAction: { appState.activateMediaListItem(delta: 1) }
         ))
         _info = State(initialValue: Self.overlay(AudioTrackInfo.fallback(fileName: url.lastPathComponent), with: appState.fileList?.currentItem?.cue))
     }
@@ -56,7 +58,10 @@ struct AudioModeView: View {
             controller.isLooping = appState.shouldLoopCurrentItem
             controller.play()
         }
-        .onDisappear { controller.pause() }
+        .onDisappear {
+            controller.pause()
+            MediaRemoteCommandCoordinator.shared.deactivate(controller)
+        }
         .onChange(of: url) {
             applyCurrentTrack()
         }

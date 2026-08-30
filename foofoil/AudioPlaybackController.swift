@@ -31,10 +31,23 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     private var scheduleGeneration: UInt64 = 0
     private var progressTimer: Timer?
     private var observers: [NSObjectProtocol] = []
+    private var mediaTitle: String
+    private let previousItemAction: @MainActor () -> Bool
+    private let nextItemAction: @MainActor () -> Bool
 
-    init(appStateID: UUID, url: URL, isLooping: Bool, range: MediaPlaybackRange? = nil) {
+    init(
+        appStateID: UUID,
+        url: URL,
+        isLooping: Bool,
+        range: MediaPlaybackRange? = nil,
+        previousItemAction: @escaping @MainActor () -> Bool = { false },
+        nextItemAction: @escaping @MainActor () -> Bool = { false }
+    ) {
         self.appStateID = appStateID
         self.isLooping = isLooping
+        self.mediaTitle = url.deletingPathExtension().lastPathComponent
+        self.previousItemAction = previousItemAction
+        self.nextItemAction = nextItemAction
         engine.attach(playerNode)
         observers.append(
             NotificationCenter.default.addObserver(
@@ -59,6 +72,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     }
 
     func play() {
+        MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
         if duration > 0, currentTime >= duration - 0.05 {
             schedule(from: 0, play: true)
             return
@@ -70,6 +84,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
                 ensureEngineRunning()
                 playerNode.play()
                 isPlaying = true
+                MediaRemoteCommandCoordinator.shared.update(self)
             }
         }
     }
@@ -78,6 +93,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         playerNode.pause()
         isPlaying = false
         refreshCurrentTime()
+        MediaRemoteCommandCoordinator.shared.update(self)
     }
 
     func togglePlayPause() {
@@ -109,6 +125,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         let clamped = min(duration, max(0, time))
         currentTime = clamped
         schedule(from: clamped, play: isPlaying || playerNode.isPlaying)
+        MediaRemoteCommandCoordinator.shared.update(self)
     }
 
     func adjustTime(by delta: Double) {
@@ -120,7 +137,16 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         setVolume(volume + delta)
     }
 
+    func playPreviousItem() -> Bool {
+        previousItemAction()
+    }
+
+    func playNextItem() -> Bool {
+        nextItemAction()
+    }
+
     func load(url: URL, range: MediaPlaybackRange? = nil) {
+        mediaTitle = url.deletingPathExtension().lastPathComponent
         do {
             let file = try AVAudioFile(forReading: url)
             audioFile = file
@@ -142,6 +168,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             segmentFrames = AVAudioFrameCount(max(0, last - startFrame))
             duration = sampleRate > 0 ? Double(segmentFrames) / sampleRate : 0
             currentTime = 0
+            MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
             schedule(from: 0, play: true)
         } catch {
             NSLog("AudioPlaybackController failed to open \(url.path): \(error.localizedDescription)")
@@ -186,6 +213,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             ensureEngineRunning()
             playerNode.play()
             isPlaying = true
+            MediaRemoteCommandCoordinator.shared.update(self)
         }
     }
 

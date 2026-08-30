@@ -335,6 +335,14 @@ extension AppState {
         }
     }
 
+    /// 系统上一首/下一首媒体键仅切换当前音视频列表；单文件时报告命令不可用。
+    @discardableResult
+    func activateMediaListItem(delta: Int) -> Bool {
+        guard isExternalMediaDocument, fileList?.isPresentable == true else { return false }
+        activateAdjacentFileListItem(delta: delta, wraps: true)
+        return true
+    }
+
     /// 随机切到另一项；仅一项时保持当前项。
     func activateShuffledFileListItem() {
         guard let list = fileList, list.isPresentable else { return }
