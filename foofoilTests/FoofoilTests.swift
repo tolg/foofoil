@@ -1362,6 +1362,75 @@ struct FoofoilTests {
         #expect(state.id == originalID)
     }
 
+    @Test func movingFileListItemsUpdatesNavigatorAndHistoryOrder() throws {
+        let first = try writeTestPNG(name: "move-list-a.png")
+        let second = try writeTestPNG(name: "move-list-b.png")
+        let third = try writeTestPNG(name: "move-list-c.png")
+        defer {
+            for url in [first, second, third] {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.openFile(url: first)
+        state.appendToFileList(urls: [second, third])
+        let originalItems = try #require(state.fileList?.items)
+        let movingID = originalItems[0].id
+        let destinationID = originalItems[2].id
+
+        state.performNavigatorAction(
+            NavigatorAction(
+                contributionID: AppState.fileListNavigatorID,
+                kind: .move,
+                itemIDs: [movingID],
+                destinationItemID: destinationID,
+                movePosition: .after
+            )
+        )
+
+        let expectedIDs = [originalItems[1].id, originalItems[2].id, originalItems[0].id]
+        #expect(state.fileList?.items.map(\.id) == expectedIDs)
+        #expect(state.navigatorContributions.first?.items.map(\.id) == expectedIDs)
+        #expect(HistoryRepository.shared.config(id: state.id)?.fileList?.items.map(\.id) == expectedIDs)
+
+        state.performNavigatorAction(
+            NavigatorAction(
+                contributionID: AppState.fileListNavigatorID,
+                kind: .move,
+                itemIDs: [expectedIDs[0]],
+                movePosition: .end
+            )
+        )
+        let endDropIDs = [expectedIDs[1], expectedIDs[2], expectedIDs[0]]
+        #expect(state.fileList?.items.map(\.id) == endDropIDs)
+        #expect(HistoryRepository.shared.config(id: state.id)?.fileList?.items.map(\.id) == endDropIDs)
+    }
+
+    @Test func cueBasedFileListsNeverAdvertiseReordering() {
+        let cue = FileListCueInfo(startCueFrames: 0, title: "Track")
+        let list = FileListState(
+            kind: .audio,
+            items: [
+                FileListItem(id: "a", path: "/tmp/album.flac", displayName: "A", cue: cue),
+                FileListItem(id: "b", path: "/tmp/album.flac", displayName: "B", cue: cue)
+            ],
+            currentID: "a"
+        )
+
+        #expect(list.isPresentable)
+        #expect(list.isCueBased)
+        #expect(!list.isReorderable)
+
+        let state = AppState()
+        state.fileList = list
+        state.syncFileListNavigator()
+        state.moveFileListItems(ids: ["a"], destinationID: "b", position: .after)
+        #expect(state.fileList?.items.map(\.id) == ["a", "b"])
+        #expect(state.navigatorContributions.first?.allowedActions.contains(.move) == false)
+    }
+
     @Test func imageDropAppendsImagesAndIgnoresOtherFileTypes() throws {
         let first = try writeTestPNG(name: "drop-list-a.png")
         let second = try writeTestPNG(name: "drop-list-b.png")

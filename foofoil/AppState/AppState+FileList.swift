@@ -370,8 +370,45 @@ extension AppState {
             }
             removeFileListItems(ids: ids)
         case .move:
-            break
+            moveFileListItems(
+                ids: action.itemIDs,
+                destinationID: action.destinationItemID,
+                position: action.movePosition
+            )
         }
+    }
+
+    /// 普通文件列表按稳定 ID 重排；CUE 曲目必须保持谱表定义的时间顺序。
+    func moveFileListItems(
+        ids: [String],
+        destinationID: String?,
+        position: NavigatorMovePosition?
+    ) {
+        guard var list = fileList,
+              list.isReorderable,
+              let position else { return }
+        let movingIDs = Set(ids)
+        let movingItems = list.items.filter { movingIDs.contains($0.id) }
+        guard movingItems.count == movingIDs.count else { return }
+
+        var remainingItems = list.items.filter { !movingIDs.contains($0.id) }
+        let insertionIndex: Int
+        switch position {
+        case .end:
+            guard destinationID == nil else { return }
+            insertionIndex = remainingItems.endIndex
+        case .before, .after:
+            guard let destinationID,
+                  let destinationIndex = remainingItems.firstIndex(where: { $0.id == destinationID }) else { return }
+            insertionIndex = position == .before ? destinationIndex : remainingItems.index(after: destinationIndex)
+        }
+        remainingItems.insert(contentsOf: movingItems, at: insertionIndex)
+        guard remainingItems != list.items else { return }
+
+        list.items = remainingItems
+        fileList = list
+        syncFileListNavigator()
+        saveState()
     }
 
     func removeFileListItems(ids: [String]) {
@@ -481,7 +518,7 @@ extension AppState {
                 selectionMode: .single,
                 items: items,
                 selectedItemIDs: [list.currentID],
-                allowedActions: [.activate, .remove],
+                allowedActions: list.isReorderable ? [.activate, .remove, .move] : [.activate, .remove],
                 revision: fileListRevision
             )
         ]

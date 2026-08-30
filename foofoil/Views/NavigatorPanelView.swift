@@ -12,6 +12,8 @@ struct NavigatorPanelView: View {
     var isFullScreenOverlay = false
     @State private var dragStartWidth: Double?
     @State private var dragStartMouseX: CGFloat?
+    @State private var draggedNavigatorContributionID: String?
+    @State private var draggedNavigatorItemID: String?
 
     private struct VisibleRow: Identifiable {
         let item: NavigatorItem
@@ -116,6 +118,10 @@ struct NavigatorPanelView: View {
                     .padding(6)
                     .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
                     .background(MovableBackground())
+                    .onDrop(
+                        of: [.utf8PlainText],
+                        delegate: navigatorEndDropDelegate(for: contribution)
+                    )
                 }
             }
         }
@@ -124,7 +130,7 @@ struct NavigatorPanelView: View {
     private func navigatorRow(_ row: VisibleRow, contribution: NavigatorContribution) -> some View {
         let isSelected = contribution.selectedItemIDs.contains(row.item.id)
         let thumbnailPath = imageThumbnailPath(for: row.item.id, contribution: contribution)
-        return HStack(spacing: 7) {
+        let rowContent = HStack(spacing: 7) {
             Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
 
             if row.hasChildren {
@@ -212,6 +218,86 @@ struct NavigatorPanelView: View {
             in: RoundedRectangle(cornerRadius: 7, style: .continuous)
         )
         .background(NonMovableBackground())
+        return reorderableRow(
+            rowContent,
+            row: row,
+            contribution: contribution,
+            hasThumbnail: thumbnailPath != nil
+        )
+    }
+
+    /// 只有扩展明确开放 move 的平面列表才能拖动；层级列表（包括 CUE）保持来源顺序。
+    @ViewBuilder
+    private func reorderableRow<Content: View>(
+        _ content: Content,
+        row: VisibleRow,
+        contribution: NavigatorContribution,
+        hasThumbnail: Bool
+    ) -> some View {
+        if contribution.style == .flat, contribution.allowedActions.contains(.move) {
+            content
+                .onDrag {
+                    draggedNavigatorContributionID = contribution.id
+                    draggedNavigatorItemID = row.item.id
+                    return NSItemProvider(object: row.item.id as NSString)
+                }
+                .onDrop(
+                    of: [.utf8PlainText],
+                    delegate: NavigatorMoveDropDelegate(
+                        canDrop: {
+                            draggedNavigatorContributionID == contribution.id
+                                && draggedNavigatorItemID != nil
+                                && draggedNavigatorItemID != row.item.id
+                        },
+                        perform: { location in
+                            guard let movingID = draggedNavigatorItemID else { return false }
+                            appState.performNavigatorAction(
+                                NavigatorAction(
+                                    contributionID: contribution.id,
+                                    kind: .move,
+                                    itemIDs: [movingID],
+                                    destinationItemID: row.item.id,
+                                    movePosition: location.y < (hasThumbnail ? 24 : 18) ? .before : .after
+                                )
+                            )
+                            clearNavigatorDrag()
+                            return true
+                        }
+                    )
+                )
+        } else {
+            content
+        }
+    }
+
+    /// 列表项以下的剩余区域作为末尾投放区。
+    private func navigatorEndDropDelegate(for contribution: NavigatorContribution) -> NavigatorMoveDropDelegate {
+        NavigatorMoveDropDelegate(
+            canDrop: {
+                contribution.style == .flat
+                    && contribution.allowedActions.contains(.move)
+                    && draggedNavigatorContributionID == contribution.id
+                    && draggedNavigatorItemID != nil
+            },
+            perform: { _ in
+                guard let movingID = draggedNavigatorItemID else { return false }
+                appState.performNavigatorAction(
+                    NavigatorAction(
+                        contributionID: contribution.id,
+                        kind: .move,
+                        itemIDs: [movingID],
+                        movePosition: .end
+                    )
+                )
+                clearNavigatorDrag()
+                return true
+            }
+        )
+    }
+
+    private func clearNavigatorDrag() {
+        draggedNavigatorContributionID = nil
+        draggedNavigatorItemID = nil
     }
 
     private func imageThumbnailPath(for itemID: String, contribution: NavigatorContribution) -> String? {
@@ -297,6 +383,25 @@ struct NavigatorPanelView: View {
         if !contributions.contains(where: { $0.id == appState.activeNavigatorContributionID }) {
             appState.activeNavigatorContributionID = contributions[0].id
         }
+    }
+}
+
+/// 显式返回 move 提案，避免 macOS 将应用内重排显示成带加号的复制操作。
+private struct NavigatorMoveDropDelegate: DropDelegate {
+    let canDrop: () -> Bool
+    let perform: (CGPoint) -> Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        canDrop()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        canDrop() ? DropProposal(operation: .move) : nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard canDrop() else { return false }
+        return perform(info.location)
     }
 }
 

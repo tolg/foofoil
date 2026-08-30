@@ -253,6 +253,13 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
 
     public var isPresentable: Bool { items.count >= 2 }
 
+    /// CUE 曲目顺序由谱表时间轴决定，不能像普通文件列表一样重排。
+    public var isCueBased: Bool {
+        !sections.isEmpty || items.contains(where: { $0.cue != nil })
+    }
+
+    public var isReorderable: Bool { isPresentable && !isCueBased }
+
     public var currentItem: FileListItem? {
         items.first(where: { $0.id == currentID }) ?? items.first
     }
