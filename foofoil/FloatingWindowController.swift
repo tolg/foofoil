@@ -108,6 +108,64 @@ final class FileDropHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
+/// 置顶切换的光晕环视图：圆角描边加柔光投影，透明度做一次脉冲后保持隐藏。
+private final class PinGlowView: NSView {
+    /// 光晕面板比箔窗四周扩出的距离；需容纳 ringOutset + 柔光半径，避免光晕被裁切。
+    static let panelPadding: CGFloat = 26
+    /// 光晕环相对箔窗外缘的外扩距离。
+    static let ringOutset: CGFloat = 3
+    private static let strokeWidth: CGFloat = 2.5
+    private static let glowRadius: CGFloat = 14
+    private static let flashAnimationKey = "pinGlowFlash"
+
+    private let glowColor: NSColor
+
+    init(frame frameRect: NSRect, color: NSColor, cornerRadius: CGFloat) {
+        glowColor = color
+        super.init(frame: frameRect)
+        wantsLayer = true
+        if let layer {
+            layer.cornerRadius = cornerRadius
+            layer.borderWidth = Self.strokeWidth
+            layer.borderColor = glowColor.withAlphaComponent(0.85).cgColor
+            layer.shadowColor = glowColor.cgColor
+            layer.shadowOpacity = 0.85
+            layer.shadowRadius = Self.glowRadius
+            layer.shadowOffset = .zero
+            layer.shadowPath = CGPath(
+                roundedRect: bounds,
+                cornerWidth: cornerRadius,
+                cornerHeight: cornerRadius,
+                transform: nil
+            )
+            layer.opacity = 0
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 透明度脉冲：快速亮起、短暂保持后淡出；结束后由控制器移除临时面板。
+    func startFlash(duration: CFTimeInterval, completion: @escaping () -> Void) {
+        guard let layer else {
+            completion()
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setCompletionBlock(completion)
+        let flash = CAKeyframeAnimation(keyPath: "opacity")
+        flash.values = [0, 1, 1, 0]
+        flash.keyTimes = [0, 0.15, 0.45, 1]
+        flash.duration = duration
+        flash.fillMode = .forwards
+        flash.isRemovedOnCompletion = false
+        layer.add(flash, forKey: Self.flashAnimationKey)
+        CATransaction.commit()
+    }
+}
+
 public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
     public let appState: AppState
@@ -141,6 +199,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     private var navigatorHoverGlobalMonitor: Any?
     private var isTransitioningFullScreen = false
     private var windowedFrameDescriptorBeforeFullScreen: String?
+    /// 置顶切换光晕的临时面板；仅在做提示动画时存在。
+    private var pinGlowPanel: NSPanel?
+    /// 是否已收到过 isPinned 的首次发射，用于跳过订阅初始值。
+    private var hasReceivedPinStateUpdate = false
+    private static let pinGlowColor = NSColor.systemRed
+    private static let unpinGlowColor = NSColor.systemGray
+    private static let pinGlowFlashDuration: CFTimeInterval = 0.8
 
     public init(appState: AppState) {
         self.appState = appState
@@ -257,9 +322,18 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         // 监听 Pin/Unpin 状态，更新窗口层级
         appState.$isPinned
             .sink { [weak self, weak window] isPinned in
+                guard let self = self else { return }
+                // @Published 在 willSet 同步发射，此刻读取批量更新标志可识别历史载入等程序性变更，恢复状态时不闪光晕。
+                let isRestoringState = self.appState.isBatchUpdating
+                let isFirstEmission = !self.hasReceivedPinStateUpdate
+                self.hasReceivedPinStateUpdate = true
                 DispatchQueue.main.async {
-                    window?.level = self?.appState.isFullScreen == true ? .normal : (isPinned ? .floating : .normal)
-                    if let window { self?.navigatorPanelController.synchronizeAppearance(with: window) }
+                    window?.level = self.appState.isFullScreen == true ? .normal : (isPinned ? .floating : .normal)
+                    if let window { self.navigatorPanelController.synchronizeAppearance(with: window) }
+                    // 仅用户主动切换置顶时在箔窗外缘闪一圈提示光晕
+                    if !isFirstEmission, !isRestoringState {
+                        self.flashPinGlow(pinned: isPinned)
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -522,6 +596,68 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                 self.appState.advanceFileListAfterPlayback()
             }
             .store(in: &cancellables)
+    }
+
+    /// 置顶切换的瞬时反馈：在箔窗外缘闪一圈光晕（开启红色，关闭灰色），动画结束后自动移除。
+    private func flashPinGlow(pinned: Bool) {
+        guard let window, window.isVisible else { return }
+        // 快速连续切换时先撤掉上一轮光晕，避免叠加闪烁
+        removePinGlowPanel()
+
+        let padding = PinGlowView.panelPadding
+        let panelFrame = window.frame.insetBy(dx: -padding, dy: -padding)
+        let panel = NSPanel(
+            contentRect: panelFrame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        // 光晕纯为视觉提示：不拦截鼠标、不抢焦点，层级跟随箔窗。
+        panel.ignoresMouseEvents = true
+        panel.isReleasedWhenClosed = false
+        panel.level = window.level
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let container = NSView(frame: NSRect(origin: .zero, size: panelFrame.size))
+        container.wantsLayer = true
+        // 光晕环贴在箔窗外缘 ringOutset 处，圆角与 ContentView 的窗口圆角规则保持一致。
+        let ringRect = container.bounds.insetBy(
+            dx: padding - PinGlowView.ringOutset,
+            dy: padding - PinGlowView.ringOutset
+        )
+        let glowView = PinGlowView(
+            frame: ringRect,
+            color: pinned ? Self.pinGlowColor : Self.unpinGlowColor,
+            cornerRadius: pinGlowWindowCornerRadius + PinGlowView.ringOutset
+        )
+        container.addSubview(glowView)
+        panel.contentView = container
+
+        window.addChildWindow(panel, ordered: .below)
+        panel.orderFrontRegardless()
+        pinGlowPanel = panel
+
+        glowView.startFlash(duration: Self.pinGlowFlashDuration) { [weak self] in
+            guard let self, self.pinGlowPanel === panel else { return }
+            self.removePinGlowPanel()
+        }
+    }
+
+    private func removePinGlowPanel() {
+        guard let panel = pinGlowPanel else { return }
+        pinGlowPanel = nil
+        window?.removeChildWindow(panel)
+        panel.orderOut(nil)
+    }
+
+    /// 与 ContentView 的圆角规则保持一致：全屏或隐藏边框时窗口内容无圆角。
+    private var pinGlowWindowCornerRadius: CGFloat {
+        let hidesBorder = appState.isFullScreen
+            || ((appState.imageURL != nil || appState.webURL != nil) && !appState.showBorder)
+        return hidesBorder ? 0 : 12
     }
 
     private func setupNavigatorPanelBindings() {
