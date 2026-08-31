@@ -54,7 +54,7 @@ struct ContentTypesSettingsView: View {
                     .accessibilityValue(mediaControlsIntervalLabel)
                 }
             } header: {
-                Text(NSLocalizedString("Audio and Video", comment: ""))
+                Text(NSLocalizedString("Video", comment: ""))
             } footer: {
                 Text(NSLocalizedString("Playback Controls Hide Delay Footer", comment: ""))
             }

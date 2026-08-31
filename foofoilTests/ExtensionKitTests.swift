@@ -351,12 +351,14 @@ struct ExtensionKitTests {
         controller.close()
     }
 
-    @Test func mediaControlsAppearOnPointerActivityAndHideAfterInactivity() async throws {
+    @Test func videoControlsAppearOnPointerActivityAndHideAfterInactivity() async throws {
         let state = AppState()
-        state.originalImageName = "foofoil-hover-test.mp3"
-        state.imageURL = URL(fileURLWithPath: "/tmp/foofoil-hover-test.mp3")
+        state.originalImageName = "foofoil-hover-test.mp4"
+        state.imageURL = URL(fileURLWithPath: "/tmp/foofoil-hover-test.mp4")
         let controller = FloatingWindowController(appState: state)
         let foilWindow = try #require(controller.window)
+        // 先让 imageURL 订阅回调跑完初次显隐推导，避免其异步块重排隐藏计时造成竞态。
+        try await Task.sleep(for: .milliseconds(50))
         let interior = NSPoint(x: foilWindow.frame.width / 2, y: foilWindow.frame.height / 2)
 
         controller.updateNavigatorEdgeHover(at: interior)
@@ -378,6 +380,82 @@ struct ExtensionKitTests {
         controller.handleMediaPointerExit(autoHideInterval: 0.01)
         try await Task.sleep(for: .milliseconds(50))
         #expect(state.isMediaPlaybackControlsVisible == false)
+        controller.close()
+    }
+
+    @Test func audioControlsStayVisibleWhileHoveringWithoutIdleTimeout() async throws {
+        let state = AppState()
+        state.originalImageName = "foofoil-audio-hover-test.mp3"
+        state.imageURL = URL(fileURLWithPath: "/tmp/foofoil-audio-hover-test.mp3")
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+        // 移到远处的屏幕外坐标，保证真实鼠标位置不会落在窗口上，推导结果确定。
+        foilWindow.setFrameOrigin(NSPoint(x: 30000, y: 30000))
+        try await Task.sleep(for: .milliseconds(50))
+
+        let interior = NSPoint(x: foilWindow.frame.width / 2, y: foilWindow.frame.height / 2)
+        controller.updateNavigatorEdgeHover(at: interior)
+        controller.handleMediaPointerActivity(at: interior, autoHideInterval: 0.01)
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        try await Task.sleep(for: .milliseconds(50))
+        // 音频 hover 不做鼠标静止超时隐藏（暂停态同样常显）。
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        controller.close()
+    }
+
+    @Test func audioControlsStayVisibleWhilePausedRegardlessOfPointer() async throws {
+        let state = AppState()
+        state.originalImageName = "foofoil-audio-pause-test.mp3"
+        state.imageURL = URL(fileURLWithPath: "/tmp/foofoil-audio-pause-test.mp3")
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+        foilWindow.setFrameOrigin(NSPoint(x: 30000, y: 30000))
+        try await Task.sleep(for: .milliseconds(50))
+
+        let away = NSPoint(x: 40000, y: 20000)
+        controller.refreshNavigatorHoverFromPointer(screenPoint: away)
+        #expect(state.isPointerInsideWindow == false)
+        // 未播放（暂停态）时常显，与指针位置无关。
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        controller.handleMediaPointerExit(autoHideInterval: 0.01)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        controller.close()
+    }
+
+    @Test func audioControlsFollowHoverRegionWhilePlaying() async throws {
+        let state = AppState()
+        state.originalImageName = "foofoil-audio-play-test.mp3"
+        state.imageURL = URL(fileURLWithPath: "/tmp/foofoil-audio-play-test.mp3")
+        let controller = FloatingWindowController(appState: state)
+        let foilWindow = try #require(controller.window)
+        foilWindow.setFrameOrigin(NSPoint(x: 30000, y: 30000))
+        try await Task.sleep(for: .milliseconds(50))
+
+        state.isMediaPlaying = true
+        try await Task.sleep(for: .milliseconds(50))
+        // 播放中且指针不在箔窗/目录上 → 隐藏。
+        #expect(state.isMediaPlaybackControlsVisible == false)
+
+        let interior = NSPoint(x: foilWindow.frame.width / 2, y: foilWindow.frame.height / 2)
+        controller.updateNavigatorEdgeHover(at: interior)
+        controller.handleMediaPointerActivity(at: interior, autoHideInterval: 0.01)
+        #expect(state.isMediaPlaybackControlsVisible)
+
+        let away = NSPoint(x: 40000, y: 20000)
+        controller.refreshNavigatorHoverFromPointer(screenPoint: away)
+        // 播放中指针离开箔窗且未悬停目录 → 隐藏。
+        #expect(state.isMediaPlaybackControlsVisible == false)
+
+        state.isMediaPlaying = false
+        try await Task.sleep(for: .milliseconds(50))
+        // 暂停后无论指针在哪都常显。
+        #expect(state.isMediaPlaybackControlsVisible)
+
         controller.close()
     }
 

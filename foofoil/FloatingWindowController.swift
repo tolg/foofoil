@@ -199,6 +199,8 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self, self.appState.isMediaPlaybackControlsVisible else { return }
+                // 音频控制条不做静止超时，隐藏延迟仅作用于视频。
+                guard !self.appState.isAudioDocument else { return }
                 self.scheduleMediaPlaybackControlsHide()
             }
             .store(in: &cancellables)
@@ -239,7 +241,16 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                             self.currentImageSize = nil
                         }
                     }
+                    // 内容类型切换后同步音频控制条对目录面板全局监听的依赖。
+                    self.updateNavigatorHoverMonitors()
                 }
+            }
+            .store(in: &cancellables)
+
+        // 音频暂停时常显控制条；恢复播放后按箔窗/目录 hover 推导显隐。视频显隐不随播放状态变化。
+        appState.$isMediaPlaying
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.updateAudioPlaybackControlsVisibility() }
             }
             .store(in: &cancellables)
 
@@ -697,6 +708,12 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         } else {
             updateNavigatorHoverMonitors()
         }
+        if appState.isAudioDocument {
+            // 音频播放中从目录面板移出时没有箔窗事件可触发隐藏，由这里统一推导显隐。
+            let resolvedScreenPoint = screenPoint
+                ?? windowPoint.map { window.convertToScreen(NSRect(origin: $0, size: .zero)).origin }
+            updateAudioPlaybackControlsVisibility(screenPoint: resolvedScreenPoint)
+        }
     }
 
     /// SwiftUI 子视图增删会改变自身 tracking area；始终以窗口坐标判断，避免 hover 瞬时丢失。
@@ -716,7 +733,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         if inside {
             if !wasInside { revealMediaPlaybackControls() }
         } else if wasInside {
-            handleMediaPointerExit()
+            handleMediaPointerExit(screenPoint: screenPoint)
         }
     }
 
@@ -730,13 +747,23 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     /// 离开窗口与窗口内静止采用同一延迟；重新进入前控制条仍平滑保留。
-    func handleMediaPointerExit(autoHideInterval: TimeInterval? = nil) {
+    /// 音频例外：显隐由播放状态与箔窗/目录 hover 区域推导，暂停或仍悬停在目录上时继续显示。
+    func handleMediaPointerExit(autoHideInterval: TimeInterval? = nil, screenPoint: NSPoint? = nil) {
         guard appState.isExternalMediaDocument,
               appState.isMediaPlaybackControlsVisible else { return }
-        scheduleMediaPlaybackControlsHide(after: autoHideInterval)
+        if appState.isAudioDocument {
+            updateAudioPlaybackControlsVisibility(screenPoint: screenPoint)
+        } else {
+            scheduleMediaPlaybackControlsHide(after: autoHideInterval)
+        }
     }
 
     private func revealMediaPlaybackControlsIfPointerIsInside() {
+        if appState.isAudioDocument {
+            // 音频显隐与指针是否在箔窗内解耦（暂停时常显），统一交给状态推导。
+            updateAudioPlaybackControlsVisibility()
+            return
+        }
         guard appState.isPointerInsideWindow else {
             hideMediaPlaybackControls()
             return
@@ -750,7 +777,13 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         appState.isMediaPlaybackControlsVisible = true
-        scheduleMediaPlaybackControlsHide(after: autoHideInterval)
+        if appState.isAudioDocument {
+            // 音频：hover 期间持续显示，不做静止超时；显隐由播放状态与 hover 区域统一推导。
+            pendingMediaPlaybackControlsHide?.cancel()
+            pendingMediaPlaybackControlsHide = nil
+        } else {
+            scheduleMediaPlaybackControlsHide(after: autoHideInterval)
+        }
     }
 
     private func scheduleMediaPlaybackControlsHide(after interval: TimeInterval? = nil) {
@@ -771,11 +804,35 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         appState.isMediaPlaybackControlsVisible = false
     }
 
+    /// 音频控制条显隐由状态推导：暂停时常显（无论指针在哪）；播放中仅当指针位于箔窗或目录面板上时显示，不做静止超时。
+    private func updateAudioPlaybackControlsVisibility(screenPoint: NSPoint? = nil) {
+        guard appState.isAudioDocument, appState.imageURL != nil else { return }
+        pendingMediaPlaybackControlsHide?.cancel()
+        pendingMediaPlaybackControlsHide = nil
+        let shouldShow = !appState.isMediaPlaying || isPointerOverAudioHoverRegion(screenPoint: screenPoint)
+        // 避免鼠标移动监听高频触发时对相同值重复发布导致内容整树重绘。
+        if appState.isMediaPlaybackControlsVisible != shouldShow {
+            appState.isMediaPlaybackControlsVisible = shouldShow
+        }
+    }
+
+    /// 音频 hover 区域：箔窗与可见目录面板的屏幕并集。
+    private func isPointerOverAudioHoverRegion(screenPoint: NSPoint? = nil) -> Bool {
+        guard let window else { return false }
+        var region = window.frame
+        if navigatorPanelController.isVisible, let panel = navigatorPanelController.window {
+            region = region.union(panel.frame)
+        }
+        return region.contains(screenPoint ?? NSEvent.mouseLocation)
+    }
+
     private func updateNavigatorHoverMonitors() {
-        let needsMonitor = !appState.navigatorContributions.isEmpty
+        // 音频播放时目录面板的进出不经过箔窗事件，需要全局监听维持控制条 hover 推导。
+        let needsNavigatorHoverMonitor = !appState.navigatorContributions.isEmpty
             && appState.navigatorPanelVisibilityMode == .onHover
             && (navigatorPanelController.isVisible || appState.isFullScreen)
-            && !isTransitioningFullScreen
+        let needsAudioHoverMonitor = appState.isAudioDocument && navigatorPanelController.isVisible
+        let needsMonitor = !isTransitioningFullScreen && (needsNavigatorHoverMonitor || needsAudioHoverMonitor)
         if needsMonitor {
             if navigatorHoverLocalMonitor == nil {
                 navigatorHoverLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in

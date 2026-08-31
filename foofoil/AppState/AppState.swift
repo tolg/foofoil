@@ -35,7 +35,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     @Published public var isCommandKeyPressed: Bool = false
     /// 由窗口内容区的 AppKit tracking area 驱动，供需要整窗 hover 的内容控件使用。
     @Published var isPointerInsideWindow: Bool = false
-    /// 音视频控制条独立于整窗 hover；鼠标静止超时后即使仍在窗口内也会隐藏。
+    /// 音视频控制条独立于整窗 hover。视频在鼠标静止超时后即使仍在窗口内也会隐藏；
+    /// 音频由暂停状态与箔窗/目录 hover 推导显隐，不做静止超时。
     @Published var isMediaPlaybackControlsVisible: Bool = false
     /// 由窗口级 Finder 文件拖放接收器驱动，用于保留整窗拖放高亮反馈。
     @Published var isFileDropTargeted: Bool = false
