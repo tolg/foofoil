@@ -67,6 +67,9 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     /// 内置同类型文件列表；仅当 items >= 2 时投影到导航面板。
     @Published var fileList: FileListState?
     var fileListRevision: UInt64 = 0
+    /// 媒体总时长在后台读取；按列表项缓存以免每次刷新导航都重复打开文件。
+    var navigatorMediaDurationBadges: [String: String] = [:]
+    var navigatorMediaDurationLoadingIDs: Set<String> = []
 
     @Published var navigatorPanelSide: NavigatorPanelSide {
         didSet { saveState() }

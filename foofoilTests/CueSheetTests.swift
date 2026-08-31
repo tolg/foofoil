@@ -355,6 +355,16 @@ struct CueSheetTests {
         #expect(cueTime.timescale == CueTime.timescale)
     }
 
+    @Test func navigatorMediaDurationLoaderReadsAudioDuration() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-navigator-duration-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try writePCMWav(url: url, sampleRate: 44100, seconds: 2)
+
+        let duration = try #require(await MediaDurationLoader.duration(for: url, kind: .audio))
+        #expect(abs(duration - 2.0) < 0.02)
+    }
+
     @Test func audioControllerPreparesCueSegmentWithoutStartingDuringViewConstruction() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("foofoil-cue-prepare-\(UUID().uuidString).wav")

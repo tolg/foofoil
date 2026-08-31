@@ -62,6 +62,27 @@ nonisolated struct AudioPlaybackTiming: Equatable, Sendable {
     }
 }
 
+/// 供导航列表使用的轻量媒体时长读取器；音频优先走 AudioToolbox，视频使用 AVFoundation。
+nonisolated enum MediaDurationLoader {
+    static func duration(for url: URL, kind: FileListKind) async -> Double? {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        if kind == .audio, let timing = AudioMetadataLoader.playbackTiming(for: url) {
+            return timing.duration
+        }
+
+        let asset = AVURLAsset(url: url)
+        guard let duration = try? await asset.load(.duration) else { return nil }
+        let seconds = duration.seconds
+        return seconds.isFinite && seconds > 0 ? seconds : nil
+    }
+}
+
 nonisolated enum AudioMetadataLoader {
     /// 与音频文件同名或同目录常用封面文件名，按优先级尝试。
     static let sidecarImageExtensions = ["jpg", "jpeg", "png", "webp", "heic", "tif", "tiff", "gif"]

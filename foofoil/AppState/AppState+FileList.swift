@@ -47,6 +47,8 @@ extension AppState {
     func resetFileList() {
         fileList = nil
         fileListRevision = 0
+        navigatorMediaDurationBadges = [:]
+        navigatorMediaDurationLoadingIDs = []
         stopImageListSlideshow()
         builtInNavigatorContributions = []
         builtInNavigatorActionHandler = nil
@@ -528,6 +530,7 @@ extension AppState {
         if activeNavigatorContributionID == nil {
             activeNavigatorContributionID = Self.fileListNavigatorID
         }
+        loadNavigatorMediaDurationsIfNeeded(for: list)
     }
 
     func makeNavigatorItem(for item: FileListItem, in list: FileListState, parentID: String?) -> NavigatorItem {
@@ -538,7 +541,7 @@ extension AppState {
             title: item.displayName,
             subtitle: accessible ? item.cue?.artist : NSLocalizedString("File List Item Unavailable", comment: ""),
             symbolName: list.kind.itemSymbolName,
-            badge: cueSegmentDurationBadge(for: item),
+            badge: cueSegmentDurationBadge(for: item) ?? navigatorMediaDurationBadges[item.id],
             isEnabled: accessible,
             isCurrent: item.id == list.currentID
         )
@@ -570,6 +573,29 @@ extension AppState {
         guard let timing, timing.sampleRate > 0 else { return nil }
         let startSamples = CueTime.sampleFrame(cueFrames: cue.startCueFrames, sampleRate: timing.sampleRate)
         return Double(max(0, timing.sampleCount - startSamples)) / timing.sampleRate
+    }
+
+    /// 音视频时长可能触发文件 I/O，因此在后台完成后再仅刷新导航投影。
+    func loadNavigatorMediaDurationsIfNeeded(for list: FileListState) {
+        guard list.kind == .audio || list.kind == .video else { return }
+        for item in list.items where item.cue == nil && navigatorMediaDurationBadges[item.id] == nil && !navigatorMediaDurationLoadingIDs.contains(item.id) {
+            guard let url = resolvedURL(for: item) else { continue }
+            let itemID = item.id
+            let kind = list.kind
+            navigatorMediaDurationLoadingIDs.insert(itemID)
+            Task { [weak self] in
+                let duration = await MediaDurationLoader.duration(for: url, kind: kind)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.navigatorMediaDurationLoadingIDs.remove(itemID)
+                    guard self.fileList?.items.contains(where: { $0.id == itemID }) == true else { return }
+                    if let duration, let badge = AudioMetadataLoader.formatDuration(duration) {
+                        self.navigatorMediaDurationBadges[itemID] = badge
+                        self.syncFileListNavigator()
+                    }
+                }
+            }
+        }
     }
 
     func makeFileListItem(url: URL) -> FileListItem {
