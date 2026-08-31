@@ -14,6 +14,8 @@ struct NavigatorPanelView: View {
     @State private var dragStartMouseX: CGFloat?
     @State private var draggedNavigatorContributionID: String?
     @State private var draggedNavigatorItemID: String?
+    /// 当前鼠标悬停所在行的 ID，用于触发行内标题滚动。
+    @State private var hoveringNavigatorRowID: String?
 
     private struct VisibleRow: Identifiable {
         let item: NavigatorItem
@@ -174,8 +176,10 @@ struct NavigatorPanelView: View {
                             .foregroundStyle(row.item.isCurrent ? Color.accentColor : Color.secondary)
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(row.item.title)
-                            .lineLimit(1)
+                        NavigatorScrollingTitle(
+                            title: row.item.title,
+                            isRowHovering: hoveringNavigatorRowID == row.item.id
+                        )
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if let subtitle = row.item.subtitle, !subtitle.isEmpty {
                             Text(subtitle)
@@ -224,6 +228,14 @@ struct NavigatorPanelView: View {
             contribution: contribution,
             hasThumbnail: thumbnailPath != nil
         )
+        // 整行命中悬停：离开旧行时仅在仍是记录行的情况下清空，避免事件顺序抖动。
+        .onHover { hovering in
+            if hovering {
+                hoveringNavigatorRowID = row.item.id
+            } else if hoveringNavigatorRowID == row.item.id {
+                hoveringNavigatorRowID = nil
+            }
+        }
     }
 
     /// 只有扩展明确开放 move 的平面列表才能拖动；层级列表（包括 CUE）保持来源顺序。
@@ -383,6 +395,72 @@ struct NavigatorPanelView: View {
         if !contributions.contains(where: { $0.id == appState.activeNavigatorContributionID }) {
             appState.activeNavigatorContributionID = contributions[0].id
         }
+    }
+}
+
+/// 标题超出可用宽度时，鼠标悬停所在行即触发标题单向循环滚动（跑马灯），避免常态下分散注意力。
+private struct NavigatorScrollingTitle: View {
+    let title: String
+    let isRowHovering: Bool
+
+    /// 循环衔接处两份文本之间的间隔。
+    private static let loopGap: CGFloat = 24
+    /// 滚动速度（点/秒），保证长短标题观感一致。
+    private static let scrollPointsPerSecond: CGFloat = 28
+
+    @State private var availableWidth: CGFloat = 0
+    @State private var titleWidth: CGFloat = 0
+
+    private var overflow: CGFloat { max(0, titleWidth - availableWidth) }
+    private var isScrolling: Bool { isRowHovering && overflow > 0 }
+
+    var body: some View {
+        GeometryReader { proxy in
+            HStack(spacing: Self.loopGap) {
+                Text(title)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .background {
+                        GeometryReader { textProxy in
+                            Color.clear.preference(key: NavigatorTitleWidthKey.self, value: textProxy.size.width)
+                        }
+                    }
+                // 第二份文本用于无缝循环：偏移走到 -(titleWidth + gap) 时它与首份起点重合。
+                // 在静止（未滚动）时就提前创建，避免滚动期间插入触发带动画的透明度过渡。
+                if overflow > 0 {
+                    Text(title)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .transition(.identity)
+                }
+            }
+            .offset(x: isScrolling ? -(titleWidth + Self.loopGap) : 0)
+            .animation(
+                isScrolling
+                    ? .linear(
+                        duration: max(1.4, Double(titleWidth + Self.loopGap) / Double(Self.scrollPointsPerSecond))
+                    )
+                    .repeatForever(autoreverses: false)
+                    : .default,
+                value: isScrolling
+            )
+            .frame(width: proxy.size.width, alignment: .leading)
+            .clipped()
+            .onAppear { availableWidth = proxy.size.width }
+            .onChange(of: proxy.size.width) { _, width in availableWidth = width }
+        }
+        .frame(height: 17)
+        .clipped()
+        .onPreferenceChange(NavigatorTitleWidthKey.self) { titleWidth = $0 }
+        .accessibilityLabel(title)
+    }
+}
+
+private struct NavigatorTitleWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
