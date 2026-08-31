@@ -47,6 +47,23 @@
         }
       }
     },
+    "%d-bit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d-bit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 位"
+          }
+        }
+      }
+    },
     "%d Channels": {
       "extractionState": "manual",
       "localizations": {

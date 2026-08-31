@@ -532,10 +532,25 @@ struct FoofoilTests {
         #expect(AudioMetadataLoader.formatSampleRate(44100) == String(format: NSLocalizedString("%@ kHz", comment: ""), "44.1"))
         #expect(AudioMetadataLoader.formatSampleRate(48000) == String(format: NSLocalizedString("%@ kHz", comment: ""), "48"))
         #expect(AudioMetadataLoader.formatBitRate(320000) == String(format: NSLocalizedString("%@ kbps", comment: ""), "320"))
+        #expect(AudioMetadataLoader.formatBitDepth(24) == String(format: NSLocalizedString("%d-bit", comment: ""), 24))
         #expect(AudioMetadataLoader.formatChannels(1) == NSLocalizedString("Mono", comment: ""))
         #expect(AudioMetadataLoader.formatChannels(2) == NSLocalizedString("Stereo", comment: ""))
         #expect(AudioMetadataLoader.formatDuration(185) == "3:05")
         #expect(AudioMetadataLoader.formatDuration(3723) == "1:02:03")
+    }
+
+    @Test func testFLACBitDepthReadsStreamInfoHeader() {
+        var header = Data("fLaC".utf8)
+        header.append(0) // 最后一个元数据块标识 + STREAMINFO 类型
+        header.append(contentsOf: [0, 0, 34])
+        header.append(Data(repeating: 0, count: 10))
+
+        // STREAMINFO 的采样率/声道/位深/总采样数共用 64 位；这里写入 24-bit。
+        let fields = UInt64(44_100) << 44 | UInt64(1) << 41 | UInt64(23) << 36
+        header.append(contentsOf: (0..<8).reversed().map { UInt8((fields >> UInt64($0 * 8)) & 0xff) })
+        header.append(Data(repeating: 0, count: 16))
+
+        #expect(AudioMetadataLoader.flacBitDepth(from: header) == 24)
     }
 
     @Test func testCanOpenFileAcceptsVideoCandidates() throws {

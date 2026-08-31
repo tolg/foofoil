@@ -185,6 +185,7 @@ struct AudioModeView: View {
             info.formatName,
             info.bitRate.map(AudioMetadataLoader.formatBitRate),
             info.sampleRate.map(AudioMetadataLoader.formatSampleRate),
+            info.bitDepth.map(AudioMetadataLoader.formatBitDepth),
             info.channelCount.map(AudioMetadataLoader.formatChannels),
             AudioMetadataLoader.formatDuration(controller.duration)
         ])

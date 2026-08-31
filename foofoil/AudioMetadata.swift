@@ -22,6 +22,7 @@ nonisolated struct AudioTrackInfo {
     var trackNumber: String?
     var formatName: String?
     var sampleRate: Double?
+    var bitDepth: Int?
     var bitRate: Double?
     var channelCount: Int?
     var artwork: NSImage?
@@ -83,6 +84,9 @@ nonisolated enum AudioMetadataLoader {
             if let descriptions = try? await track.load(.formatDescriptions) {
                 applyFormatDescriptions(descriptions, to: &info)
             }
+        }
+        if info.bitDepth == nil {
+            info.bitDepth = flacBitDepth(for: url)
         }
 
         if info.artwork == nil {
@@ -275,6 +279,26 @@ nonisolated enum AudioMetadataLoader {
         return String(format: NSLocalizedString("%@ kbps", comment: ""), "\(kbps)")
     }
 
+    static func formatBitDepth(_ bitDepth: Int) -> String {
+        String(format: NSLocalizedString("%d-bit", comment: ""), bitDepth)
+    }
+
+    /// FLAC 的 Core Media 格式描述常缺少位深，直接读取固定长度的 STREAMINFO 文件头。
+    static func flacBitDepth(from header: Data) -> Int? {
+        guard header.count >= 42,
+              header.prefix(4) == Data("fLaC".utf8),
+              header[4] & 0x7f == 0,
+              Int(header[5]) << 16 | Int(header[6]) << 8 | Int(header[7]) == 34 else {
+            return nil
+        }
+
+        let streamInfo = header[18..<26].reduce(UInt64(0)) { partial, byte in
+            partial << 8 | UInt64(byte)
+        }
+        let bitDepth = Int((streamInfo >> 36) & 0x1f) + 1
+        return (4...32).contains(bitDepth) ? bitDepth : nil
+    }
+
     static func formatChannels(_ count: Int) -> String {
         switch count {
         case 1: return NSLocalizedString("Mono", comment: "")
@@ -340,6 +364,10 @@ nonisolated enum AudioMetadataLoader {
             if asbd.mSampleRate > 0 {
                 info.sampleRate = asbd.mSampleRate
             }
+            // 有损编码通常不声明原始位深，不能拿解码后的 PCM 位数代替。
+            if asbd.mBitsPerChannel >= 8 {
+                info.bitDepth = Int(asbd.mBitsPerChannel)
+            }
             if asbd.mChannelsPerFrame > 0 {
                 info.channelCount = Int(asbd.mChannelsPerFrame)
             }
@@ -351,6 +379,16 @@ nonisolated enum AudioMetadataLoader {
             }
             break
         }
+    }
+
+    private static func flacBitDepth(for url: URL) -> Int? {
+        guard url.pathExtension.caseInsensitiveCompare("flac") == .orderedSame,
+              let handle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { try? handle.close() }
+        guard let header = try? handle.read(upToCount: 42) else { return nil }
+        return flacBitDepth(from: header)
     }
 
     private static func stringValue(_ items: [AVMetadataItem], identifiers: [AVMetadataIdentifier]) async -> String? {
