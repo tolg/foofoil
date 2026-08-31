@@ -59,6 +59,7 @@ struct CueSheetTests {
         """
         let sheet = CueSheetParser.parse(text: text, cueURL: URL(fileURLWithPath: "/tmp/album.cue"))
         #expect(sheet.title == "The Dark Side of the Moon")
+        #expect(sheet.displayTitle == "The Dark Side of the Moon")
         #expect(sheet.performer == "Pink Floyd")
         #expect(sheet.genre == "Progressive Rock")
         #expect(sheet.date == "1973")
@@ -79,6 +80,14 @@ struct CueSheetTests {
         #expect(third.title == "On the Run")
         #expect(third.startCueFrames == CueTime.parse("03:57:50"))
         #expect(third.endCueFrames == nil)
+    }
+
+    @Test func cueDisplayTitleFallsBackToFileName() {
+        let sheet = CueSheetParser.parse(
+            text: "FILE \"disc.wav\" WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00",
+            cueURL: URL(fileURLWithPath: "/tmp/Archive Disc.cue")
+        )
+        #expect(sheet.displayTitle == "Archive Disc")
     }
 
     @Test func parserKeepsSeparateFilesIndependent() {
@@ -272,6 +281,8 @@ struct CueSheetTests {
         let state = AppState()
         defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
         #expect(state.handleDroppedFileURLs([cue]))
+        #expect(state.fileList?.title == "Disc")
+        #expect(state.toConfig().historyMenuDisplayName == "Disc")
         let items = try #require(state.navigatorContributions.first?.items)
         #expect(items.map(\.title) == ["Intro", "Song"])
         #expect(items.map(\.badge) == ["0:01", "0:01"])
@@ -300,6 +311,7 @@ struct CueSheetTests {
             kind: .audio,
             items: [item, second],
             currentID: "t1",
+            title: "Album",
             sections: [FileListSection(id: "section", title: "Album", cueSheetPath: "/tmp/album.cue")]
         )
         let encoded = try JSONEncoder().encode(list)
@@ -307,9 +319,11 @@ struct CueSheetTests {
         #expect(decoded.items[0].cue?.startCueFrames == CueTime.frames(minutes: 0, seconds: 12, frames: 37))
         #expect(decoded.items[0].cue?.endCueFrames == CueTime.frames(minutes: 0, seconds: 48, frames: 0))
         #expect(decoded.items[0].cue?.title == "Track")
+        #expect(decoded.title == "Album")
         #expect(decoded.sections.first?.title == "Album")
 
         var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "title")
         object.removeValue(forKey: "sections")
         if var items = object["items"] as? [[String: Any]] {
             items = items.map { item in
@@ -321,6 +335,7 @@ struct CueSheetTests {
         }
         let legacy = try JSONDecoder().decode(FileListState.self, from: JSONSerialization.data(withJSONObject: object))
         #expect(legacy.sections.isEmpty)
+        #expect(legacy.title == nil)
         #expect(legacy.items[0].cue == nil)
     }
 
@@ -338,6 +353,24 @@ struct CueSheetTests {
         let cueTime = CueTime.time(CueTime.frames(minutes: 5, seconds: 32, frames: 37))
         #expect(cueTime.value == 24937)
         #expect(cueTime.timescale == CueTime.timescale)
+    }
+
+    @Test func audioControllerPreparesCueSegmentWithoutStartingDuringViewConstruction() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-cue-prepare-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try writePCMWav(url: url, sampleRate: 44100, seconds: 2)
+
+        let controller = AudioPlaybackController(
+            appStateID: UUID(),
+            url: url,
+            isLooping: false,
+            range: MediaPlaybackRange(startCueFrames: 0, endCueFrames: 75)
+        )
+
+        #expect(controller.duration == 1)
+        #expect(controller.currentTime == 0)
+        #expect(!controller.isPlaying)
     }
 
     private func writePCMWav(url: URL, sampleRate: Int, seconds: Double) throws {

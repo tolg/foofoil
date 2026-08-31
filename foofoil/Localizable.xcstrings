@@ -523,6 +523,40 @@
         }
       }
     },
+    "Directory Scan Limit Message Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the first %d files were scanned. The resulting list may be incomplete."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅扫描了前 %d 个文件，生成的列表可能不完整。"
+          }
+        }
+      }
+    },
+    "Directory Scan Limit Title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder Scan Stopped"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目录扫描已停止"
+          }
+        }
+      }
+    },
     "Drop image, HTML, Markdown or type a note": {
       "extractionState": "manual",
       "localizations": {

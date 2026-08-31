@@ -62,10 +62,7 @@ struct AudioModeView: View {
             controller.pause()
             MediaRemoteCommandCoordinator.shared.deactivate(controller)
         }
-        .onChange(of: url) {
-            applyCurrentTrack()
-        }
-        .onChange(of: appState.fileList?.currentID) {
+        .onChange(of: presentationID) {
             applyCurrentTrack()
         }
         .onChange(of: appState.shouldLoopCurrentItem) {
@@ -201,7 +198,7 @@ struct AudioModeView: View {
 
     private func applyCurrentTrack() {
         controller.isLooping = appState.shouldLoopCurrentItem
-        controller.load(url: url, range: appState.currentPlaybackRange)
+        controller.load(url: url, range: appState.currentPlaybackRange, autoplay: true)
         info = Self.overlay(
             AudioTrackInfo.fallback(fileName: url.lastPathComponent),
             with: appState.fileList?.currentItem?.cue

@@ -1264,25 +1264,93 @@ struct FoofoilTests {
         #expect(attr.length > 0)
     }
 
-    @Test func groupsSameKindTogetherAndKeepsOthersSeparate() {
+    @Test func groupedDropChoosesOneTypeByMediaPriority() {
         let urls = [
             URL(fileURLWithPath: "/tmp/a.jpg"),
             URL(fileURLWithPath: "/tmp/b.jpg"),
             URL(fileURLWithPath: "/tmp/c.mp4"),
+            URL(fileURLWithPath: "/tmp/song.mp3"),
             URL(fileURLWithPath: "/tmp/d.pdf"),
             URL(fileURLWithPath: "/tmp/e.jpg"),
             URL(fileURLWithPath: "/tmp/notes.txt")
         ]
         let groups = FileListGrouper.groups(from: urls)
-        #expect(groups.count == 4)
-        #expect(groups[0].kind == .listable(.image))
-        #expect(groups[0].urls.map(\.lastPathComponent) == ["a.jpg", "b.jpg", "e.jpg"])
-        #expect(groups[1].kind == .listable(.video))
-        #expect(groups[1].urls.map(\.lastPathComponent) == ["c.mp4"])
-        #expect(groups[2].kind == .other)
-        #expect(groups[2].urls.first?.lastPathComponent == "d.pdf")
-        #expect(groups[3].kind == .other)
-        #expect(groups[3].urls.first?.lastPathComponent == "notes.txt")
+        #expect(groups.count == 1)
+        #expect(groups[0].kind == .listable(.audio))
+        #expect(groups[0].urls.map(\.lastPathComponent) == ["song.mp3"])
+    }
+
+    @Test func groupedDropChoosesMostNumerousOtherType() {
+        let groups = FileListGrouper.groups(from: [
+            URL(fileURLWithPath: "/tmp/document.pdf"),
+            URL(fileURLWithPath: "/tmp/first.txt"),
+            URL(fileURLWithPath: "/tmp/page.html"),
+            URL(fileURLWithPath: "/tmp/second.md")
+        ])
+
+        #expect(groups.count == 2)
+        #expect(groups.allSatisfy { $0.kind == .other })
+        #expect(groups.flatMap(\.urls).map(\.lastPathComponent) == ["first.txt", "second.md"])
+    }
+
+    @Test func directoryDropRecursesSkipsHiddenAndCreatesPreferredList() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-directory-drop-\(UUID().uuidString)", isDirectory: true)
+        let nested = directory.appendingPathComponent("Disc 2", isDirectory: true)
+        let hiddenDirectory = directory.appendingPathComponent(".private", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: hiddenDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let firstAudio = directory.appendingPathComponent("01.mp3")
+        let secondAudio = nested.appendingPathComponent("02.mp3")
+        let hiddenAudio = directory.appendingPathComponent(".hidden.mp3")
+        let nestedHiddenAudio = hiddenDirectory.appendingPathComponent("secret.mp3")
+        let video = directory.appendingPathComponent("movie.mp4")
+        let image = directory.appendingPathComponent("cover.png")
+        let unsupported = directory.appendingPathComponent("payload.unknown-format")
+        for url in [firstAudio, secondAudio, hiddenAudio, nestedHiddenAudio, video, image, unsupported] {
+            try Data("test".utf8).write(to: url)
+        }
+
+        let expanded = DroppedFileResolver.scan(urls: [directory]).urls
+        #expect(!expanded.contains(hiddenAudio))
+        #expect(!expanded.contains(nestedHiddenAudio))
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        #expect(state.handleDroppedFileURLs([directory]))
+        for _ in 0..<100 where state.fileList == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(state.fileList?.kind == .audio)
+        #expect(state.fileList?.items.map(\.displayName) == ["01.mp3", "02.mp3"])
+        #expect(state.fileList?.items.contains(where: { $0.path == unsupported.path }) == false)
+    }
+
+    @Test func directoryScanStopsAtLimitAndSupportsCancellation() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-directory-limit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for index in 0..<5 {
+            let url = directory.appendingPathComponent(String(format: "%02d.txt", index))
+            try Data("test".utf8).write(to: url)
+        }
+
+        #expect(DroppedFileResolver.scanLimit == 1_000)
+        let limited = DroppedFileResolver.scan(urls: [directory], limit: 3)
+        #expect(limited.scannedFileCount == 3)
+        #expect(limited.urls.count == 3)
+        #expect(limited.didReachLimit)
+        #expect(!limited.wasCancelled)
+
+        let cancellation = DroppedFileScanCancellation()
+        cancellation.cancel()
+        let cancelled = DroppedFileResolver.scan(urls: [directory], cancellation: cancellation)
+        #expect(cancelled.urls.isEmpty)
+        #expect(cancelled.wasCancelled)
     }
 
     @Test func classifyRejectsPDFAndTextFromImageLists() {
@@ -1795,7 +1863,7 @@ struct FoofoilTests {
 
         let first = FileListItem(id: "a", path: "/tmp/a.png", bookmark: nil, displayName: "a.png")
         let second = FileListItem(id: "b", path: "/tmp/b.png", bookmark: nil, displayName: "b.png")
-        let list = FileListState(kind: .image, items: [first, second], currentID: "b")
+        let list = FileListState(kind: .image, items: [first, second], currentID: "b", title: "参考图")
         let config = WindowConfig(
             id: UUID(),
             imagePath: "/tmp/b.png",
@@ -1813,16 +1881,17 @@ struct FoofoilTests {
         let decoded = try JSONDecoder().decode(WindowConfig.self, from: encoded)
         #expect(decoded.fileList?.items.map(\.id) == ["a", "b"])
         #expect(decoded.fileList?.currentID == "b")
+        #expect(decoded.fileList?.title == "参考图")
         #expect(decoded.fileList?.isSlideshowEnabled == false)
         #expect(decoded.fileList?.slideshowInterval == ImageListSlideshow.defaultInterval)
-        #expect(decoded.historyMenuDisplayName.contains("2"))
+        #expect(decoded.historyMenuDisplayName == "参考图")
 
         let database = try HistoryDatabase(databaseURL: directory.appendingPathComponent("history.sqlite3"))
         try database.upsert(config)
         let stored = try #require(try database.config(id: config.id))
         #expect(stored.id == config.id)
         #expect(stored.fileList?.items.count == 2)
-        #expect(stored.storedDisplayTitle?.contains("2") == true)
+        #expect(stored.storedDisplayTitle == "参考图")
         #expect(stored.sourceFingerprint == nil)
 
         let member = WindowConfig(
@@ -1835,6 +1904,31 @@ struct FoofoilTests {
         try database.upsert(member)
         let listAfter = try #require(try database.config(id: config.id))
         #expect(listAfter.fileList?.items.count == 2)
+
+        try database.rename(id: config.id, title: "新标题")
+        let renamed = try #require(try database.config(id: config.id))
+        #expect(renamed.historyMenuDisplayName == "新标题")
+        #expect(renamed.fileList?.title == "新标题")
+        #expect(renamed.originalImageName == "b.png")
+
+        try database.rename(id: config.id, title: "  ")
+        let untitled = try #require(try database.config(id: config.id))
+        #expect(untitled.fileList?.title == nil)
+        #expect(untitled.historyMenuDisplayName.contains("2"))
+        #expect(untitled.originalImageName == "b.png")
+
+        // 旧版列表改名曾把标题写进 original_filename；读取时应迁回列表标题。
+        let legacyRenamed = WindowConfig(
+            id: UUID(),
+            imagePath: "/tmp/b.png",
+            originalImageName: "旧列表标题",
+            contentKind: .image,
+            fileList: FileListState(kind: .image, items: [first, second], currentID: "b")
+        )
+        try database.upsert(legacyRenamed)
+        let migrated = try #require(try database.config(id: legacyRenamed.id))
+        #expect(migrated.fileList?.title == "旧列表标题")
+        #expect(migrated.historyMenuDisplayName == "旧列表标题")
     }
 
     @Test func mediaPlaybackModeCyclesAndAdvancesFileList() throws {

@@ -69,7 +69,7 @@ public nonisolated enum FileOpenKind: Equatable, Sendable {
     case other
 }
 
-enum DroppedFileKind: Equatable {
+nonisolated enum DroppedFileKind: Equatable {
     case image
     case video
     case audio
@@ -244,6 +244,8 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
     public var kind: FileListKind
     public var items: [FileListItem]
     public var currentID: String
+    /// 用户设置的列表标题；为空时展示本地化的“类型 + 项数”回退标题。
+    public var title: String?
     /// 仅图片列表使用；默认关闭，随列表一起持久化。
     public var isSlideshowEnabled: Bool
     /// 轮播间隔秒数快照；实际计时以 SettingsStore 全局偏好为准。
@@ -268,6 +270,7 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
         kind: FileListKind,
         items: [FileListItem],
         currentID: String,
+        title: String? = nil,
         isSlideshowEnabled: Bool = false,
         slideshowInterval: TimeInterval = ImageListSlideshow.defaultInterval,
         sections: [FileListSection] = []
@@ -275,13 +278,14 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
         self.kind = kind
         self.items = items
         self.currentID = currentID
+        self.title = Self.normalizedTitle(title)
         self.isSlideshowEnabled = isSlideshowEnabled
         self.slideshowInterval = ImageListSlideshow.clampInterval(slideshowInterval)
         self.sections = sections
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, items, currentID, isSlideshowEnabled, slideshowInterval, sections
+        case kind, items, currentID, title, isSlideshowEnabled, slideshowInterval, sections
     }
 
     public init(from decoder: Decoder) throws {
@@ -289,17 +293,149 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
         kind = try container.decode(FileListKind.self, forKey: .kind)
         items = try container.decode([FileListItem].self, forKey: .items)
         currentID = try container.decode(String.self, forKey: .currentID)
+        title = Self.normalizedTitle(try container.decodeIfPresent(String.self, forKey: .title))
         isSlideshowEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSlideshowEnabled) ?? false
         slideshowInterval = ImageListSlideshow.clampInterval(
             try container.decodeIfPresent(TimeInterval.self, forKey: .slideshowInterval) ?? ImageListSlideshow.defaultInterval
         )
         sections = try container.decodeIfPresent([FileListSection].self, forKey: .sections) ?? []
     }
+
+    static func normalizedTitle(_ title: String?) -> String? {
+        guard let value = title?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
 }
 
 public nonisolated struct FileListGroup: Equatable, Sendable {
     public let kind: FileOpenKind
     public let urls: [URL]
+}
+
+nonisolated final class DroppedFileScanCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+}
+
+nonisolated struct DroppedFileScanResult: Sendable {
+    let urls: [URL]
+    let scannedFileCount: Int
+    let didReachLimit: Bool
+    let wasCancelled: Bool
+}
+
+public nonisolated enum DroppedFileResolver {
+    static let scanLimit = 1_000
+
+    /// 将拖入的目录递归展开为普通文件；隐藏项和包内容不参与后续类型选择。
+    static func scan(
+        urls: [URL],
+        limit: Int = scanLimit,
+        cancellation: DroppedFileScanCancellation? = nil,
+        fileManager: FileManager = .default
+    ) -> DroppedFileScanResult {
+        let limit = max(1, limit)
+        var result: [URL] = []
+        var scannedFileCount = 0
+        var didReachLimit = false
+
+        for url in urls where url.isFileURL {
+            if cancellation?.isCancelled == true {
+                return DroppedFileScanResult(
+                    urls: FileListGrouper.uniqued(result),
+                    scannedFileCount: scannedFileCount,
+                    didReachLimit: didReachLimit,
+                    wasCancelled: true
+                )
+            }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+            guard !isHidden(url) else { continue }
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
+            guard isDirectory.boolValue else {
+                guard scannedFileCount < limit else {
+                    didReachLimit = true
+                    break
+                }
+                scannedFileCount += 1
+                result.append(url)
+                continue
+            }
+            if (try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) == true { continue }
+
+            let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .isHiddenKey, .isPackageKey]
+            guard let enumerator = fileManager.enumerator(
+                at: url,
+                includingPropertiesForKeys: keys,
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else { continue }
+
+            var files: [URL] = []
+            while let item = enumerator.nextObject() {
+                if cancellation?.isCancelled == true {
+                    enumerator.skipDescendants()
+                    break
+                }
+                guard let child = item as? URL, !isHidden(child),
+                      let values = try? child.resourceValues(forKeys: Set(keys)) else { continue }
+                if values.isDirectory == true {
+                    if values.isHidden == true || values.isPackage == true {
+                        enumerator.skipDescendants()
+                    }
+                    continue
+                }
+                guard values.isRegularFile != false else { continue }
+                guard scannedFileCount < limit else {
+                    didReachLimit = true
+                    enumerator.skipDescendants()
+                    break
+                }
+                scannedFileCount += 1
+                files.append(child)
+            }
+            files.sort { lhs, rhs in
+                lhs.path.localizedStandardCompare(rhs.path) == .orderedAscending
+            }
+            result.append(contentsOf: files)
+            if cancellation?.isCancelled == true || didReachLimit { break }
+        }
+        return DroppedFileScanResult(
+            urls: FileListGrouper.uniqued(result),
+            scannedFileCount: scannedFileCount,
+            didReachLimit: didReachLimit,
+            wasCancelled: cancellation?.isCancelled == true
+        )
+    }
+
+    static func containsDirectory(in urls: [URL], fileManager: FileManager = .default) -> Bool {
+        urls.contains { url in
+            var isDirectory: ObjCBool = false
+            return url.isFileURL
+                && fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
+    }
+
+    private static func isHidden(_ url: URL) -> Bool {
+        if url.lastPathComponent.hasPrefix(".") { return true }
+        return (try? url.resourceValues(forKeys: [.isHiddenKey]).isHidden) == true
+    }
 }
 
 public nonisolated enum FileListGrouper {
@@ -357,7 +493,7 @@ public nonisolated enum FileListGrouper {
         return cues.isEmpty ? unique : cues
     }
 
-    /// 可列表类型按首次出现顺序聚成一组（跨穿插的其它文件仍归入该类型）；其它类型各成单文件组。
+    /// 一次批次只选择一种内容：CUE、音频、视频、图片依次优先；其它类型按数量最多者选择。
     static func groups(from urls: [URL]) -> [FileListGroup] {
         let unique = preferredOpenableURLs(from: urls)
         let cues = unique.filter { isCueFile($0) }
@@ -365,35 +501,26 @@ public nonisolated enum FileListGrouper {
             return [FileListGroup(kind: .cueSheets, urls: cues)]
         }
 
-        var listableURLs: [FileListKind: [URL]] = [:]
-        enum Token {
-            case listable(FileListKind)
-            case other(URL)
+        for kind in [FileListKind.audio, .video, .image] {
+            let matching = unique.filter { classify(url: $0) == .listable(kind) }
+            if !matching.isEmpty {
+                return [FileListGroup(kind: .listable(kind), urls: matching)]
+            }
         }
-        var tokens: [Token] = []
-        var seenKinds = Set<FileListKind>()
 
+        var otherGroups: [(kind: DroppedFileKind, urls: [URL])] = []
         for url in unique {
-            switch classify(url: url) {
-            case .listable(let kind):
-                if seenKinds.insert(kind).inserted {
-                    tokens.append(.listable(kind))
-                }
-                listableURLs[kind, default: []].append(url)
-            case .cueSheets:
-                break
-            case .other:
-                tokens.append(.other(url))
+            let kind = dropKind(url: url)
+            if let index = otherGroups.firstIndex(where: { $0.kind == kind }) {
+                otherGroups[index].urls.append(url)
+            } else {
+                otherGroups.append((kind, [url]))
             }
         }
-
-        return tokens.map { token in
-            switch token {
-            case .listable(let kind):
-                FileListGroup(kind: .listable(kind), urls: listableURLs[kind] ?? [])
-            case .other(let url):
-                FileListGroup(kind: .other, urls: [url])
-            }
+        guard var selected = otherGroups.first else { return [] }
+        for candidate in otherGroups.dropFirst() where candidate.urls.count > selected.urls.count {
+            selected = candidate
         }
+        return selected.urls.map { FileListGroup(kind: .other, urls: [$0]) }
     }
 }

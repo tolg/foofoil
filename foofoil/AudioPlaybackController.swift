@@ -72,6 +72,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     }
 
     func play() {
+        guard audioFile != nil, segmentFrames > 0 else { return }
         MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
         if duration > 0, currentTime >= duration - 0.05 {
             schedule(from: 0, play: true)
@@ -81,7 +82,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             if currentTime > 0 {
                 schedule(from: currentTime, play: true)
             } else {
-                ensureEngineRunning()
+                guard ensureEngineRunning() else { return }
                 playerNode.play()
                 isPlaying = true
                 MediaRemoteCommandCoordinator.shared.update(self)
@@ -145,10 +146,20 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         nextItemAction()
     }
 
-    func load(url: URL, range: MediaPlaybackRange? = nil) {
+    func load(url: URL, range: MediaPlaybackRange? = nil, autoplay: Bool = false) {
         mediaTitle = url.deletingPathExtension().lastPathComponent
+        playerNode.stop()
+        engine.stop()
+        isPlaying = false
         do {
             let file = try AVAudioFile(forReading: url)
+            guard Self.isPlayable(format: file.processingFormat) else {
+                NSLog("AudioPlaybackController rejected invalid format for \(url.path): \(file.processingFormat)")
+                audioFile = nil
+                duration = 0
+                currentTime = 0
+                return
+            }
             audioFile = file
             sampleRate = file.processingFormat.sampleRate > 0
                 ? file.processingFormat.sampleRate
@@ -169,7 +180,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             duration = sampleRate > 0 ? Double(segmentFrames) / sampleRate : 0
             currentTime = 0
             MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
-            schedule(from: 0, play: true)
+            schedule(from: 0, play: autoplay)
         } catch {
             NSLog("AudioPlaybackController failed to open \(url.path): \(error.localizedDescription)")
             audioFile = nil
@@ -179,7 +190,11 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     }
 
     private func reconnect(format: AVAudioFormat) {
+        // AVAudioEngine 不支持运行中改图；历史恢复和 CUE 切轨前先完整停止并重置。
+        playerNode.stop()
+        engine.stop()
         engine.disconnectNodeOutput(playerNode)
+        engine.reset()
         engine.connect(playerNode, to: engine.mainMixerNode, format: format)
         applyVolume()
     }
@@ -210,7 +225,10 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             }
         }
         if play {
-            ensureEngineRunning()
+            guard ensureEngineRunning() else {
+                isPlaying = false
+                return
+            }
             playerNode.play()
             isPlaying = true
             MediaRemoteCommandCoordinator.shared.update(self)
@@ -231,13 +249,28 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         )
     }
 
-    private func ensureEngineRunning() {
-        guard !engine.isRunning else { return }
+    @discardableResult
+    private func ensureEngineRunning() -> Bool {
+        guard !engine.isRunning else { return true }
+        let outputFormat = engine.outputNode.inputFormat(forBus: 0)
+        guard Self.isPlayable(format: outputFormat) else {
+            NSLog("AudioPlaybackController cannot start with invalid output format: \(outputFormat)")
+            return false
+        }
         do {
+            engine.prepare()
             try engine.start()
+            return true
         } catch {
             NSLog("AudioPlaybackController engine start failed: \(error.localizedDescription)")
+            return false
         }
+    }
+
+    private static func isPlayable(format: AVAudioFormat) -> Bool {
+        format.sampleRate.isFinite
+            && format.sampleRate > 0
+            && format.channelCount > 0
     }
 
     private func applyVolume() {

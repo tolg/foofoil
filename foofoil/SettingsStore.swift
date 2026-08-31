@@ -290,10 +290,11 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
     }
 
     public var historyMenuDisplayName: String {
-        if let storedDisplayTitle, !storedDisplayTitle.isEmpty { return storedDisplayTitle }
         if let fileList, fileList.isPresentable {
+            if let title = FileListState.normalizedTitle(fileList.title) { return title }
             return String(format: NSLocalizedString(fileList.kind.historyTitleFormatKey, comment: ""), fileList.items.count)
         }
+        if let storedDisplayTitle, !storedDisplayTitle.isEmpty { return storedDisplayTitle }
         if let webURLString = self.webURLString {
             return self.originalImageName ?? webURLString
         } else if let imagePath = self.imagePath {

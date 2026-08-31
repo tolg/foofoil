@@ -95,8 +95,7 @@ struct TextEditorModeView: View {
                                             .contextMenu {
                                                 Button(action: {
                                                     targetRenameConfig = config
-                                                    let rawTitle = config.originalImageName ?? config.historyMenuDisplayName
-                                                    newTitleText = rawTitle
+                                                    newTitleText = config.historyMenuDisplayName
                                                     showRenameAlert = true
                                                 }) {
                                                     Label(NSLocalizedString("Change Title", comment: ""), systemImage: "pencil")

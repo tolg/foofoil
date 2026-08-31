@@ -71,6 +71,14 @@ public final class HistoryManager: ObservableObject {
     }
 
     public func updateHistoryTitle(configId: UUID, newTitle: String) {
+        // 已打开列表也同步内存标题，避免下一次窗口状态保存把刚改好的数据库标题覆盖掉。
+        if let appDelegate = NSApplication.shared.delegate as? AppDelegate,
+           let state = appDelegate.windowControllers.first(where: { $0.appState.id == configId })?.appState,
+           var fileList = state.fileList,
+           fileList.isPresentable {
+            fileList.title = FileListState.normalizedTitle(newTitle)
+            state.fileList = fileList
+        }
         repository.rename(id: configId, title: newTitle)
         refreshUI()
     }

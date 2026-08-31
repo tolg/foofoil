@@ -32,6 +32,29 @@ extension AppState {
         func handleDroppedFileURLs(_ urls: [URL]) -> Bool {
             let fileURLs = urls.filter(\.isFileURL)
             guard !fileURLs.isEmpty else { return false }
+            activeDirectoryDropScan?.cancel()
+            activeDirectoryDropScan = nil
+            currentDropGeneration &+= 1
+            let generation = currentDropGeneration
+
+            // 大目录遍历放到后台，完成后仍回到同一套多文件筛选与打开流程。
+            if DroppedFileResolver.containsDirectory(in: fileURLs) {
+                scanDroppedDirectories(urls: fileURLs) { [weak self] result in
+                    guard let self, self.isCurrentDrop(generation), !result.wasCancelled else { return }
+                    _ = self.processDroppedFileURLs(result.urls)
+                    if result.didReachLimit {
+                        self.showDirectoryScanLimitAlert()
+                    }
+                }
+                return true
+            }
+
+            return processDroppedFileURLs(fileURLs)
+        }
+
+        @discardableResult
+        private func processDroppedFileURLs(_ fileURLs: [URL]) -> Bool {
+            guard !fileURLs.isEmpty else { return false }
 
             if listableKind != nil {
                 return appendMatchingDroppedFiles(urls: fileURLs)
@@ -49,9 +72,13 @@ extension AppState {
                 return true
             }
 
-            // 空白箔片的第一组直接在当前状态中打开，图片批次会立即安装为列表。
+            // 空白箔片直接打开选中的媒体组；不可列表类型仍按文件分别创建箔片。
             let groups = FileListGrouper.groups(from: openable)
             guard let first = groups.first else { return false }
+            if groups.count > 1 {
+                postGroupedFileOpen(urls: groups.flatMap(\.urls), append: false)
+                return true
+            }
             openFileGroup(first, preservesIdentity: true)
             return true
         }
@@ -63,6 +90,8 @@ extension AppState {
             }
 
             // 递增代次，后续所有异步回调需校验仍为当前代次，否则丢弃（防止并发覆盖与“打开以前的东西”）。
+            activeDirectoryDropScan?.cancel()
+            activeDirectoryDropScan = nil
             currentDropGeneration &+= 1
             let generation = currentDropGeneration
 
@@ -148,8 +177,53 @@ extension AppState {
                     completion([])
                     return
                 }
-                completion(collected.compactMap { $0 })
+                let urls = collected.compactMap { $0 }
+                guard DroppedFileResolver.containsDirectory(in: urls) else {
+                    completion(urls)
+                    return
+                }
+                self.scanDroppedDirectories(urls: urls) { [weak self] result in
+                    guard let self, self.isCurrentDrop(generation), !result.wasCancelled else {
+                        completion([])
+                        return
+                    }
+                    completion(result.urls)
+                    if result.didReachLimit {
+                        self.showDirectoryScanLimitAlert()
+                    }
+                }
             }
+        }
+
+        /// 后台执行有上限的目录扫描，并持有根目录授权直到结果在主线程完成处理。
+        private func scanDroppedDirectories(
+            urls: [URL],
+            completion: @escaping (DroppedFileScanResult) -> Void
+        ) {
+            let cancellation = DroppedFileScanCancellation()
+            activeDirectoryDropScan = cancellation
+            let accessedRoots = urls.filter { $0.startAccessingSecurityScopedResource() }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let result = DroppedFileResolver.scan(urls: urls, cancellation: cancellation)
+                DispatchQueue.main.async {
+                    defer { accessedRoots.forEach { $0.stopAccessingSecurityScopedResource() } }
+                    if self?.activeDirectoryDropScan === cancellation {
+                        self?.activeDirectoryDropScan = nil
+                    }
+                    completion(result)
+                }
+            }
+        }
+
+        private func showDirectoryScanLimitAlert() {
+            let alert = NSAlert()
+            alert.messageText = NSLocalizedString("Directory Scan Limit Title", comment: "")
+            alert.informativeText = String(
+                format: NSLocalizedString("Directory Scan Limit Message Format", comment: ""),
+                DroppedFileResolver.scanLimit
+            )
+            alert.alertStyle = .informational
+            alert.runModal()
         }
 
         /// Finder 多选拖放通常只提供 public.file-url，而不支持 loadObject(URL.self)。

@@ -636,6 +636,7 @@ extension AppState {
             kind: .audio,
             items: items,
             currentID: items[0].id,
+            title: sheets.first?.section.title,
             sections: sheets.map(\.section)
         )
         sourceFingerprint = nil

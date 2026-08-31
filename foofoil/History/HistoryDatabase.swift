@@ -184,9 +184,18 @@ nonisolated final class HistoryDatabase {
             try transaction {
                 guard var config = try queryConfigs("SELECT * FROM history_items WHERE id = ?", bindings: [id.uuidString]).first else { return }
                 try deleteChunks(historyID: id, kinds: [0, 1])
-                config.originalImageName = title.isEmpty ? nil : title
+                if var fileList = config.fileList, fileList.isPresentable {
+                    // 列表标题属于列表本身，不能覆盖会随当前项切换的原始文件名。
+                    fileList.title = FileListState.normalizedTitle(title)
+                    config.fileList = fileList
+                } else {
+                    config.originalImageName = FileListState.normalizedTitle(title)
+                }
                 let displayTitle = displayTitle(for: config, kind: config.contentKind ?? HistoryContentKind.infer(from: config))
-                try executePrepared("UPDATE history_items SET display_title = ?, original_filename = ?, updated_at = ? WHERE id = ?", bindings: [displayTitle, config.originalImageName, Date().timeIntervalSince1970, id.uuidString])
+                try executePrepared(
+                    "UPDATE history_items SET display_title = ?, original_filename = ?, file_list = ?, updated_at = ? WHERE id = ?",
+                    bindings: [displayTitle, config.originalImageName, encodeFileList(config.fileList), Date().timeIntervalSince1970, id.uuidString]
+                )
                 let metadata = [config.webURLString, config.actualWebURLString].compactMap { $0 }.joined(separator: " ")
                 try insertChunk(historyID: id, title: displayTitle, kind: 0, ordinal: 0, pageNumber: nil, text: metadata)
                 if [.note, .text, .markdown, .csv].contains(config.contentKind ?? .note) {
@@ -392,16 +401,40 @@ nonisolated final class HistoryDatabase {
         return (try? JSONEncoder().encode(fileList)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
-    private func decodeFileList(_ json: String?) -> FileListState? {
+    private func decodeFileList(
+        _ json: String?,
+        storedDisplayTitle: String? = nil,
+        originalFilename: String? = nil
+    ) -> FileListState? {
         guard let json, let data = json.data(using: .utf8),
-              let list = try? JSONDecoder().decode(FileListState.self, from: data),
+              var list = try? JSONDecoder().decode(FileListState.self, from: data),
               list.isPresentable else { return nil }
+
+        if list.title == nil {
+            let fallback = String(
+                format: NSLocalizedString(list.kind.historyTitleFormatKey, comment: ""),
+                list.items.count
+            )
+            let storedTitle = FileListState.normalizedTitle(storedDisplayTitle)
+            let originalTitle = FileListState.normalizedTitle(originalFilename)
+
+            // 兼容旧记录：CUE 分区已经保存专辑标题；旧版改名则可能留在展示标题或原始文件名中。
+            if list.isCueBased, let cueTitle = list.sections.first.flatMap({ FileListState.normalizedTitle($0.title) }) {
+                list.title = cueTitle
+            } else if let storedTitle, storedTitle != fallback {
+                list.title = storedTitle
+            } else if let originalTitle,
+                      !list.items.contains(where: { $0.displayName == originalTitle }) {
+                list.title = originalTitle
+            }
+        }
         return list
     }
 
     private func displayTitle(for config: WindowConfig, kind: HistoryContentKind) -> String {
-        // 列表标题随数量变化重算，不能沿用库里旧的 storedDisplayTitle。
+        // 列表自定义标题优先；无标题时随数量变化重算回退标题。
         if let fileList = config.fileList, fileList.isPresentable {
+            if let title = FileListState.normalizedTitle(fileList.title) { return title }
             return String(format: NSLocalizedString(fileList.kind.historyTitleFormatKey, comment: ""), fileList.items.count)
         }
         // 普通笔记的原始文件名字段承载用户自定义标题；其他类型继续沿用既有展示规则。
@@ -536,7 +569,13 @@ nonisolated final class HistoryDatabase {
                     navigatorPanelWidth: NavigatorPanelMetrics.clampWidth(
                         sqlite3_column_double(statement, columns["navigator_panel_width"]!)
                     ),
-                    fileList: columns["file_list"].flatMap { decodeFileList(optionalText(statement, $0)) }
+                    fileList: columns["file_list"].flatMap {
+                        decodeFileList(
+                            optionalText(statement, $0),
+                            storedDisplayTitle: text(statement, columns["display_title"]!),
+                            originalFilename: optionalText(statement, columns["original_filename"]!)
+                        )
+                    }
                 ))
             }
         }
