@@ -33,4 +33,5 @@ extension Notification.Name {
     public static let openGroupedFiles = Notification.Name("openGroupedFiles")
     public static let imageListSlideshowIntervalDidChange = Notification.Name("imageListSlideshowIntervalDidChange")
     public static let mediaPlaybackControlsAutoHideIntervalDidChange = Notification.Name("mediaPlaybackControlsAutoHideIntervalDidChange")
+    public static let showsMediaBottomProgressBarDidChange = Notification.Name("showsMediaBottomProgressBarDidChange")
 }

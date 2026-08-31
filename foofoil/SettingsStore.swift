@@ -363,7 +363,8 @@ public class SettingsStore {
             Keys.extensionAutoDownloadUpdates: false,
             Keys.extensionAutoInstallCompatibleMinorUpdates: false,
             Keys.imageListSlideshowInterval: ImageListSlideshow.defaultInterval,
-            Keys.mediaPlaybackControlsAutoHideInterval: MediaPlaybackControlsAutoHide.defaultInterval
+            Keys.mediaPlaybackControlsAutoHideInterval: MediaPlaybackControlsAutoHide.defaultInterval,
+            Keys.showsMediaBottomProgressBar: true
         ])
     }
 
@@ -384,6 +385,7 @@ public class SettingsStore {
         static let extensionAutoInstallCompatibleMinorUpdates = "extensionAutoInstallCompatibleMinorUpdates"
         static let imageListSlideshowInterval = "imageListSlideshowInterval"
         static let mediaPlaybackControlsAutoHideInterval = "mediaPlaybackControlsAutoHideInterval"
+        static let showsMediaBottomProgressBar = "showsMediaBottomProgressBar"
     }
 
     var navigatorPanelSide: NavigatorPanelSide {
@@ -465,6 +467,16 @@ public class SettingsStore {
             guard abs(mediaPlaybackControlsAutoHideInterval - clamped) > 0.001 else { return }
             userDefaults.set(clamped, forKey: Keys.mediaPlaybackControlsAutoHideInterval)
             NotificationCenter.default.post(name: .mediaPlaybackControlsAutoHideIntervalDidChange, object: nil)
+        }
+    }
+
+    /// 箔底常显细进度条开关；全局偏好，默认开启，修改后立即通知所有已打开窗口。
+    var showsMediaBottomProgressBar: Bool {
+        get { userDefaults.object(forKey: Keys.showsMediaBottomProgressBar) as? Bool ?? true }
+        set {
+            guard newValue != showsMediaBottomProgressBar else { return }
+            userDefaults.set(newValue, forKey: Keys.showsMediaBottomProgressBar)
+            NotificationCenter.default.post(name: .showsMediaBottomProgressBarDidChange, object: nil)
         }
     }
 

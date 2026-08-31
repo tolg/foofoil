@@ -2774,6 +2774,27 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "每张图片显示这么久后，再切换到下一张。"}}
       }
     },
+    "Audio and Video": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Audio & Video"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "音频与视频"}}
+      }
+    },
+    "Bottom Progress Bar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Bottom Progress Bar"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "底部进度条"}}
+      }
+    },
+    "Bottom Progress Bar Footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Show a slim playback progress line along the bottom edge of the foil, regardless of the controls."}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "在箔片底部边缘常显一条纤细的播放进度线，与控制条显隐无关。"}}
+      }
+    },
     "Video": {
       "extractionState": "manual",
       "localizations": {

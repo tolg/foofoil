@@ -464,6 +464,33 @@ struct ExtensionKitTests {
         #expect(MediaPlaybackControlsAutoHide.clampInterval(99) == MediaPlaybackControlsAutoHide.maxInterval)
     }
 
+    @Test func showsMediaBottomProgressBarDefaultsOnAndNotifies() {
+        let original = SettingsStore.shared.showsMediaBottomProgressBar
+        defer { SettingsStore.shared.showsMediaBottomProgressBar = original }
+
+        // 未写入用户偏好时走注册默认值：开启。
+        UserDefaults.standard.removeObject(forKey: "showsMediaBottomProgressBar")
+        #expect(SettingsStore.shared.showsMediaBottomProgressBar == true)
+
+        var changeCount = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: .showsMediaBottomProgressBarDidChange, object: nil, queue: .main
+        ) { _ in changeCount += 1 }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        SettingsStore.shared.showsMediaBottomProgressBar = false
+        #expect(SettingsStore.shared.showsMediaBottomProgressBar == false)
+        #expect(changeCount == 1)
+
+        // 相同值写入不重复发布通知。
+        SettingsStore.shared.showsMediaBottomProgressBar = false
+        #expect(changeCount == 1)
+
+        SettingsStore.shared.showsMediaBottomProgressBar = true
+        #expect(SettingsStore.shared.showsMediaBottomProgressBar == true)
+        #expect(changeCount == 2)
+    }
+
     @Test func fullScreenLifecycleKeepsWindowedBorderAndFramePreferences() throws {
         let state = AppState()
         state.showBorder = true

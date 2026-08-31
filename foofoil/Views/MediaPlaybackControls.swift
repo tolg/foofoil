@@ -494,6 +494,8 @@ enum MediaPlaybackBarMetrics {
     static let minimumWindowWidth: CGFloat = 380
     /// 悬浮控制条占用的底部空间，供音频元数据避让。
     static let overlayBottomInset: CGFloat = 56
+    /// 箔底常显进度线高度；极细但可见。
+    static let bottomProgressLineHeight: CGFloat = 2
 }
 
 struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
@@ -650,5 +652,43 @@ struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
         .buttonStyle(.plain)
         .help(title)
         .accessibilityLabel(title)
+    }
+}
+
+/// 箔底常显的极细播放进度线；与控制条显隐无关，展示进度信息可在设置中关闭。
+struct MediaBottomProgressLine<Controller: MediaTransportControlling>: View {
+    @ObservedObject var controller: Controller
+    /// 覆盖在深色封面/画面上时改用白色前景，避免随系统外观变成不可见的深色。
+    var lightContent = false
+    @State private var isEnabled = SettingsStore.shared.showsMediaBottomProgressBar
+
+    private var progress: Double {
+        guard controller.duration > 0 else { return 0 }
+        return min(max(controller.currentTime / controller.duration, 0), 1)
+    }
+
+    var body: some View {
+        Group {
+            if isEnabled, controller.duration > 0 {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(lineColor.opacity(0.18))
+                        Capsule()
+                            .fill(lineColor.opacity(0.5))
+                            .frame(width: proxy.size.width * progress)
+                    }
+                }
+                .frame(height: MediaPlaybackBarMetrics.bottomProgressLineHeight)
+                .accessibilityHidden(true)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showsMediaBottomProgressBarDidChange)) { _ in
+            isEnabled = SettingsStore.shared.showsMediaBottomProgressBar
+        }
+    }
+
+    private var lineColor: Color {
+        lightContent ? .white : .primary
     }
 }

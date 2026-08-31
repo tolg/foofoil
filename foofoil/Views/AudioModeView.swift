@@ -51,6 +51,13 @@ struct AudioModeView: View {
                 }
                 .transition(.opacity)
             }
+
+            // 箔底常显的细进度线；与控制条显隐无关，设置中可关闭。
+            VStack {
+                Spacer(minLength: 0)
+                MediaBottomProgressLine(controller: controller, lightContent: info.artwork != nil)
+            }
+            .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeInOut(duration: 0.15), value: appState.isMediaPlaybackControlsVisible)

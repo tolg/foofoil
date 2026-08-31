@@ -11,6 +11,7 @@ import SwiftUI
 struct ContentTypesSettingsView: View {
     @State private var slideshowInterval = SettingsStore.shared.imageListSlideshowInterval
     @State private var mediaControlsAutoHideInterval = SettingsStore.shared.mediaPlaybackControlsAutoHideInterval
+    @State private var showsBottomProgress = SettingsStore.shared.showsMediaBottomProgressBar
 
     var body: some View {
         Form {
@@ -35,6 +36,15 @@ struct ContentTypesSettingsView: View {
                 Text(NSLocalizedString("Images", comment: ""))
             } footer: {
                 Text(NSLocalizedString("Slideshow Interval Footer", comment: ""))
+            }
+            Section {
+                Toggle(isOn: $showsBottomProgress) {
+                    Text(NSLocalizedString("Bottom Progress Bar", comment: ""))
+                }
+            } header: {
+                Text(NSLocalizedString("Audio and Video", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("Bottom Progress Bar Footer", comment: ""))
             }
             Section {
                 VStack(alignment: .leading, spacing: 8) {
@@ -64,9 +74,13 @@ struct ContentTypesSettingsView: View {
         .onAppear {
             slideshowInterval = SettingsStore.shared.imageListSlideshowInterval
             mediaControlsAutoHideInterval = SettingsStore.shared.mediaPlaybackControlsAutoHideInterval
+            showsBottomProgress = SettingsStore.shared.showsMediaBottomProgressBar
         }
         .onChange(of: slideshowInterval) { _, value in
             SettingsStore.shared.imageListSlideshowInterval = value
+        }
+        .onChange(of: showsBottomProgress) { _, value in
+            SettingsStore.shared.showsMediaBottomProgressBar = value
         }
         .onChange(of: mediaControlsAutoHideInterval) { _, value in
             SettingsStore.shared.mediaPlaybackControlsAutoHideInterval = value
