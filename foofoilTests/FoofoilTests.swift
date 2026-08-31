@@ -1342,6 +1342,9 @@ struct FoofoilTests {
         #expect(state.fileList?.kind == .audio)
         #expect(state.fileList?.items.map(\.displayName) == ["01.mp3", "02.mp3"])
         #expect(state.fileList?.items.contains(where: { $0.path == unsupported.path }) == false)
+        #expect(state.fileList?.title == directory.lastPathComponent)
+        #expect(state.toConfig().historyMenuDisplayName.contains(directory.lastPathComponent))
+        #expect(state.toConfig().historyMenuDisplayName.contains("2"))
     }
 
     @Test func directoryScanStopsAtLimitAndSupportsCancellation() throws {
@@ -1899,14 +1902,16 @@ struct FoofoilTests {
         #expect(decoded.fileList?.title == "参考图")
         #expect(decoded.fileList?.isSlideshowEnabled == false)
         #expect(decoded.fileList?.slideshowInterval == ImageListSlideshow.defaultInterval)
-        #expect(decoded.historyMenuDisplayName == "参考图")
+        #expect(decoded.historyMenuDisplayName.contains("参考图"))
+        #expect(decoded.historyMenuDisplayName.contains("2"))
 
         let database = try HistoryDatabase(databaseURL: directory.appendingPathComponent("history.sqlite3"))
         try database.upsert(config)
         let stored = try #require(try database.config(id: config.id))
         #expect(stored.id == config.id)
         #expect(stored.fileList?.items.count == 2)
-        #expect(stored.storedDisplayTitle == "参考图")
+        #expect(stored.storedDisplayTitle?.contains("参考图") == true)
+        #expect(stored.storedDisplayTitle?.contains("2") == true)
         #expect(stored.sourceFingerprint == nil)
 
         let member = WindowConfig(
@@ -1922,7 +1927,8 @@ struct FoofoilTests {
 
         try database.rename(id: config.id, title: "新标题")
         let renamed = try #require(try database.config(id: config.id))
-        #expect(renamed.historyMenuDisplayName == "新标题")
+        #expect(renamed.historyMenuDisplayName.contains("新标题"))
+        #expect(renamed.historyMenuDisplayName.contains("2"))
         #expect(renamed.fileList?.title == "新标题")
         #expect(renamed.originalImageName == "b.png")
 
@@ -1943,7 +1949,8 @@ struct FoofoilTests {
         try database.upsert(legacyRenamed)
         let migrated = try #require(try database.config(id: legacyRenamed.id))
         #expect(migrated.fileList?.title == "旧列表标题")
-        #expect(migrated.historyMenuDisplayName == "旧列表标题")
+        #expect(migrated.historyMenuDisplayName.contains("旧列表标题"))
+        #expect(migrated.historyMenuDisplayName.contains("2"))
     }
 
     @Test func mediaPlaybackModeCyclesAndAdvancesFileList() throws {

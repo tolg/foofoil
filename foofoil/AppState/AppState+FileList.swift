@@ -89,12 +89,12 @@ extension AppState {
         scheduleImageListSlideshowAdvance()
     }
 
-    func openFileGroup(_ group: FileListGroup, preservesIdentity: Bool) {
+    func openFileGroup(_ group: FileListGroup, preservesIdentity: Bool, title: String? = nil) {
         switch group.kind {
         case .cueSheets:
             installCueSheets(urls: group.urls, preservesIdentity: preservesIdentity)
         case .listable(let kind) where group.urls.count >= 2:
-            installFileList(kind: kind, urls: group.urls, preservesIdentity: preservesIdentity)
+            installFileList(kind: kind, urls: group.urls, preservesIdentity: preservesIdentity, title: title)
         case .listable, .other:
             if let url = group.urls.first {
                 openFile(url: url)
@@ -107,7 +107,7 @@ extension AppState {
         fileList?.currentItem?.cue?.playbackRange
     }
 
-    func installFileList(kind: FileListKind, urls: [URL], preservesIdentity: Bool) {
+    func installFileList(kind: FileListKind, urls: [URL], preservesIdentity: Bool, title: String? = nil) {
         let unique = uniqueExistingURLs(urls)
         guard unique.count >= 2 else {
             if let url = unique.first {
@@ -121,7 +121,7 @@ extension AppState {
             id = UUID()
         }
         let items = unique.map(makeFileListItem)
-        fileList = FileListState(kind: kind, items: items, currentID: items[0].id)
+        fileList = FileListState(kind: kind, items: items, currentID: items[0].id, title: title)
         sourceFingerprint = nil
         mediaPlaybackMode = .sequentialLoop
         isBatchUpdating = false

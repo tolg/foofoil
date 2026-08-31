@@ -39,9 +39,13 @@ extension AppState {
 
             // 大目录遍历放到后台，完成后仍回到同一套多文件筛选与打开流程。
             if DroppedFileResolver.containsDirectory(in: fileURLs) {
+                // 单目录打开时，用目录名作为列表及历史记录的默认标题。
+                let fileListTitle = fileURLs.count == 1 && fileURLs[0].hasDirectoryPath
+                    ? fileURLs[0].lastPathComponent
+                    : nil
                 scanDroppedDirectories(urls: fileURLs) { [weak self] result in
                     guard let self, self.isCurrentDrop(generation), !result.wasCancelled else { return }
-                    _ = self.processDroppedFileURLs(result.urls)
+                    _ = self.processDroppedFileURLs(result.urls, fileListTitle: fileListTitle)
                     if result.didReachLimit {
                         self.showDirectoryScanLimitAlert()
                     }
@@ -53,7 +57,7 @@ extension AppState {
         }
 
         @discardableResult
-        private func processDroppedFileURLs(_ fileURLs: [URL]) -> Bool {
+        private func processDroppedFileURLs(_ fileURLs: [URL], fileListTitle: String? = nil) -> Bool {
             guard !fileURLs.isEmpty else { return false }
 
             if listableKind != nil {
@@ -79,7 +83,7 @@ extension AppState {
                 postGroupedFileOpen(urls: groups.flatMap(\.urls), append: false)
                 return true
             }
-            openFileGroup(first, preservesIdentity: true)
+            openFileGroup(first, preservesIdentity: true, title: fileListTitle)
             return true
         }
 

@@ -999,6 +999,23 @@
         }
       }
     },
+    "File List Custom Title Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$d)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（%2$d）"
+          }
+        }
+      }
+    },
     "Image List History Format": {
       "extractionState": "manual",
       "localizations": {

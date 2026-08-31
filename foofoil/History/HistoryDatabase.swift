@@ -434,7 +434,13 @@ nonisolated final class HistoryDatabase {
     private func displayTitle(for config: WindowConfig, kind: HistoryContentKind) -> String {
         // 列表自定义标题优先；无标题时随数量变化重算回退标题。
         if let fileList = config.fileList, fileList.isPresentable {
-            if let title = FileListState.normalizedTitle(fileList.title) { return title }
+            if let title = FileListState.normalizedTitle(fileList.title) {
+                return String(
+                    format: NSLocalizedString("File List Custom Title Format", comment: ""),
+                    title,
+                    fileList.items.count
+                )
+            }
             return String(format: NSLocalizedString(fileList.kind.historyTitleFormatKey, comment: ""), fileList.items.count)
         }
         // 普通笔记的原始文件名字段承载用户自定义标题；其他类型继续沿用既有展示规则。
