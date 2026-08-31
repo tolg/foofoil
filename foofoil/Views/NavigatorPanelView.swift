@@ -171,9 +171,16 @@ struct NavigatorPanelView: View {
                             isCurrent: row.item.isCurrent
                         )
                     } else if let symbolName = row.item.symbolName {
-                        Image(systemName: symbolName)
-                            .frame(width: 16)
-                            .foregroundStyle(row.item.isCurrent ? Color.accentColor : Color.secondary)
+                        if showsPlaybackIndicator(for: contribution), row.item.isCurrent {
+                            // 内置音视频列表的当前项用频率柱状图指示：播放时底部对齐的
+                            // 柱高持续起伏；暂停时时间轴停走、冻结在最后变化时刻。
+                            NavigatorPlaybackBars(isPlaying: appState.isMediaPlaying)
+                                .frame(width: 16)
+                        } else {
+                            Image(systemName: symbolName)
+                                .frame(width: 16)
+                                .foregroundStyle(row.item.isCurrent ? Color.accentColor : Color.secondary)
+                        }
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         NavigatorScrollingTitle(
@@ -319,6 +326,13 @@ struct NavigatorPanelView: View {
         return list.items.first(where: { $0.id == itemID })?.path
     }
 
+    /// 仅内置音视频列表的当前项使用“正在播放”波形图标；图片列表与扩展贡献保持原样。
+    private func showsPlaybackIndicator(for contribution: NavigatorContribution) -> Bool {
+        guard contribution.id == AppState.fileListNavigatorID,
+              let kind = appState.fileList?.kind else { return false }
+        return kind == .video || kind == .audio
+    }
+
     /// 桌面伴随窗口拖外侧（左挂左缘、右挂右缘）；全屏覆盖层只能拖贴着箔片的内侧。
     private var isDraggingLeftEdge: Bool {
         if isFullScreenOverlay {
@@ -461,6 +475,41 @@ private struct NavigatorTitleWidthKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+/// “正在播放”频率柱状图：底部对齐的数根竖线按固定步进随机起伏。
+/// 时间轴在暂停时停走，柱形冻结在最后变化时刻；高度由（步数, 柱序号）
+/// 确定性生成，父视图重渲染也不会让冻结画面跳动。
+private struct NavigatorPlaybackBars: View {
+    let isPlaying: Bool
+
+    private static let barCount = 4
+    private static let stepInterval: Double = 0.24
+    private static let maxHeight: CGFloat = 14
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: Self.stepInterval, paused: !isPlaying)) { context in
+            let step = Int(context.date.timeIntervalSinceReferenceDate / Self.stepInterval)
+            HStack(alignment: .bottom, spacing: 1.5) {
+                ForEach(0..<Self.barCount, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: 2, height: Self.maxHeight * Self.level(step: step, bar: index))
+                }
+            }
+            .animation(.linear(duration: Self.stepInterval), value: step)
+        }
+        .frame(width: 13, height: Self.maxHeight, alignment: .bottom)
+    }
+
+    /// 简单整数散列映射到 0.25...1 的高度比例，保证同一步内结果稳定。
+    private static func level(step: Int, bar: Int) -> CGFloat {
+        var hash = UInt(bitPattern: step) &* 2_654_435_761 &+ UInt(bar) &* 4_073_552_689
+        hash ^= hash >> 13
+        hash = hash &* 1_274_126_177
+        hash ^= hash >> 16
+        return 0.25 + 0.75 * CGFloat(hash % 1_000) / 1_000
     }
 }
 

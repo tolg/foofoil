@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 import AppKit
 
 /// 音频模式：封面按图片方式铺为背景，叠加曲目信息，播放控件与视频一致。
@@ -61,7 +62,10 @@ struct AudioModeView: View {
         .onDisappear {
             controller.pause()
             MediaRemoteCommandCoordinator.shared.deactivate(controller)
+            appState.isMediaPlaying = false
         }
+        // 播放状态桥接到 appState，导航面板据此驱动“正在播放”图标的动效。
+        .onReceive(controller.$isPlaying) { appState.isMediaPlaying = $0 }
         .onChange(of: presentationID) {
             applyCurrentTrack()
         }
