@@ -16,6 +16,8 @@ struct NavigatorPanelView: View {
     @State private var draggedNavigatorItemID: String?
     /// 当前鼠标悬停所在行的 ID，用于触发行内标题滚动。
     @State private var hoveringNavigatorRowID: String?
+    /// 鼠标是否悬停在固定标题上，触发标题跑马灯。
+    @State private var isHoveringNavigatorHeader = false
 
     private struct VisibleRow: Identifiable {
         let item: NavigatorItem
@@ -47,10 +49,14 @@ struct NavigatorPanelView: View {
             MovableBackground()
 
             VStack(spacing: 0) {
-                if contributions.count > 1 {
-                    contributionPicker
-                }
                 if let contribution = activeContribution {
+                    // 标题区位于滚动区域之外，列表滚动时保持固定；
+                    // 多个贡献时由选择器兼任标题与切换，避免重复展示同一名称。
+                    if contributions.count > 1 {
+                        contributionPicker
+                    } else {
+                        contributionTitleHeader(contribution)
+                    }
                     navigatorContent(contribution)
                 } else {
                     ContentUnavailableView(
@@ -81,6 +87,10 @@ struct NavigatorPanelView: View {
         }
     }
 
+    private func localizedTitle(for contribution: NavigatorContribution) -> String {
+        NSLocalizedString(contribution.titleLocalizationKey, comment: "")
+    }
+
     private var contributionPicker: some View {
         Picker(
             NSLocalizedString("Navigator", comment: ""),
@@ -90,7 +100,7 @@ struct NavigatorPanelView: View {
             )
         ) {
             ForEach(contributions) { contribution in
-                Text(NSLocalizedString(contribution.titleLocalizationKey, comment: ""))
+                Text(localizedTitle(for: contribution))
                     .tag(contribution.id)
             }
         }
@@ -99,6 +109,48 @@ struct NavigatorPanelView: View {
         .padding(.horizontal, 12)
         .frame(height: 32)
         .background(NonMovableBackground())
+    }
+
+    /// 单一贡献时的固定小标题：显示列表自定义/专辑标题（不附数量），过长时悬停滚动，
+    /// CUE 列表在尾部追加格式标记；高度与选择器一致，贡献数量变化时顶部区域不跳动。
+    private func contributionTitleHeader(_ contribution: NavigatorContribution) -> some View {
+        HStack(spacing: 6) {
+            NavigatorScrollingTitle(
+                title: headerTitle(for: contribution),
+                font: .caption.weight(.semibold),
+                isRowHovering: isHoveringNavigatorHeader
+            )
+            if showsCUEBadge(for: contribution) {
+                Text(NSLocalizedString("Navigator CUE Badge", comment: ""))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15), in: Capsule())
+            }
+        }
+        .padding(.horizontal, 13)
+        .frame(height: 32)
+        // 可移动背景盖在最上层：按住标题任意处（含文字与徽标）都走“拖父窗口、面板跟随”的
+        // 贴附拖动路径；若只作背景，命中文字时会走仅拖面板的原生路径。
+        .overlay(MovableBackground())
+        // 整条标题区命中悬停，与列表行的整行命中保持一致。
+        .onHover { isHoveringNavigatorHeader = $0 }
+    }
+
+    /// 内置文件列表显示自定义/专辑标题（不附数量）；无自定义标题时回退到类型名称。
+    private func headerTitle(for contribution: NavigatorContribution) -> String {
+        if contribution.id == AppState.fileListNavigatorID,
+           let list = appState.fileList, list.isPresentable,
+           let title = FileListState.normalizedTitle(list.title) {
+            return title
+        }
+        return localizedTitle(for: contribution)
+    }
+
+    /// CUE 标记放在尾部独立徽标中，标题过长被截断时仍然可见。
+    private func showsCUEBadge(for contribution: NavigatorContribution) -> Bool {
+        contribution.id == AppState.fileListNavigatorID && appState.fileList?.isCueBased == true
     }
 
     @ViewBuilder
@@ -412,9 +464,11 @@ struct NavigatorPanelView: View {
     }
 }
 
-/// 标题超出可用宽度时，鼠标悬停所在行即触发标题单向循环滚动（跑马灯），避免常态下分散注意力。
+/// 标题超出可用宽度时，鼠标悬停所在行（或固定标题区）即触发标题单向循环滚动（跑马灯），
+/// 避免常态下分散注意力。
 private struct NavigatorScrollingTitle: View {
     let title: String
+    var font: Font = .body
     let isRowHovering: Bool
 
     /// 循环衔接处两份文本之间的间隔。
@@ -432,6 +486,7 @@ private struct NavigatorScrollingTitle: View {
         GeometryReader { proxy in
             HStack(spacing: Self.loopGap) {
                 Text(title)
+                    .font(font)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .background {
@@ -443,6 +498,7 @@ private struct NavigatorScrollingTitle: View {
                 // 在静止（未滚动）时就提前创建，避免滚动期间插入触发带动画的透明度过渡。
                 if overflow > 0 {
                     Text(title)
+                        .font(font)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                         .transition(.identity)

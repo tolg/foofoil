@@ -2675,6 +2675,23 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "导航面板"}}
       }
     },
+    "Navigator CUE Badge": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CUE"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CUE"
+          }
+        }
+      }
+    },
     "Navigator Empty": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "No Navigation Items"}},
