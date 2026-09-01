@@ -122,13 +122,19 @@ extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
             setMenuItem(withAction: #selector(fitImageToWindowWidthAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(zoomOutWindowAction), in: menu, isHidden: true)
             setMenuItem(withAction: #selector(zoomInWindowAction), in: menu, isHidden: true)
-            navigatorMenuItem?.isHidden = true
+            setMenuItem(withAction: #selector(toggleNavigatorPanelAction), in: menu, isHidden: true)
+            setMenuItem(withAction: #selector(placeNavigatorOnLeftAction), in: menu, isHidden: true)
+            setMenuItem(withAction: #selector(placeNavigatorOnRightAction), in: menu, isHidden: true)
             return
         }
 
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
         let isWebMode = appState.webURL != nil
-        navigatorMenuItem?.isHidden = appState.navigatorContributions.isEmpty
+        // 子菜单已扁平进视图菜单，按 action 逐项控制导航面板三项的显隐。
+        let navigatorItemsHidden = appState.navigatorContributions.isEmpty
+        setMenuItem(withAction: #selector(toggleNavigatorPanelAction), in: menu, isHidden: navigatorItemsHidden)
+        setMenuItem(withAction: #selector(placeNavigatorOnLeftAction), in: menu, isHidden: navigatorItemsHidden)
+        setMenuItem(withAction: #selector(placeNavigatorOnRightAction), in: menu, isHidden: navigatorItemsHidden)
 
         // 1. 图片和网页模式均可切换视觉边框。
         setMenuItem(

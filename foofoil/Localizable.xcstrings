@@ -1594,6 +1594,40 @@
         }
       }
     },
+    "Place Navigator on Left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place Navigator on Left"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导航面板挂在左侧"
+          }
+        }
+      }
+    },
+    "Place Navigator on Right": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Place Navigator on Right"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导航面板挂在右侧"
+          }
+        }
+      }
+    },
     "Play": {
       "extractionState": "manual",
       "localizations": {
@@ -2780,18 +2814,6 @@
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "No Navigation Items"}},
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "没有导航项目"}}
-      }
-    },
-    "Navigator on Left": {
-      "localizations": {
-        "en": {"stringUnit": {"state": "translated", "value": "Place on Left"}},
-        "zh-Hans": {"stringUnit": {"state": "translated", "value": "挂在左侧"}}
-      }
-    },
-    "Navigator on Right": {
-      "localizations": {
-        "en": {"stringUnit": {"state": "translated", "value": "Place on Right"}},
-        "zh-Hans": {"stringUnit": {"state": "translated", "value": "挂在右侧"}}
       }
     },
     "Remove Navigator Item": {

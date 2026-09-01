@@ -18,7 +18,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     var goMenu: NSMenu?
     var goMenuItem: NSMenuItem?
     var viewMenu: NSMenu?
-    var navigatorMenuItem: NSMenuItem?
     var extensionMenu: NSMenu?
     var extensionMenuItem: NSMenuItem?
     var windowMenu: NSMenu?

@@ -1184,24 +1184,35 @@ struct FoofoilTests {
 
         guard let viewMenu = NSApplication.shared.mainMenu?.items.first(where: {
             $0.submenu?.title == NSLocalizedString("View", comment: "")
-        })?.submenu,
-              let navigatorMenu = viewMenu.items.first(where: {
-                  $0.submenu?.title == NSLocalizedString("Navigator", comment: "")
-              })?.submenu else {
-            #expect(Bool(false), "Navigator submenu not setup")
+        })?.submenu else {
+            #expect(Bool(false), "View menu not setup")
             return
         }
 
-        let alwaysShow = try #require(navigatorMenu.items.first { $0.action == #selector(AppDelegate.toggleNavigatorPanelAction) })
+        // 导航面板三项直接放在视图菜单一层，不再有子菜单。
+        #expect(viewMenu.items.contains { $0.submenu?.title == NSLocalizedString("Navigator", comment: "") } == false)
+
+        let alwaysShow = try #require(viewMenu.items.first { $0.action == #selector(AppDelegate.toggleNavigatorPanelAction) })
         #expect(alwaysShow.title == NSLocalizedString("Always Show Navigator", comment: ""))
         #expect(alwaysShow.keyEquivalent == "s")
         #expect(alwaysShow.keyEquivalentModifierMask == [.command, .control])
         #expect(appDelegate.validateMenuItem(alwaysShow) == false)
         #expect(alwaysShow.state == .off)
 
-        #expect(navigatorMenu.items.contains { $0.title == NSLocalizedString("Toggle Navigator", comment: "") } == false)
-        #expect(navigatorMenu.items.contains { $0.title == NSLocalizedString("Show Navigator on Hover", comment: "") } == false)
-        #expect(navigatorMenu.items.contains {
+        let left = try #require(viewMenu.items.first { $0.action == #selector(AppDelegate.placeNavigatorOnLeftAction) })
+        #expect(left.title == NSLocalizedString("Place Navigator on Left", comment: ""))
+        let right = try #require(viewMenu.items.first { $0.action == #selector(AppDelegate.placeNavigatorOnRightAction) })
+        #expect(right.title == NSLocalizedString("Place Navigator on Right", comment: ""))
+
+        // 侧挂项紧跟总显开关，中间不插分割线。
+        if let alwaysIndex = viewMenu.items.firstIndex(of: alwaysShow),
+           let leftIndex = viewMenu.items.firstIndex(of: left) {
+            #expect(leftIndex == alwaysIndex + 1)
+        }
+
+        #expect(viewMenu.items.contains { $0.title == NSLocalizedString("Toggle Navigator", comment: "") } == false)
+        #expect(viewMenu.items.contains { $0.title == NSLocalizedString("Show Navigator on Hover", comment: "") } == false)
+        #expect(viewMenu.items.contains {
             $0.title == NSLocalizedString("Always Show Navigator", comment: "")
                 && $0.action != #selector(AppDelegate.toggleNavigatorPanelAction)
         } == false)
