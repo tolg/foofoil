@@ -80,7 +80,7 @@ struct AudioModeView: View {
             controller.isLooping = appState.shouldLoopCurrentItem
         }
         .task(id: presentationID) {
-            info = Self.overlay(await AudioMetadataLoader.load(from: url), with: appState.fileList?.currentItem?.cue)
+            info = await loadTrackInfo()
         }
     }
 
@@ -215,7 +215,20 @@ struct AudioModeView: View {
             AudioTrackInfo.fallback(fileName: url.lastPathComponent),
             with: appState.fileList?.currentItem?.cue
         )
-        Task { info = Self.overlay(await AudioMetadataLoader.load(from: url), with: appState.fileList?.currentItem?.cue) }
+        Task { info = await loadTrackInfo() }
+    }
+
+    /// 读取曲目元数据；无内嵌封面且所在目录未获沙盒授权时向用户请求访问权限后重试，
+    /// 成功读取同目录封面则保存文件夹书签，保证重启后仍能显示。
+    private func loadTrackInfo() async -> AudioTrackInfo {
+        var loaded = await AudioMetadataLoader.load(from: url)
+        if loaded.artwork == nil, await appState.requestSidecarCoverAccessIfNeeded(for: url) {
+            loaded = await AudioMetadataLoader.load(from: url)
+        }
+        if loaded.sidecarCoverURL != nil {
+            appState.recordSidecarCoverAccess(for: url)
+        }
+        return Self.overlay(loaded, with: appState.fileList?.currentItem?.cue)
     }
 
     private func joined(_ parts: [String?]) -> String? {

@@ -83,8 +83,16 @@ extension AppState {
                         self.accessingVideoURL = restored.accessedURL
                         self.videoBookmarkData = restored.bookmark
                         self.imageURL = restored.url
+                        // 音频再恢复同目录封面文件夹的访问，保证封面在重启后仍可读取
+                        if Self.isAudioFileName(config.originalImageName ?? path),
+                           let sidecarBookmark = config.mediaSidecarBookmark,
+                           let sidecar = Self.restoreSidecarCoverAccess(bookmark: sidecarBookmark) {
+                            if sidecar.accessed { accessingSidecarDirectoryURL = sidecar.directory }
+                            mediaSidecarBookmarkData = sidecar.refreshedBookmark ?? sidecarBookmark
+                        }
                     } else {
                         self.videoBookmarkData = nil
+                        self.mediaSidecarBookmarkData = nil
                         self.imageURL = nil
                     }
                 } else if FileManager.default.fileExists(atPath: url.path) {
@@ -159,6 +167,7 @@ extension AppState {
                 webZoom: webZoom,
                 mediaPlaybackMode: mediaPlaybackMode,
                 videoBookmark: videoBookmarkData,
+                mediaSidecarBookmark: mediaSidecarBookmarkData,
                 extensionID: extensionSession?.extensionID,
                 extensionStateReference: extensionStateReference,
                 navigatorPanelSide: navigatorPanelSide,

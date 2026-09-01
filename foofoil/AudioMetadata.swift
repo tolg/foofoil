@@ -26,6 +26,8 @@ nonisolated struct AudioTrackInfo {
     var bitRate: Double?
     var channelCount: Int?
     var artwork: NSImage?
+    /// 封面来自音频同目录文件时记录其位置，供保存沙盒书签使用；不参与持久化。
+    var sidecarCoverURL: URL?
 
     static func fallback(fileName: String) -> AudioTrackInfo {
         AudioTrackInfo(title: (fileName as NSString).deletingPathExtension)
@@ -110,8 +112,10 @@ nonisolated enum AudioMetadataLoader {
             info.bitDepth = flacBitDepth(for: url)
         }
 
-        if info.artwork == nil {
-            info.artwork = sidecarCoverImage(for: url)
+        if info.artwork == nil,
+           let sidecar = sidecarCoverImageAndURL(for: url) {
+            info.artwork = sidecar.image
+            info.sidecarCoverURL = sidecar.url
         }
         return info
     }
@@ -252,12 +256,21 @@ nonisolated enum AudioMetadataLoader {
     }
 
     static func sidecarCoverImage(for audioURL: URL) -> NSImage? {
+        sidecarCoverImageAndURL(for: audioURL)?.image
+    }
+
+    static func sidecarCoverImageAndURL(for audioURL: URL) -> (image: NSImage, url: URL)? {
         for candidate in sidecarCoverCandidates(for: audioURL) {
             if let image = loadSidecarImage(primary: audioURL, related: candidate) {
-                return image
+                return (image, candidate)
             }
         }
         return nil
+    }
+
+    /// 沙盒未获授权时音频所在目录不可读，此时无法自行发现同目录封面，需要向用户请求授权。
+    static func isCoverDirectoryAccessible(for audioURL: URL) -> Bool {
+        FileManager.default.isReadableFile(atPath: audioURL.deletingLastPathComponent().path)
     }
 
     /// 沙盒只授权用户选中的音频文件；同目录封面需以 NSFilePresenter 关联项方式读取。

@@ -291,6 +291,103 @@ struct FoofoilTests {
         }
     }
 
+    @Test func testAudioSidecarCoverBookmarkPersistsAndRestores() throws {
+        // 会话内读取到同目录封面后保存文件夹书签，经配置重启后仍能读取封面
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-audio-sidecar-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let audioURL = directory.appendingPathComponent("song.mp3")
+        try Data("fake audio".utf8).write(to: audioURL)
+        let image = NSImage(size: NSSize(width: 16, height: 16))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 16, height: 16)).fill()
+        image.unlockFocus()
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        let jpeg = try #require(bitmap.representation(using: .jpeg, properties: [:]))
+        try jpeg.write(to: directory.appendingPathComponent("cover.jpg"))
+
+        let state = AppState()
+        state.openAudio(url: audioURL)
+        #expect(try #require(AudioMetadataLoader.sidecarCoverImageAndURL(for: audioURL)).url
+            == directory.appendingPathComponent("cover.jpg"))
+
+        state.recordSidecarCoverAccess(for: audioURL)
+        let sidecarBookmark = try #require(state.mediaSidecarBookmarkData)
+
+        let config = state.toConfig()
+        #expect(config.mediaSidecarBookmark == sidecarBookmark)
+
+        // 模拟重启：书签解析恢复目录访问后，封面仍可读取
+        let restored = AppState(config: config)
+        #expect(restored.imageURL == audioURL)
+        #expect(restored.mediaSidecarBookmarkData != nil)
+        #expect(AudioMetadataLoader.sidecarCoverImage(for: audioURL) != nil)
+
+        if let saved = SettingsStore.shared.historyConfigs.first(where: { $0.id == state.id }) {
+            HistoryManager.shared.removeFromHistory(saved)
+        }
+    }
+
+    @Test func testSidecarCoverDeclineIsRememberedPerDirectory() throws {
+        let firstDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-decline-a-\(UUID().uuidString)", isDirectory: true)
+        let secondDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-decline-b-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: firstDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondDirectory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: firstDirectory)
+            try? FileManager.default.removeItem(at: secondDirectory)
+        }
+
+        #expect(!AppState.hasDeclinedSidecarCoverAccess(for: firstDirectory))
+        AppState.recordSidecarCoverAccessDecline(for: firstDirectory)
+        #expect(AppState.hasDeclinedSidecarCoverAccess(for: firstDirectory))
+        // 拒绝只针对单个目录，不影响其他文件夹
+        #expect(!AppState.hasDeclinedSidecarCoverAccess(for: secondDirectory))
+    }
+
+    @Test func testSidecarBookmarkRoundTripsThroughHistoryDatabase() throws {
+        let databaseDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-sidecar-db-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: databaseDirectory) }
+        let repository = HistoryRepository(databaseURL: databaseDirectory.appendingPathComponent("history.sqlite3"))
+
+        let folderURL = databaseDirectory.appendingPathComponent("album", isDirectory: true)
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        let sidecarBookmark = try #require(AppState.makeSecurityScopedBookmark(for: folderURL))
+
+        let id = UUID()
+        #expect(repository.upsert(WindowConfig(
+            id: id,
+            imagePath: folderURL.appendingPathComponent("song.mp3").path,
+            originalImageName: "song.mp3",
+            contentKind: .audio,
+            mediaSidecarBookmark: sidecarBookmark
+        )))
+
+        let stored = try #require(repository.config(id: id))
+        #expect(stored.mediaSidecarBookmark == sidecarBookmark)
+    }
+
+    @Test func testWindowConfigDecodesLegacySidecarBookmarkField() throws {
+        // 旧数据没有 mediaSidecarBookmark 字段时解码为 nil，不影响加载
+        let legacy = WindowConfig(id: UUID(), originalImageName: "song.mp3")
+        let data = try JSONEncoder().encode(legacy)
+        #expect(try JSONDecoder().decode(WindowConfig.self, from: data).mediaSidecarBookmark == nil)
+
+        // 新字段正常往返
+        let bookmark = Data([0x01, 0x02, 0x03])
+        let current = WindowConfig(id: UUID(), originalImageName: "song.mp3", mediaSidecarBookmark: bookmark)
+        let decoded = try JSONDecoder().decode(WindowConfig.self, from: JSONEncoder().encode(current))
+        #expect(decoded.mediaSidecarBookmark == bookmark)
+    }
+
     @Test func testCanOpenFileAcceptsAudioCandidates() throws {
         let audioURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("foofoil-canopen-\(UUID().uuidString).mp3")

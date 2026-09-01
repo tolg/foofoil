@@ -36,6 +36,7 @@ extension AppState {
             self.svgColor = nil
             self.mediaPlaybackMode = .sequentialLoop
             self.videoBookmarkData = nil
+            self.mediaSidecarBookmarkData = nil
             self.extensionSession = nil
             self.extensionFallbackProviderID = nil
             self.extensionStateReference = nil

@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 nonisolated final class HistoryDatabase {
-    static let schemaVersion = 9
+    static let schemaVersion = 10
 
     private let queue = DispatchQueue(label: "com.foofoil.history.database", qos: .utility)
     private var connection: OpaquePointer?
@@ -97,9 +97,10 @@ nonisolated final class HistoryDatabase {
                         window_frame, show_border, image_scale, text_font_size, is_markdown_preview,
                         svg_color, background_color_hex, created_at, updated_at, last_opened_at,
                         source_fingerprint, index_status, index_version, video_looping, video_bookmark,
+                        media_sidecar_bookmark,
                         extension_id, extension_state_reference, navigator_panel_side,
                         navigator_panel_visibility, navigator_panel_width, file_list
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET
                         content_kind=excluded.content_kind, display_title=excluded.display_title,
                         original_filename=excluded.original_filename, image_path=excluded.image_path,
@@ -114,6 +115,7 @@ nonisolated final class HistoryDatabase {
                         last_opened_at=excluded.last_opened_at,
                         source_fingerprint=excluded.source_fingerprint,
                         video_looping=excluded.video_looping, video_bookmark=excluded.video_bookmark,
+                        media_sidecar_bookmark=excluded.media_sidecar_bookmark,
                         extension_id=excluded.extension_id,
                         extension_state_reference=excluded.extension_state_reference,
                         navigator_panel_side=excluded.navigator_panel_side,
@@ -127,7 +129,8 @@ nonisolated final class HistoryDatabase {
                         config.windowFrame, config.showBorder, config.imageScale, config.textFontSize,
                         config.isMarkdownPreview, config.svgColor, config.backgroundColorHex,
                         createdAt, now, now, config.sourceFingerprint, 0, 1, config.mediaPlaybackMode.sqliteValue,
-                        config.videoBookmark?.base64EncodedString(), config.extensionID,
+                        config.videoBookmark?.base64EncodedString(), config.mediaSidecarBookmark?.base64EncodedString(),
+                        config.extensionID,
                         config.extensionStateReference, config.navigatorPanelSide.rawValue,
                         config.navigatorPanelVisibilityMode.rawValue, config.navigatorPanelWidth,
                         encodeFileList(config.fileList)
@@ -307,6 +310,7 @@ nonisolated final class HistoryDatabase {
                 source_fingerprint TEXT, index_status INTEGER NOT NULL DEFAULT 0,
                 index_version INTEGER NOT NULL DEFAULT 0, index_error TEXT, thumbnail_path TEXT,
                 video_looping INTEGER NOT NULL DEFAULT 1, video_bookmark TEXT,
+                media_sidecar_bookmark TEXT,
                 extension_id TEXT, extension_state_reference TEXT,
                 navigator_panel_side TEXT NOT NULL DEFAULT 'right',
                 navigator_panel_visibility TEXT NOT NULL DEFAULT 'onHover',
@@ -362,6 +366,8 @@ nonisolated final class HistoryDatabase {
         }
         // 即使用户库的 user_version 落后于实际列，也按列是否存在补 file_list，避免 INSERT 引用缺失列。
         try addColumnIfMissing("file_list", definition: "file_list TEXT")
+        // v10 新增音频同目录封面文件夹的安全范围书签（Base64 文本）；重启后靠它恢复封面访问。
+        try addColumnIfMissing("media_sidecar_bookmark", definition: "media_sidecar_bookmark TEXT")
         if previousVersion >= 1 && previousVersion < 9 {
             // v9：旧列表 video_looping=1 是单曲循环开关；迁成顺序循环，使列表能自动续播。
             try execute("""
@@ -559,6 +565,7 @@ nonisolated final class HistoryDatabase {
                     thumbnailPath: optionalText(statement, columns["thumbnail_path"]!),
                     mediaPlaybackMode: MediaPlaybackMode(sqliteValue: Int(sqlite3_column_int(statement, columns["video_looping"]!))),
                     videoBookmark: optionalText(statement, columns["video_bookmark"]!).flatMap { Data(base64Encoded: $0) },
+                    mediaSidecarBookmark: optionalText(statement, columns["media_sidecar_bookmark"]!).flatMap { Data(base64Encoded: $0) },
                     extensionID: optionalText(statement, columns["extension_id"]!),
                     extensionStateReference: optionalText(statement, columns["extension_state_reference"]!),
                     navigatorPanelSide: optionalText(statement, columns["navigator_panel_side"]!)

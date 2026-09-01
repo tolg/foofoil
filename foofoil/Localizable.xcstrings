@@ -251,6 +251,40 @@
         }
       }
     },
+    "Audio Cover Access Message Format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "foofoil needs access to the folder “%@” to display the album cover stored next to the audio file."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "foofoil 需要访问文件夹“%@”，才能显示与音频同目录存放的专辑封面。"
+          }
+        }
+      }
+    },
+    "Grant Access": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grant Access"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权"
+          }
+        }
+      }
+    },
     "Capture Image foofoil": {
       "extractionState": "manual",
       "localizations": {

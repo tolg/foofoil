@@ -128,6 +128,10 @@ extension AppState {
             accessingVideoURL = nil
             accessingCueURL?.stopAccessingSecurityScopedResource()
             accessingCueURL = nil
+            if let directoryURL = accessingSidecarDirectoryURL {
+                directoryURL.stopAccessingSecurityScopedResource()
+                accessingSidecarDirectoryURL = nil
+            }
             if let presenter = cueRelatedPresenter {
                 NSFileCoordinator.removeFilePresenter(presenter)
                 cueRelatedPresenter = nil
@@ -158,6 +162,107 @@ extension AppState {
             }
             guard FileManager.default.fileExists(atPath: fallbackURL.path) else { return nil }
             return (fallbackURL, Self.makeSecurityScopedBookmark(for: fallbackURL), nil)
+        }
+
+        /// 解析音频同目录封面文件夹的安全范围书签并校验文件夹仍存在。
+        /// 返回 (目录 URL, 书签过期时需持久化的新书签, 是否已持有授权)；无法访问时返回 nil。
+        static func restoreSidecarCoverAccess(bookmark: Data) -> (directory: URL, refreshedBookmark: Data?, accessed: Bool)? {
+            var isStale = false
+            guard let url = try? URL(
+                resolvingBookmarkData: bookmark,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) else { return nil }
+            let accessed = url.startAccessingSecurityScopedResource()
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                if accessed { url.stopAccessingSecurityScopedResource() }
+                return nil
+            }
+            // 书签过期（如文件夹被移动）时按解析出的新位置重建
+            let refreshed = isStale ? Self.makeSecurityScopedBookmark(for: url) : nil
+            return (url, refreshed, accessed)
+        }
+
+        /// 音频会话内成功读取同目录封面后保存其所在文件夹的书签，重启后无需再次授权即可显示封面。
+        func recordSidecarCoverAccess(for audioURL: URL) {
+            let directory = audioURL.deletingLastPathComponent()
+            let directoryPath = directory.resolvingSymlinksInPath().standardizedFileURL.path
+            if let existing = accessingSidecarDirectoryURL,
+               existing.resolvingSymlinksInPath().standardizedFileURL.path == directoryPath {
+                return
+            }
+            // 只有当前能读取该目录（如拖入整个文件夹的会话）时才可能创建书签
+            guard let bookmark = Self.makeSecurityScopedBookmark(for: directory) else { return }
+            mediaSidecarBookmarkData = bookmark
+            saveState()
+        }
+
+        /// 音频无内嵌封面且所在目录未获沙盒授权时，向用户请求文件夹访问权限以载入同目录封面。
+        /// 返回是否获得授权；取消会记住该目录，避免同一文件夹反复打扰。
+        func requestSidecarCoverAccessIfNeeded(for audioURL: URL) async -> Bool {
+            let directory = audioURL.deletingLastPathComponent()
+            // 目录已可读（已持有授权、无需授权或确实没有封面文件）时不必请求
+            guard !AudioMetadataLoader.isCoverDirectoryAccessible(for: audioURL) else { return false }
+            // 已保存书签但尚未持有授权（如切换内容后释放）时先重新激活，避免重复打扰
+            if accessingSidecarDirectoryURL == nil,
+               let bookmark = mediaSidecarBookmarkData,
+               let sidecar = Self.restoreSidecarCoverAccess(bookmark: bookmark) {
+                if sidecar.accessed { accessingSidecarDirectoryURL = sidecar.directory }
+                if let refreshed = sidecar.refreshedBookmark { mediaSidecarBookmarkData = refreshed }
+                if AudioMetadataLoader.isCoverDirectoryAccessible(for: audioURL) { return false }
+            }
+            guard !Self.hasDeclinedSidecarCoverAccess(for: directory) else { return false }
+
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.directoryURL = directory
+            panel.message = String(
+                format: NSLocalizedString("Audio Cover Access Message Format", comment: ""),
+                directory.lastPathComponent
+            )
+            panel.prompt = NSLocalizedString("Grant Access", comment: "")
+
+            NSApp.activate(ignoringOtherApps: true)
+            let granted: Bool = await withCheckedContinuation { continuation in
+                if let window = Self.hostWindow(for: self) {
+                    panel.beginSheetModal(for: window) { response in
+                        continuation.resume(returning: response == .OK)
+                    }
+                } else {
+                    continuation.resume(returning: panel.runModal() == .OK)
+                }
+            }
+            guard granted, let chosen = panel.urls.first else {
+                Self.recordSidecarCoverAccessDecline(for: directory)
+                return false
+            }
+            if chosen.startAccessingSecurityScopedResource() {
+                accessingSidecarDirectoryURL = chosen
+            }
+            mediaSidecarBookmarkData = Self.makeSecurityScopedBookmark(for: chosen)
+            saveState()
+            return true
+        }
+
+        private static func hostWindow(for state: AppState) -> NSWindow? {
+            NSApp.windows.first { ($0.windowController as? FloatingWindowController)?.appState === state }
+        }
+
+        private static let sidecarCoverDeclineKeyPrefix = "sidecarCoverAccessDeclined."
+
+        private static func sidecarCoverDeclineKey(for directory: URL) -> String {
+            sidecarCoverDeclineKeyPrefix + directory.resolvingSymlinksInPath().standardizedFileURL.path
+        }
+
+        static func hasDeclinedSidecarCoverAccess(for directory: URL) -> Bool {
+            UserDefaults.standard.object(forKey: sidecarCoverDeclineKey(for: directory)) != nil
+        }
+
+        static func recordSidecarCoverAccessDecline(for directory: URL) {
+            UserDefaults.standard.set(true, forKey: sidecarCoverDeclineKey(for: directory))
         }
 
         /// UTType 对音视频的声明较宽（MKV/AVI 等也归为 movie），需再确认 macOS 原生可播放后才打开。
