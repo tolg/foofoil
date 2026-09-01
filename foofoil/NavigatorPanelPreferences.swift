@@ -5,6 +5,7 @@
 
 import Foundation
 import Combine
+import AppKit
 
 /// 指针悬停状态单独观察，避免写入 AppState 的 @Published 导致箔片内容整树重绘闪一下。
 final class NavigatorHoverState: ObservableObject {
@@ -30,6 +31,41 @@ nonisolated enum NavigatorPanelMetrics {
     static let edgeTriggerWidth = 12.0
     static let widthResizeHandleThickness = 8.0
     static let hoverHideDelay = 0.08
+    /// 面板横向可见宽度低于此比例（即被推出屏幕超过 1/3）时视为超界，可自动换边。
+    static let autoSwapMinVisibleRatio: CGFloat = 2.0 / 3.0
+
+    /// 面板被推出屏幕超过 1/3、且挂到另一侧后能完整放进某块屏幕可见区域时，
+    /// 返回换边目标；否则返回 nil。纯几何判定，供窗口移动时调用与单元测试。
+    static func autoSwapTargetSide(
+        current: NavigatorPanelSide,
+        panelFrame: NSRect,
+        windowFrame: NSRect,
+        screenVisibleFrames: [NSRect]
+    ) -> NavigatorPanelSide? {
+        let visibleWidth = screenVisibleFrames.reduce(CGFloat(0)) { $0 + panelFrame.intersection($1).width }
+        guard visibleWidth < panelFrame.width * autoSwapMinVisibleRatio else { return nil }
+
+        let gap = CGFloat(attachmentGap)
+        let candidateFrame: NSRect
+        switch current {
+        case .left:
+            candidateFrame = NSRect(
+                x: windowFrame.maxX + gap,
+                y: panelFrame.minY,
+                width: panelFrame.width,
+                height: panelFrame.height
+            )
+        case .right:
+            candidateFrame = NSRect(
+                x: windowFrame.minX - gap - panelFrame.width,
+                y: panelFrame.minY,
+                width: panelFrame.width,
+                height: panelFrame.height
+            )
+        }
+        guard screenVisibleFrames.contains(where: { $0.contains(candidateFrame) }) else { return nil }
+        return current == .left ? .right : .left
+    }
 
     static func containsWidthResizeHandle(x: CGFloat, width: CGFloat, draggingLeftEdge: Bool) -> Bool {
         if draggingLeftEdge {

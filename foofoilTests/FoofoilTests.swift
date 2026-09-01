@@ -1787,6 +1787,49 @@ struct FoofoilTests {
         ))
     }
 
+    @Test func navigatorAutoSwapsSideWhenPanelMostlyOffscreen() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let panelWidth: CGFloat = 200
+
+        func panel(minX: CGFloat) -> NSRect {
+            NSRect(x: minX, y: 100, width: panelWidth, height: 400)
+        }
+
+        // 左挂面板被推出屏幕超过 1/3，右侧完整放得下 → 换到右侧。
+        let clippedLeft = panel(minX: -panelWidth * 2 / 3)
+        #expect(NavigatorPanelMetrics.autoSwapTargetSide(
+            current: .left,
+            panelFrame: clippedLeft,
+            windowFrame: NSRect(x: 0, y: 0, width: 300, height: 400),
+            screenVisibleFrames: [screen]
+        ) == .right)
+
+        // 超界不足 1/3 → 不换。
+        #expect(NavigatorPanelMetrics.autoSwapTargetSide(
+            current: .left,
+            panelFrame: panel(minX: -panelWidth / 4),
+            windowFrame: NSRect(x: 0, y: 0, width: 300, height: 400),
+            screenVisibleFrames: [screen]
+        ) == nil)
+
+        // 另一侧放不下（窗口几乎占满屏幕宽，换边后依旧出屏）→ 不换。
+        #expect(NavigatorPanelMetrics.autoSwapTargetSide(
+            current: .right,
+            panelFrame: panel(minX: 950),
+            windowFrame: NSRect(x: 40, y: 0, width: 950, height: 400),
+            screenVisibleFrames: [screen]
+        ) == nil)
+
+        // 面板横跨两块相邻屏幕时整体可见 → 不换。
+        let secondScreen = NSRect(x: -600, y: 0, width: 600, height: 800)
+        #expect(NavigatorPanelMetrics.autoSwapTargetSide(
+            current: .left,
+            panelFrame: panel(minX: -100),
+            windowFrame: NSRect(x: 0, y: 0, width: 300, height: 400),
+            screenVisibleFrames: [screen, secondScreen]
+        ) == nil)
+    }
+
     @Test func fileListKeyDownNavigatesAdjacentItems() throws {
         let first = try writeTestPNG(name: "key-a.png")
         let second = try writeTestPNG(name: "key-b.png")
