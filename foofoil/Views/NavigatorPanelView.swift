@@ -81,6 +81,10 @@ struct NavigatorPanelView: View {
             appState.handleNavigatorDrop(providers: providers)
             return true
         }
+        // 空白处默认右键菜单；行与标题各自提供更具体的菜单覆盖此处。
+        .contextMenu {
+            moveToOppositeSideMenuItem
+        }
         .onAppear { selectFirstContributionIfNeeded() }
         .onChange(of: contributions.map(\.id)) { _, _ in
             selectFirstContributionIfNeeded()
@@ -136,6 +140,56 @@ struct NavigatorPanelView: View {
         .overlay(MovableBackground())
         // 整条标题区命中悬停，与列表行的整行命中保持一致。
         .onHover { isHoveringNavigatorHeader = $0 }
+        .contextMenu {
+            moveToOppositeSideMenuItem
+            if contribution.id == AppState.fileListNavigatorID {
+                Button {
+                    beginListTitleRename()
+                } label: {
+                    Label(NSLocalizedString("Change Title", comment: ""), systemImage: "pencil")
+                }
+            }
+        }
+    }
+
+    /// 面板空白处与标题共用的右键菜单项：把面板挂到另一侧。
+    private var moveToOppositeSideMenuItem: some View {
+        Button {
+            moveNavigatorPanelToOppositeSide()
+        } label: {
+            Label(
+                NSLocalizedString(
+                    appState.navigatorPanelSide == .left
+                        ? "Move Navigator to Right Side"
+                        : "Move Navigator to Left Side",
+                    comment: ""
+                ),
+                systemImage: appState.navigatorPanelSide == .left ? "sidebar.right" : "sidebar.left"
+            )
+        }
+    }
+
+    /// 与菜单栏“挂在左侧/右侧”动作一致：AppState 驱动重排，偏好同步持久化。
+    private func moveNavigatorPanelToOppositeSide() {
+        let next: NavigatorPanelSide = appState.navigatorPanelSide == .left ? .right : .left
+        appState.navigatorPanelSide = next
+        SettingsStore.shared.navigatorPanelSide = next
+    }
+
+    /// 用原生 NSAlert 改标题：面板是 canBecomeMain = false 的边框面板，SwiftUI 警告框
+    /// 在其中文本框无法聚焦且绑定只在首次展示生效；原生 accessory 输入框没有这两个问题。
+    /// 确认后走箔片上历史记录改名的同一流程，预填原始列表标题（不带数量）。
+    private func beginListTitleRename() {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("Change Title", comment: "")
+        alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = FileListState.normalizedTitle(appState.fileList?.title) ?? ""
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        HistoryManager.shared.updateHistoryTitle(configId: appState.id, newTitle: field.stringValue)
     }
 
     /// 内置文件列表显示自定义/专辑标题（不附数量）；无自定义标题时回退到类型名称。

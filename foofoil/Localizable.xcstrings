@@ -1220,6 +1220,40 @@
         }
       }
     },
+    "Move Navigator to Left Side": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Left Side"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移到左侧"
+          }
+        }
+      }
+    },
+    "Move Navigator to Right Side": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Right Side"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移到右侧"
+          }
+        }
+      }
+    },
     "Move to Next Screen": {
       "extractionState": "manual",
       "localizations": {
@@ -1356,7 +1390,23 @@
         }
       }
     },
-    "OK": {},
+    "OK": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
     "Opacity": {
       "extractionState": "manual",
       "localizations": {
