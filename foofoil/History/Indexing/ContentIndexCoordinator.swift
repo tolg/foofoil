@@ -15,11 +15,12 @@ public final class ContentIndexCoordinator: @unchecked Sendable {
 
     private init() {}
 
-    public func schedule(config: WindowConfig) {
+    /// - Parameter force: 为 true 时忽略同路径去重，强制重建缩略图并重跑索引（如同目录封面经授权后才可用）。
+    public func schedule(config: WindowConfig, force: Bool = false) {
         let kind = config.contentKind ?? HistoryContentKind.infer(from: config)
         guard kind == .image || kind == .pdf || kind == .video || kind == .audio, let path = config.imagePath else { return }
         lock.lock()
-        if scheduledPaths[config.id] == path {
+        if !force, scheduledPaths[config.id] == path {
             lock.unlock()
             return
         }

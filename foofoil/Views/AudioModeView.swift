@@ -224,6 +224,10 @@ struct AudioModeView: View {
         var loaded = await AudioMetadataLoader.load(from: url)
         if loaded.artwork == nil, await appState.requestSidecarCoverAccessIfNeeded(for: url) {
             loaded = await AudioMetadataLoader.load(from: url)
+            // 授权后封面才可读：补做窗口尺寸适配与历史缩略图重建
+            if loaded.artwork != nil {
+                appState.sidecarCoverDidBecomeAvailable()
+            }
         }
         if loaded.sidecarCoverURL != nil {
             appState.recordSidecarCoverAccess(for: url)

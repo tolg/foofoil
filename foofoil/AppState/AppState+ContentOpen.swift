@@ -247,6 +247,16 @@ extension AppState {
             return true
         }
 
+        /// 音频封面经用户授权后变为可用：通知窗口按封面重新适配尺寸，并强制重建历史缩略图。
+        func sidecarCoverDidBecomeAvailable() {
+            NotificationCenter.default.post(
+                name: .mediaPresentationSizeDidChange,
+                object: nil,
+                userInfo: ["id": id]
+            )
+            ContentIndexCoordinator.shared.schedule(config: toConfig(), force: true)
+        }
+
         private static func hostWindow(for state: AppState) -> NSWindow? {
             NSApp.windows.first { ($0.windowController as? FloatingWindowController)?.appState === state }
         }

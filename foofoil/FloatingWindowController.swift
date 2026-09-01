@@ -440,6 +440,22 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             }
             .store(in: &cancellables)
 
+        // 音频封面经用户授权后才可读：按封面重新适配窗口尺寸并刷新缓存的展示尺寸。
+        NotificationCenter.default.publisher(for: .mediaPresentationSizeDidChange)
+            .sink { [weak self] notification in
+                guard let self = self,
+                      let targetId = notification.userInfo?["id"] as? UUID,
+                      targetId == self.appState.id,
+                      self.appState.isAudioDocument,
+                      let url = self.appState.imageURL else { return }
+
+                self.fetchMediaPresentationSize(for: url) { size in
+                    guard self.appState.imageURL == url, let size else { return }
+                    self.applyMediaPresentationSize(size, animated: true)
+                }
+            }
+            .store(in: &cancellables)
+
         // 无边框 PDF 在缩放结束后，先将窗口比例校正为当前页比例，再缩放 PDF 填满窗口。
         NotificationCenter.default.publisher(for: .shouldMatchPDFWindowAspectRatio)
             .sink { [weak self] notification in
