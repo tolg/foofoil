@@ -2775,6 +2775,23 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "扩展会话不可用"}}
       }
     },
+    "Always Show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always Show"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "始终显示"
+          }
+        }
+      }
+    },
     "Always Show Navigator": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "Always Show Navigator"}},

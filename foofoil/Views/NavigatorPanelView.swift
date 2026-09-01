@@ -83,6 +83,9 @@ struct NavigatorPanelView: View {
         }
         // 空白处默认右键菜单；行与标题各自提供更具体的菜单覆盖此处。
         .contextMenu {
+            if !contributions.isEmpty {
+                alwaysShowNavigatorMenuItem
+            }
             moveToOppositeSideMenuItem
         }
         .onAppear { selectFirstContributionIfNeeded() }
@@ -141,6 +144,7 @@ struct NavigatorPanelView: View {
         // 整条标题区命中悬停，与列表行的整行命中保持一致。
         .onHover { isHoveringNavigatorHeader = $0 }
         .contextMenu {
+            alwaysShowNavigatorMenuItem
             moveToOppositeSideMenuItem
             if contribution.id == AppState.fileListNavigatorID {
                 Button {
@@ -149,6 +153,28 @@ struct NavigatorPanelView: View {
                     Label(NSLocalizedString("Change Title", comment: ""), systemImage: "pencil")
                 }
             }
+        }
+    }
+
+    /// “始终显示”开关项：勾选状态即当前显示模式，切换写法与菜单栏同名命令一致。
+    private var alwaysShowNavigatorMenuItem: some View {
+        Toggle(
+            isOn: Binding(
+                get: { appState.navigatorPanelVisibilityMode == .always },
+                set: { enabled in
+                    let next: NavigatorPanelVisibilityMode = enabled ? .always : .onHover
+                    appState.navigatorPanelVisibilityMode = next
+                    SettingsStore.shared.navigatorPanelVisibilityMode = next
+                    if next != .always {
+                        appState.isNavigatorPanelExplicitlyVisible = false
+                    }
+                }
+            )
+        ) {
+            Label(
+                NSLocalizedString("Always Show", comment: ""),
+                systemImage: "sidebar.squares.leading"
+            )
         }
     }
 

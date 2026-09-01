@@ -315,7 +315,7 @@ extension AppDelegate {
             action: #selector(toggleNavigatorPanelAction),
             keyEquivalent: "s"
         )
-        alwaysShowNavigatorItem.withSymbol("sidebar.left")
+        alwaysShowNavigatorItem.withSymbol("sidebar.squares.leading")
         alwaysShowNavigatorItem.keyEquivalentModifierMask = [.command, .control]
         alwaysShowNavigatorItem.target = self
         viewMenu.addItem(alwaysShowNavigatorItem)
