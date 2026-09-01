@@ -291,14 +291,7 @@ nonisolated public struct WindowConfig: Codable, Identifiable {
 
     public var historyMenuDisplayName: String {
         if let fileList, fileList.isPresentable {
-            if let title = FileListState.normalizedTitle(fileList.title) {
-                return String(
-                    format: NSLocalizedString("File List Custom Title Format", comment: ""),
-                    title,
-                    fileList.items.count
-                )
-            }
-            return String(format: NSLocalizedString(fileList.kind.historyTitleFormatKey, comment: ""), fileList.items.count)
+            return fileList.historyDisplayTitle
         }
         if let storedDisplayTitle, !storedDisplayTitle.isEmpty { return storedDisplayTitle }
         if let webURLString = self.webURLString {

@@ -1953,6 +1953,43 @@ struct FoofoilTests {
         #expect(migrated.historyMenuDisplayName.contains("2"))
     }
 
+    @Test func fileListHistoryDisplayTitleSharesSourceWithHistory() {
+        let first = FileListItem(id: "a", path: "/tmp/a.png", bookmark: nil, displayName: "a.png")
+        let second = FileListItem(id: "b", path: "/tmp/b.png", bookmark: nil, displayName: "b.png")
+
+        func config(for list: FileListState) -> WindowConfig {
+            WindowConfig(
+                id: UUID(),
+                imagePath: "/tmp/a.png",
+                originalImageName: "a.png",
+                contentKind: .image,
+                fileList: list
+            )
+        }
+
+        // 自定义标题附项数，与历史记录展示标题同源。
+        let titled = FileListState(kind: .image, items: [first, second], currentID: "a", title: " 夜曲 ")
+        #expect(titled.historyDisplayTitle.contains("夜曲"))
+        #expect(titled.historyDisplayTitle.contains("2"))
+        #expect(titled.historyDisplayTitle == config(for: titled).historyMenuDisplayName)
+
+        // 无标题时回退为本地化“类型（项数）”，仍与历史标题一致。
+        let untitled = FileListState(kind: .image, items: [first, second], currentID: "a")
+        #expect(untitled.historyDisplayTitle.contains("2"))
+        #expect(untitled.historyDisplayTitle == config(for: untitled).historyMenuDisplayName)
+
+        // CUE 列表沿用专辑标题并保持 CUE 标记条件成立。
+        let cueInfo = FileListCueInfo(startCueFrames: 0, sectionID: "s1")
+        let cueTracks = [
+            FileListItem(id: "t1", path: "/tmp/a.flac", displayName: "Track 1", cue: cueInfo),
+            FileListItem(id: "t2", path: "/tmp/a.flac", displayName: "Track 2", cue: cueInfo)
+        ]
+        let cueList = FileListState(kind: .audio, items: cueTracks, currentID: "t1", title: "专辑")
+        #expect(cueList.isCueBased)
+        #expect(cueList.historyDisplayTitle.contains("专辑"))
+        #expect(cueList.historyDisplayTitle == config(for: cueList).historyMenuDisplayName)
+    }
+
     @Test func mediaPlaybackModeCyclesAndAdvancesFileList() throws {
         let first = try writeTestMedia(name: "mode-a.mp3")
         let second = try writeTestMedia(name: "mode-b.mp3")

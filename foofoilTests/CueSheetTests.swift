@@ -282,7 +282,10 @@ struct CueSheetTests {
         defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
         #expect(state.handleDroppedFileURLs([cue]))
         #expect(state.fileList?.title == "Disc")
-        #expect(state.toConfig().historyMenuDisplayName == "Disc")
+        // 自定义（专辑）标题同样展示项数；CUE 列表标题与历史记录保持一致。
+        let displayTitle = state.toConfig().historyMenuDisplayName
+        #expect(displayTitle.contains("Disc"))
+        #expect(displayTitle.contains("2"))
         let items = try #require(state.navigatorContributions.first?.items)
         #expect(items.map(\.title) == ["Intro", "Song"])
         #expect(items.map(\.badge) == ["0:01", "0:01"])

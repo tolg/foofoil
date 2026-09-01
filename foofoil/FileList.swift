@@ -266,6 +266,22 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
         items.first(where: { $0.id == currentID }) ?? items.first
     }
 
+    /// 与历史记录一致的列表展示标题：自定义（或 CUE 专辑）标题附项数，
+    /// 无标题时回退为本地化的“类型（项数）”。
+    public var historyDisplayTitle: String {
+        if let title = Self.normalizedTitle(self.title) {
+            return String(
+                format: NSLocalizedString("File List Custom Title Format", comment: ""),
+                title,
+                items.count
+            )
+        }
+        return String(
+            format: NSLocalizedString(kind.historyTitleFormatKey, comment: ""),
+            items.count
+        )
+    }
+
     public init(
         kind: FileListKind,
         items: [FileListItem],
