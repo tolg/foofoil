@@ -23,6 +23,19 @@ Core 已能播放 MP3，安装 Hi-Fi 后仍可让 Hi-Fi 接管 MP3 会话，并�
 -   不考虑 Mac App Store 限制；
 -   官网与 GitHub Release 为发行渠道。
 
+### 当前实现基线（2026-09-02）
+
+当前主仓库已经落地 Extension API v1、Manifest、Provider Resolver、Content Session、
+capability negotiation、宿主命令与 Navigator contribution、扩展状态持久化、Loader、跨进程
+Test Extension 样机，以及 Extension Manager 的 Registry 解析、兼容版本选择、安装、更新、回滚、
+卸载和设置界面。普通音频、视频、PDF 与文件列表仍由 Core 的现有实现提供。
+
+现阶段 Extension Manager 默认使用本地种子 Registry 和 Test Extension 完成开发闭环；生产
+Registry URL、正式 Registry 签名密钥、固定 Team ID、强制代码签名和 notarization 校验仍属于发布
+接线工作，不能把本地样机状态视为正式分发已经上线。`hifi-ext` 功能分支已验证 Hi-Fi 的首条
+真实硬件播放链路，但尚未进入当前主线或正式发布仓库。Hi-Fi、EPUB、Video+ 与 Retro 仍按独立
+能力仓库和独立 Release 推进，不把它们重新并入 Core 的长期发布物。
+
 典型体验一：增加新内容类型。
 
 ``` text
@@ -176,17 +189,50 @@ library、emulator core 等，内部实现不能泄漏到 Core。
 
 ## 5. 项目与 Release 组织
 
-建议独立仓库：
+目标仓库组织：
 
 ``` text
 foofoil/foofoil
-foofoil/foofoil-extension-kit
-foofoil/foofoil-extension-hifi
-foofoil/foofoil-extension-epub
-foofoil/foofoil-extension-video
-foofoil/foofoil-extension-retro
-foofoil/foofoil-extension-registry
+foofoil/extension-kit
+
+foofoil/hifi
+foofoil/epub
+foofoil/video
+foofoil/retro
+
+foofoil/registry
 ```
+
+命名规则不是统一给所有仓库追加 `extension`，而是区分用户能力与扩展基础设施：
+
+-   `hifi`、`epub`、`video`、`retro` 是用户会主动寻找的能力，使用短名；
+-   `extension-kit` 自身没有明确的内容领域含义，保留 `extension` 以说明用途；
+-   `registry` 位于 `foofoil` Organization 下已经有足够上下文，不重复产品名；
+-   扩展身份由 Organization、仓库 description 和 README 第一屏共同说明，不塞进 repo slug。
+
+短名不只是 URL 更简洁。每个能力仓库都可以成为 foofoil 的独立发现入口：用户可能先因 Hi-Fi、
+EPUB 或视频能力进入仓库，再了解到轻量 Core 和其他可选能力。Core 本身体积与安装负担较小，
+这种发现路径符合产品结构。仓库名可以先表达能力，但不能隐藏依赖关系；例如 `foofoil/hifi`
+的 description 和 README 第一屏必须立即说明：
+
+``` text
+Hi-Fi for foofoil
+Advanced local audio playback extension for foofoil. Requires foofoil.
+```
+
+README 随后给出 foofoil 的安装入口、扩展内安装方式和兼容版本。不能让用户读到安装步骤之后才
+发现它不能独立运行。面向用户的产品名仍为 `Hi-Fi`、`EPUB`、`Video+` 和 `Retro`，foofoil App
+中的类型名仍统一使用“扩展 / Extensions”；短仓库名不改变产品术语。
+
+仓库短名也不要求抹去代码层的扩展身份。Bundle ID、Manifest ID、模块名和类型名仍可使用
+`app.foofoil.extension.hifi`、`HiFiExtensionRuntime` 等明确的技术命名；本节只约束公开仓库 slug
+和由此形成的发现路径。
+
+当前 ExtensionKit 和 Extension Manager 源码位于 `foofoil/foofoil`，便于 API v1 与宿主同步
+收敛。这是当前实现布局，不是最终发布仓库边界。`extension-kit` 应承载可复用契约、Manifest
+Schema、ABI 头文件和扩展构建支持；宿主 Loader、Installer、Registry 客户端及 UI 继续由
+`foofoil/foofoil` 持有。正式能力可以在功能分支中孵化，但首个公开 Release 前必须迁入对应短名
+仓库，避免继续形成与 Core 同步发版的事实耦合。
 
 各扩展独立维护：
 
@@ -953,7 +999,10 @@ PresentationAdapter
 
 ### Phase 0：ExtensionKit
 
-完成：
+当前状态：基础实现已在 `foofoil/foofoil` 落地；公开复用部分仍需按第 5 节边界提取到
+`foofoil/extension-kit`。
+
+已完成：
 
 -   Manifest Schema；
 -   Extension API v1；
@@ -990,7 +1039,10 @@ Navigator 样机还必须验证旧 Session 缺少 contribution 字段时可正�
 
 ### Phase 1：Extension Manager
 
-完成：
+当前状态：开发与自动化测试所需闭环已在 `foofoil/foofoil` 落地，本地种子 Registry 可安装
+Test Extension；生产分发接线与真实发布验收尚未完成。
+
+已完成的实现：
 
 -   Registry；
 -   Compatibility Resolver；
@@ -1005,12 +1057,33 @@ Navigator 样机还必须验证旧 Session 缺少 contribution 字段时可正�
 -   uninstall；
 -   扩展设置页。
 
+发布前仍需完成：
+
+-   配置生产 Registry HTTPS URL，移除正式构建对本地种子 Registry 的依赖；
+-   以离线保管的正式私钥生成 Registry，并在客户端固定对应公钥；
+-   正式构建强制校验 Developer ID、固定 Team ID、notarization 和受信 Bundle ID；
+-   用真实 GitHub Release 产物完成安装、升级、撤销、回滚和卸载验收；
+-   建立 `foofoil/registry` 的发布与 CI 校验流程。
+
 验收：从 App 内安装测试扩展，无需用户处理扩展包即可打开对应文件或增强已有 Provider；升级、
 撤销、回滚和卸载不破坏已有 Session 与持久化状态。
 
 ### Phase 2：Hi-Fi
 
-实现：
+目标仓库：`foofoil/hifi`。这是首个正式能力仓库，也是验证“短名能力入口 → 认识 foofoil →
+在 App 内安装扩展”完整发现与安装路径的首要样本。
+
+当前状态：`hifi-ext` 功能分支已经打通 DSF raw DSD → DoP → CoreAudio HAL → USB DAC 的最小
+闭环，并在真实 Stereo DSD64 设备上完成播放验收；宿主侧已具备播放、暂停、进度轮询、输出设备
+选择和关闭时释放设备的样机能力。这一结果证明 Extension API 能承载真实 Hi-Fi Pipeline，但
+仍是功能分支中的 in-process 开发样机，不代表 `foofoil/hifi` 已建立或 Hi-Fi 已可通过正式
+Registry 安装。
+
+尚未完成的关键发布范围包括 DSD → PCM fallback、raw DFF / DST / SACD ISO、完整 seek、播放
+队列与 Navigator 闭环、metadata 与封面、Session 恢复、更多 DSD 速率和设备回归、进程隔离评估，
+以及独立仓库、签名、公证、安装和升级流程。
+
+完整阶段范围：
 
 -   DSF / DFF；
 -   SACD ISO / DST；
@@ -1040,16 +1113,22 @@ Navigator 样机还必须验证旧 Session 缺少 contribution 字段时可正�
 
 ### Phase 3：EPUB
 
+目标仓库：`foofoil/epub`。
+
 把 EPUB 重型依赖从 Core 迁出，验证 renderer/resource-heavy
 类型扩展和旧功能迁移。EPUB 扩展贡献树形目录数据与跳转动作，由 Core Navigator Panel 呈现，
 不携带扩展私有列表 View。
 
 ### Phase 4：Video+
 
+目标仓库：`foofoil/video`，面向用户的产品名仍为 `Video+`。
+
 加入 FFmpeg / libav\*、MKV、RM/RMVB 等，并依据 Phase 0 结果将高风险解码放入独立进程。
 视频队列复用 `media.playback-queue`，列表与章节复用 `ui.navigator`。
 
 ### Phase 5：Retro
+
+目标仓库：`foofoil/retro`。
 
 验证 Emulator Core、Controller、高交互 ContentSession 和独立进程模型。
 
@@ -1090,6 +1169,9 @@ Extension
   第三方插件市场                  不做
   Mac App Store                   不考虑
   官网 / GitHub Release           正式发行渠道
+  能力仓库命名                    `hifi` / `epub` / `video` / `retro`
+  基础设施仓库命名                `extension-kit` / `registry`
+  仓库 README 依赖披露            第一屏明确 Requires foofoil
   扩展独立 repo                   是
   扩展独立 Release                是
   扩展独立版本                    是
