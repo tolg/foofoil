@@ -30,6 +30,8 @@ enum ExtensionLoaderError: LocalizedError {
     case missingExecutable
     case missingEntryPoint
     case invalidInterface
+    case runtimeCallFailed(Int32)
+    case invalidRuntimeResponse
 
     var errorDescription: String? {
         switch self {
@@ -43,6 +45,8 @@ enum ExtensionLoaderError: LocalizedError {
         case .missingExecutable: "The extension executable is missing."
         case .missingEntryPoint: "The Extension API entry point is missing."
         case .invalidInterface: "The extension returned an invalid Extension API interface."
+        case .runtimeCallFailed(let status): "The extension runtime call failed (\(status))."
+        case .invalidRuntimeResponse: "The extension returned an invalid response."
         }
     }
 }
@@ -193,10 +197,11 @@ final class ExtensionLoader {
 }
 
 /// 装载后保持映像到进程退出，不依赖 dlclose 做热升级或卸载。
-final class InProcessExtensionInterface {
+final class InProcessExtensionInterface: @unchecked Sendable {
     typealias CreateFunction = @convention(c) (UInt32) -> UnsafePointer<FoofoilExtensionInterfaceV1>?
 
     private let imageHandle: UnsafeMutableRawPointer
+    private let callLock = NSLock()
     let interface: UnsafePointer<FoofoilExtensionInterfaceV1>
 
     init(executableURL: URL, negotiatedAPI: UInt32) throws {
@@ -222,4 +227,45 @@ final class InProcessExtensionInterface {
         interface.pointee.destroy?(interface.pointee.context)
         _ = imageHandle
     }
+
+    nonisolated func createSession(for request: ContentRequest) throws -> ContentSession {
+        let requestData = try JSONEncoder().encode(request)
+        return try call(interface.pointee.create_session, input: requestData)
+    }
+
+    nonisolated func perform(commandID: String, session: ContentSession) throws -> ContentSession {
+        guard let performCommand = interface.pointee.perform_command else { return session }
+        let message = ExtensionCommandMessage(commandID: commandID, session: session)
+        return try call(performCommand, input: JSONEncoder().encode(message))
+    }
+
+    nonisolated private func call(
+        _ function: ((UnsafeMutableRawPointer?, UnsafePointer<UInt8>?, Int, UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?, UnsafeMutablePointer<Int>?) -> Int32)?,
+        input: Data
+    ) throws -> ContentSession {
+        guard let function else { throw ExtensionLoaderError.invalidInterface }
+        // ABI v1 不要求插件可重入；宿主按 runtime 串行调用，避免多窗口并发破坏插件状态。
+        callLock.lock()
+        defer { callLock.unlock() }
+        var output: UnsafeMutablePointer<UInt8>?
+        var outputLength = 0
+        let status = input.withUnsafeBytes { bytes in
+            function(
+                interface.pointee.context,
+                bytes.bindMemory(to: UInt8.self).baseAddress,
+                bytes.count,
+                &output,
+                &outputLength
+            )
+        }
+        guard status == 0 else { throw ExtensionLoaderError.runtimeCallFailed(status) }
+        guard let output, outputLength > 0 else { throw ExtensionLoaderError.invalidRuntimeResponse }
+        defer { interface.pointee.release_bytes?(interface.pointee.context, output, outputLength) }
+        return try JSONDecoder().decode(ContentSession.self, from: Data(bytes: output, count: outputLength))
+    }
+}
+
+private struct ExtensionCommandMessage: Encodable {
+    let commandID: String
+    let session: ContentSession
 }

@@ -529,9 +529,14 @@ extension AppDelegate {
     func rebuildExtensionMenu(_ menu: NSMenu) {
         menu.removeAllItems()
         guard let commands = activeAppState?.extensionSession?.commands else { return }
-        for command in commands {
+        appendExtensionCommands(commands, parentID: nil, to: menu)
+    }
+
+    /// 扩展只声明稳定的父子关系，菜单对象及动作路由仍由宿主创建和持有。
+    private func appendExtensionCommands(_ commands: [CommandDescriptor], parentID: String?, to menu: NSMenu) {
+        for command in commands where command.parentID == parentID {
             let item = NSMenuItem(
-                title: NSLocalizedString(command.titleLocalizationKey, comment: ""),
+                title: command.displayTitle ?? NSLocalizedString(command.titleLocalizationKey, comment: ""),
                 action: #selector(extensionCommandAction(_:)),
                 keyEquivalent: command.keyEquivalent ?? ""
             )
@@ -542,6 +547,12 @@ extension AppDelegate {
             item.keyEquivalentModifierMask = NSEvent.ModifierFlags(rawValue: command.modifierFlags)
             if let symbolName = command.symbolName {
                 item.withSymbol(symbolName)
+            }
+            if commands.contains(where: { $0.parentID == command.id }) {
+                let submenu = NSMenu(title: item.title)
+                appendExtensionCommands(commands, parentID: command.id, to: submenu)
+                item.action = nil
+                item.submenu = submenu
             }
             menu.addItem(item)
         }

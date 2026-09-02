@@ -433,7 +433,7 @@ final class ExtensionManager: ObservableObject {
         return entry
     }
 
-    private func makeLoader() -> ExtensionLoader {
+    func makeLoader() -> ExtensionLoader {
         ExtensionLoader(
             trustedTeamID: configuration.trustedTeamID,
             requireSignature: configuration.requireSignature,

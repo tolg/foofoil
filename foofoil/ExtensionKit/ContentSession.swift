@@ -46,6 +46,10 @@ enum SessionPresentation: Codable, Equatable, Sendable {
 struct CommandDescriptor: Codable, Equatable, Identifiable, Sendable {
     let id: String
     let titleLocalizationKey: String
+    /// 设备名等外部动态值不走本地化；普通宿主 chrome 继续使用 localization key。
+    var displayTitle: String?
+    /// 指向同一命令集合中的父命令；宿主据此构造原生子菜单。
+    var parentID: String?
     var symbolName: String?
     var keyEquivalent: String?
     var modifierFlags: UInt
@@ -55,6 +59,8 @@ struct CommandDescriptor: Codable, Equatable, Identifiable, Sendable {
     init(
         id: String,
         titleLocalizationKey: String,
+        displayTitle: String? = nil,
+        parentID: String? = nil,
         symbolName: String? = nil,
         keyEquivalent: String? = nil,
         modifierFlags: UInt = 0,
@@ -63,6 +69,8 @@ struct CommandDescriptor: Codable, Equatable, Identifiable, Sendable {
     ) {
         self.id = id
         self.titleLocalizationKey = titleLocalizationKey
+        self.displayTitle = displayTitle
+        self.parentID = parentID
         self.symbolName = symbolName
         self.keyEquivalent = keyEquivalent
         self.modifierFlags = modifierFlags
@@ -86,6 +94,9 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
     var capabilities: [NegotiatedCapability]
     var commands: [CommandDescriptor]
     var navigatorContributions: [NavigatorContribution]
+    var mediaPlayback: MediaPlaybackSnapshot?
+    var playbackQueue: MediaPlaybackQueueSnapshot?
+    var audioDeviceSelection: AudioDeviceSelectionSnapshot?
     var stateReference: String?
 
     init(
@@ -97,6 +108,9 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
         capabilities: [NegotiatedCapability] = [],
         commands: [CommandDescriptor] = [],
         navigatorContributions: [NavigatorContribution] = [],
+        mediaPlayback: MediaPlaybackSnapshot? = nil,
+        playbackQueue: MediaPlaybackQueueSnapshot? = nil,
+        audioDeviceSelection: AudioDeviceSelectionSnapshot? = nil,
         stateReference: String? = nil
     ) {
         self.id = id
@@ -107,12 +121,15 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
         self.capabilities = capabilities
         self.commands = commands
         self.navigatorContributions = navigatorContributions
+        self.mediaPlayback = mediaPlayback
+        self.playbackQueue = playbackQueue
+        self.audioDeviceSelection = audioDeviceSelection
         self.stateReference = stateReference
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, extensionID, providerID, request, presentation, capabilities, commands
-        case navigatorContributions, stateReference
+        case navigatorContributions, mediaPlayback, playbackQueue, audioDeviceSelection, stateReference
     }
 
     init(from decoder: Decoder) throws {
@@ -129,6 +146,12 @@ struct ContentSession: Codable, Equatable, Identifiable, Sendable {
             [NavigatorContribution].self,
             forKey: .navigatorContributions
         ) ?? []
+        mediaPlayback = try container.decodeIfPresent(MediaPlaybackSnapshot.self, forKey: .mediaPlayback)
+        playbackQueue = try container.decodeIfPresent(MediaPlaybackQueueSnapshot.self, forKey: .playbackQueue)
+        audioDeviceSelection = try container.decodeIfPresent(
+            AudioDeviceSelectionSnapshot.self,
+            forKey: .audioDeviceSelection
+        )
         stateReference = try container.decodeIfPresent(String.self, forKey: .stateReference)
     }
 }

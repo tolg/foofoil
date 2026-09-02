@@ -17,7 +17,29 @@ cd "$SCRIPT_DIR"
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
     -derivedDataPath build -destination "$DESTINATION" build
 
-APP_PATH="build/Build/Products/Debug/$APP_NAME.app"
+APP_PATH="$SCRIPT_DIR/build/Build/Products/Debug/$APP_NAME.app"
+
+# Debug 运行时注入 Hi-Fi 开发插件；Release 仍通过扩展安装机制独立分发。
+SIGN_NAME=$(codesign -dvv "$APP_PATH" 2>&1 | awk -F= '
+    /^Authority=/ && value == "" { value=$2 }
+    END { print value }
+')
+SIGN_IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
+SIGN_IDENTITY=$(print -r -- "$SIGN_IDENTITIES" | awk -v name="$SIGN_NAME" '
+    index($0, "\"" name "\"") > 0 && index($0, "REVOKED") == 0 && value == "" { value=$2 }
+    END { print value }
+')
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+DEVELOPMENT_EXTENSIONS="$SCRIPT_DIR/build/DevelopmentExtensions"
+"$SCRIPT_DIR/HiFiExtension/build-plugin" "$DEVELOPMENT_EXTENSIONS" "$SIGN_IDENTITY"
+mkdir -p "$APP_PATH/Contents/PlugIns"
+rm -rf "$APP_PATH/Contents/PlugIns/Hi-Fi.foofoilextension"
+cp -R "$DEVELOPMENT_EXTENSIONS/Hi-Fi.foofoilextension" "$APP_PATH/Contents/PlugIns/"
+codesign --force --sign "$SIGN_IDENTITY" --options runtime \
+    --entitlements "$SCRIPT_DIR/foofoil/foofoil.entitlements" "$APP_PATH"
+# 插件注入会改变 bundle seal；重签后刷新 LaunchServices，避免沿用构建阶段的旧登记。
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister \
+    -f -R -trusted "$APP_PATH"
 
 # 终止所有正在运行的实例
 pkill -x "$APP_NAME" 2>/dev/null || true

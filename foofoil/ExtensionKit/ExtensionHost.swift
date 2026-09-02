@@ -15,6 +15,7 @@ final class ExtensionHost: ExtensionRuntimeHost {
     private var preferredProvidersByDomain: [String: String]
     private var sessionCounts: [String: Int] = [:]
     private var loadedInProcess: Set<String> = []
+    private var inProcessRuntimes: [String: InProcessExtensionInterface] = [:]
     private let sessionLock = NSLock()
 
     init(
@@ -30,6 +31,9 @@ final class ExtensionHost: ExtensionRuntimeHost {
         self.manager = resolvedManager
         resolvedManager.host = self
         resolvedManager.loadInstalledRuntimes()
+#if DEBUG
+        loadBundledDevelopmentRuntimes()
+#endif
     }
 
     func setPreferredProvider(_ providerID: String?, for domain: String) {
@@ -44,15 +48,11 @@ final class ExtensionHost: ExtensionRuntimeHost {
     func canOpen(url: URL) -> Bool {
         let request = ContentRequest.singleFile(.init(url: url))
         let candidates = resolver.candidates(for: request)
-        if candidates.contains(where: { !$0.descriptor.isBuiltIn && $0.descriptor.role == .primary }) {
-            return true
-        }
-        if let domain = candidates.compactMap(\.descriptor.enhancementDomain).first,
-           let preferred = preferredProvidersByDomain[domain],
-           candidates.contains(where: { $0.descriptor.id == preferred && !$0.descriptor.isBuiltIn }) {
-            return true
-        }
-        return false
+        let domain = candidates.compactMap(\.descriptor.enhancementDomain).first
+        let preferred = domain.flatMap { preferredProvidersByDomain[$0] }
+        guard let resolution = try? resolver.resolve(request, preferredProviderID: preferred),
+              let provider = resolver.provider(id: resolution.selectedProviderID) else { return false }
+        return !provider.descriptor.isBuiltIn
     }
 
     func open(url: URL) async throws -> SessionResolutionOutcome {
@@ -70,7 +70,17 @@ final class ExtensionHost: ExtensionRuntimeHost {
         }
         let updated = try await provider.perform(commandID: commandID, session: session)
         try NavigatorContributionValidator.validate(updated)
+        try CommandContributionValidator.validate(updated)
+        try MediaSessionContractValidator.validate(updated)
         return updated
+    }
+
+    /// 通知扩展释放会话持有的文件访问与独占音频设备；普通扩展可忽略此命令。
+    func closeSession(_ session: ContentSession) {
+        Task { @MainActor in
+            guard let provider = resolver.provider(id: session.providerID) else { return }
+            _ = try? await provider.perform(commandID: "hifi.close", session: session)
+        }
     }
 
     func perform(navigatorAction: NavigatorAction, in session: ContentSession) async throws -> ContentSession {
@@ -83,6 +93,8 @@ final class ExtensionHost: ExtensionRuntimeHost {
         }
         let updated = try await provider.perform(navigatorAction: navigatorAction, session: session)
         try NavigatorContributionValidator.validate(updated)
+        try CommandContributionValidator.validate(updated)
+        try MediaSessionContractValidator.validate(updated)
         return updated
     }
 
@@ -112,12 +124,29 @@ final class ExtensionHost: ExtensionRuntimeHost {
         if loaded.manifest.id == LocalTestExtension.identifier {
             resolver.unregisterProviders(extensionID: loaded.manifest.id)
             audioEnhancer = LocalTestExtension.register(in: resolver)
+        } else if loaded.executionModel == .inProcess {
+            do {
+                let runtime = try manager.makeLoader().openInProcessInterface(loaded)
+                resolver.unregisterProviders(extensionID: loaded.manifest.id)
+                for declaration in loaded.manifest.providers {
+                    resolver.register(InProcessContentProvider(
+                        extensionID: loaded.manifest.id,
+                        declaration: declaration,
+                        runtime: runtime
+                    ))
+                }
+                inProcessRuntimes[loaded.manifest.id] = runtime
+            } catch {
+                NSLog("Extension runtime activation failed: \(error.localizedDescription)")
+                return
+            }
         }
         markLoadedInProcess(loaded.manifest.id)
     }
 
     func deactivateRuntime(extensionID: String) {
         resolver.unregisterProviders(extensionID: extensionID)
+        inProcessRuntimes.removeValue(forKey: extensionID)
         if extensionID == LocalTestExtension.identifier {
             audioEnhancer = nil
         }
@@ -140,4 +169,21 @@ final class ExtensionHost: ExtensionRuntimeHost {
         loadedInProcess.insert(extensionID)
         sessionLock.unlock()
     }
+
+#if DEBUG
+    /// `./run` 注入的开发插件不写安装状态；Release 只从正式安装目录加载。
+    private func loadBundledDevelopmentRuntimes() {
+        guard let directory = Bundle.main.builtInPlugInsURL else { return }
+        let loader = manager.makeLoader()
+        for discovered in loader.discover(in: directory) {
+            guard case .success(let loaded) = discovered.result else {
+                if case .failure(let error) = discovered.result {
+                    NSLog("Development extension load failed: \(error.localizedDescription)")
+                }
+                continue
+            }
+            activateRuntime(for: loaded)
+        }
+    }
+#endif
 }

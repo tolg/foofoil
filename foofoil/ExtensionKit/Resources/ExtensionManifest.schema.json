@@ -34,6 +34,7 @@
           "id": {"type": "string", "minLength": 1},
           "role": {"enum": ["primary", "override"]},
           "fallbackProvider": {"type": "string", "minLength": 1},
+          "enhancementDomain": {"type": "string", "minLength": 1},
           "contentTypes": {
             "type": "array",
             "minItems": 1,

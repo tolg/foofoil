@@ -86,17 +86,21 @@ struct ExtensionProviderDeclaration: Codable, Equatable, Sendable {
     let id: String
     let role: ExtensionProviderRole
     var fallbackProvider: String?
+    /// override provider 所属偏好域，例如 audio；旧清单缺失时保持 nil。
+    var enhancementDomain: String?
     let contentTypes: [ContentTypeDeclaration]
 
     init(
         id: String,
         role: ExtensionProviderRole,
         fallbackProvider: String? = nil,
+        enhancementDomain: String? = nil,
         contentTypes: [ContentTypeDeclaration]
     ) {
         self.id = id
         self.role = role
         self.fallbackProvider = fallbackProvider
+        self.enhancementDomain = enhancementDomain
         self.contentTypes = contentTypes
     }
 }

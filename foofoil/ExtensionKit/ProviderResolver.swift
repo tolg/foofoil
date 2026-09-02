@@ -176,6 +176,8 @@ final class ProviderResolver {
                 defer { accessScope.stop() }
                 let session = try await provider.makeSession(for: request, negotiatedAPI: negotiatedAPI)
                 try NavigatorContributionValidator.validate(session)
+                try CommandContributionValidator.validate(session)
+                try MediaSessionContractValidator.validate(session)
                 return SessionResolutionOutcome(session: session, resolution: resolution, failures: failures)
             } catch {
                 failures.append(ProviderFailure(providerID: providerID, message: error.localizedDescription))
