@@ -7,6 +7,7 @@ import CryptoKit
 import Foundation
 import Testing
 @testable import foofoil
+import FoofoilExtensionKit
 
 @MainActor
 @Suite(.serialized)

@@ -86,6 +86,8 @@ foofoil/
 
 ## 从源码构建
 
+请将 `extension-kit` 作为本仓库的兄弟目录检出。Xcode 工程以本地包的形式链接 `../extension-kit`。
+
 1. 使用 Xcode 打开 `foofoil.xcodeproj`。
 2. 选择 `foofoil` Scheme 和 **My Mac** 运行目标。
 3. 如果 Xcode 提示签名问题，请配置开发者签名团队。

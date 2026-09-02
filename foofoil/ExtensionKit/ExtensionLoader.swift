@@ -6,6 +6,7 @@
 import Darwin
 import Foundation
 import Security
+import FoofoilExtensionKit
 
 enum ExtensionExecutionModel: String, Codable, Sendable {
     case inProcess

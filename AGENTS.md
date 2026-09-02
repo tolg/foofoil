@@ -6,7 +6,7 @@ foofoil is a lightweight macOS reference app built for keeping useful content vi
 
 The app is written in Swift and uses SwiftUI for most interface code, with AppKit where direct macOS window, menu, text, or visual-effect control is required. It also uses native Apple frameworks for web content, PDFs, OCR, images, file types, and persistence.
 
-Reusable Extension API contracts live in the sibling `extension-kit` repository. Capability extensions such as Hi-Fi live in their own sibling repositories and are not part of the Core app target. Host loading, the Extension Manager, Registry client, and UI stay in this repository.
+Reusable Extension API contracts live in the sibling `extension-kit` repository; this app links it as a local Swift package at `../extension-kit`. Capability extensions such as Hi-Fi live in their own sibling repositories and are not part of the Core app target. Host loading, the Extension Manager, Registry client, and UI stay in this repository.
 
 ## Core Product Principles
 

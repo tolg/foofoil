@@ -5,6 +5,7 @@
 
 import Foundation
 import UniformTypeIdentifiers
+import FoofoilExtensionKit
 
 final class BuiltInAudioProvider: ContentProvider {
     let descriptor = ProviderDescriptor(

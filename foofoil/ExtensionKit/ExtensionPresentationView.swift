@@ -3,6 +3,7 @@
 //
 //  Created by tolg on 2026/8/25.
 
+import FoofoilExtensionKit
 import SwiftUI
 
 struct ExtensionPresentationView: View {

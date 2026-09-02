@@ -13,6 +13,7 @@ import CoreGraphics
 import UniformTypeIdentifiers
 import SwiftUI
 @testable import foofoil
+import FoofoilExtensionKit
 
 @MainActor
 @Suite(.serialized)

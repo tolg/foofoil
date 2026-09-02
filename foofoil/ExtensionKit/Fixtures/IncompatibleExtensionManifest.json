@@ -1,9 +1,0 @@
-{
-  "id": "app.foofoil.extension.future",
-  "name": "Future Extension",
-  "version": "2.0.0",
-  "extensionAPI": {"min": 2, "max": 3},
-  "system": {"minMacOS": "15.0", "architectures": ["arm64", "x86_64"]},
-  "providers": [],
-  "capabilities": []
-}

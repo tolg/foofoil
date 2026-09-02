@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import FoofoilExtensionKit
 
 public struct ContentView: View {
     @ObservedObject var appState: AppState

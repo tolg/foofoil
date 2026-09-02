@@ -33,10 +33,10 @@ Test Extension 样机，以及 Extension Manager 的 Registry 解析、兼容版
 现阶段 Extension Manager 默认使用本地种子 Registry 和 Test Extension 完成开发闭环；生产
 Registry URL、正式 Registry 签名密钥、固定 Team ID、强制代码签名和 notarization 校验仍属于发布
 接线工作，不能把本地样机状态视为正式分发已经上线。公开契约已提取到 `foofoil/extension-kit`；
-Hi-Fi 源码已提取到 `foofoil/hifi`。宿主仍在本仓库编译与 API v1 同步的契约源码，并继续持有
-Loader、Installer、Registry 客户端和 UI。`hifi-ext` 功能分支已完成首条真实硬件播放验证，计划删除，
-不再作为长期开发入口。Hi-Fi、EPUB、Video+ 与 Retro 仍按独立能力仓库和独立 Release 推进，不把
-它们重新并入 Core 的长期发布物。
+Hi-Fi 源码已提取到 `foofoil/hifi`。宿主通过本地 package 依赖 kit，并继续持有 Loader、Installer、
+Registry 客户端和 UI。`hifi-ext` 功能分支已完成首条真实硬件播放验证，计划删除，不再作为长期
+开发入口。Hi-Fi、EPUB、Video+ 与 Retro 仍按独立能力仓库和独立 Release 推进，不把它们重新并入
+Core 的长期发布物。
 
 典型体验一：增加新内容类型。
 
@@ -231,10 +231,9 @@ README 随后给出 foofoil 的安装入口、扩展内安装方式和兼容版�
 和由此形成的发现路径。
 
 公开复用契约、Manifest Schema、ABI 头文件和扩展构建支持位于 `foofoil/extension-kit`。
-宿主 Loader、Installer、Registry 客户端及 UI 继续由 `foofoil/foofoil` 持有；API v1 收敛期间，
-宿主仍编译与 kit 对应的契约源码，避免单仓库检出无法构建。正式能力在首个公开 Release 前必须
-位于对应短名仓库，避免继续形成与 Core 同步发版的事实耦合。`foofoil/hifi` 已从原 `hifi-ext`
-功能分支抽出。
+宿主 Loader、Installer、Registry 客户端及 UI 继续由 `foofoil/foofoil` 持有，并通过本地 Swift
+package 依赖 `../extension-kit`。正式能力在首个公开 Release 前必须位于对应短名仓库，避免继续
+形成与 Core 同步发版的事实耦合。`foofoil/hifi` 已从原 `hifi-ext` 功能分支抽出。
 
 各扩展独立维护：
 
@@ -1002,8 +1001,7 @@ PresentationAdapter
 ### Phase 0：ExtensionKit
 
 当前状态：基础实现已在 `foofoil/foofoil` 落地；公开复用契约、ABI、Manifest Schema 和
-fixture 已提取到 `foofoil/extension-kit`。宿主仍在本仓库编译对应契约源码，与 API v1 同步
-收敛。
+fixture 已提取到 `foofoil/extension-kit`。宿主通过本地 package 依赖该仓库，不再内嵌契约源码。
 
 已完成：
 

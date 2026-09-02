@@ -10,6 +10,8 @@
 		F20F00013139000100F20F00 /* foofoilTestExtensionService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = F20F00033139000100F20F00 /* foofoilTestExtensionService.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		F10F011A3123000100F10F01 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = F10F011C3123000100F10F01 /* LICENSE */; };
 		F10F011B3123000100F10F01 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = F10F011D3123000100F10F01 /* THIRD_PARTY_NOTICES.md */; };
+		F30F01043139000100F30F01 /* FoofoilExtensionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F30F01023139000100F30F01 /* FoofoilExtensionKit */; };
+		F30F01053139000100F30F01 /* FoofoilExtensionKit in Frameworks */ = {isa = PBXBuildFile; productRef = F30F01033139000100F30F01 /* FoofoilExtensionKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -94,6 +96,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F30F01043139000100F30F01 /* FoofoilExtensionKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +104,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F30F01053139000100F30F01 /* FoofoilExtensionKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -160,6 +164,7 @@
 			);
 			name = foofoil;
 			packageProductDependencies = (
+				F30F01023139000100F30F01 /* FoofoilExtensionKit */,
 			);
 			productName = foofoil;
 			productReference = AB7D0D0B2FFB8BC800ED4438 /* foofoil.app */;
@@ -183,6 +188,7 @@
 			);
 			name = foofoilTests;
 			packageProductDependencies = (
+				F30F01033139000100F30F01 /* FoofoilExtensionKit */,
 			);
 			productName = foofoilTests;
 			productReference = AB7D0D182FFB8BCA00ED4438 /* foofoilTests.xctest */;
@@ -269,6 +275,9 @@
 			);
 			mainGroup = AB7D0D022FFB8BC800ED4438;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F30F01013139000100F30F01 /* XCLocalSwiftPackageReference "../extension-kit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AB7D0D0C2FFB8BC800ED4438 /* Products */;
 			projectDirPath = "";
@@ -736,6 +745,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		F30F01013139000100F30F01 /* XCLocalSwiftPackageReference "../extension-kit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../extension-kit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F30F01023139000100F30F01 /* FoofoilExtensionKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F30F01013139000100F30F01 /* XCLocalSwiftPackageReference "../extension-kit" */;
+			productName = FoofoilExtensionKit;
+		};
+		F30F01033139000100F30F01 /* FoofoilExtensionKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F30F01013139000100F30F01 /* XCLocalSwiftPackageReference "../extension-kit" */;
+			productName = FoofoilExtensionKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AB7D0D032FFB8BC800ED4438 /* Project object */;
 }

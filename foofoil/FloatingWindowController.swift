@@ -10,6 +10,7 @@ import SwiftUI
 import Combine
 import AVFoundation
 import QuartzCore
+import FoofoilExtensionKit
 
 /// 根内容视图作为 AppKit 拖放目标，鼠标位于任意箔片内容上时都能取得 Finder 的完整文件批次。
 final class FileDropHostingView<Content: View>: NSHostingView<Content> {

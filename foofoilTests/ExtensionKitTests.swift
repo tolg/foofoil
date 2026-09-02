@@ -8,6 +8,7 @@ import CoreGraphics
 import Foundation
 import Testing
 @testable import foofoil
+import FoofoilExtensionKit
 
 @MainActor
 @Suite(.serialized)
@@ -20,7 +21,7 @@ struct ExtensionKitTests {
     }
 
     @Test func validatesManifestFixtureAndNegotiatesHighestCommonAPI() throws {
-        let url = try #require(Bundle.main.url(forResource: "TestExtensionManifest", withExtension: "json"))
+        let url = try #require(ExtensionKitResources.fixture(named: "TestExtensionManifest"))
         let manifest = try ExtensionManifestValidator.decodeAndValidate(Data(contentsOf: url))
 
         #expect(manifest.id == LocalTestExtension.identifier)
@@ -28,7 +29,7 @@ struct ExtensionKitTests {
         #expect(manifest.capabilities.map(\.id).contains(ExtensionCapabilityIdentifier.navigator))
         #expect(ExtensionAPI.negotiate(with: manifest.extensionAPI) == 1)
 
-        let incompatibleURL = try #require(Bundle.main.url(forResource: "IncompatibleExtensionManifest", withExtension: "json"))
+        let incompatibleURL = try #require(ExtensionKitResources.fixture(named: "IncompatibleExtensionManifest"))
         #expect(throws: ExtensionManifestError.incompatibleAPI) {
             try ExtensionManifestValidator.decodeAndValidate(Data(contentsOf: incompatibleURL))
         }

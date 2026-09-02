@@ -4,6 +4,7 @@
 //  Created by tolg on 2026/8/26.
 
 import Foundation
+import FoofoilExtensionKit
 
 struct ExtensionInstallRecord: Codable, Equatable, Sendable {
     let extensionID: String

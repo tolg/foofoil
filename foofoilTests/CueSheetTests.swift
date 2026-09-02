@@ -10,6 +10,7 @@ import Foundation
 import AppKit
 import AVFoundation
 @testable import foofoil
+import FoofoilExtensionKit
 
 @MainActor
 @Suite(.serialized)

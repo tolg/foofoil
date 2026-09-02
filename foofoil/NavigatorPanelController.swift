@@ -5,6 +5,7 @@
 
 import AppKit
 import SwiftUI
+import FoofoilExtensionKit
 
 final class NavigatorPanel: NSPanel {
     var onDeleteSelected: (() -> Void)?

@@ -6,6 +6,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import FoofoilExtensionKit
 
 struct NavigatorPanelView: View {
     @ObservedObject var appState: AppState

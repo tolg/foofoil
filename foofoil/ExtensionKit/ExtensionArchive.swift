@@ -5,6 +5,7 @@
 
 import Compression
 import Foundation
+import FoofoilExtensionKit
 
 struct ExtensionArchiveLimits: Equatable, Sendable {
     var maxFileCount: Int

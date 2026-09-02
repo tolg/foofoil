@@ -8,6 +8,7 @@
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
+import FoofoilExtensionKit
 
 extension AppState {
     static let fileListNavigatorID = "builtin.file-list"

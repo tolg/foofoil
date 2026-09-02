@@ -6,6 +6,7 @@
 import Combine
 import CryptoKit
 import Foundation
+import FoofoilExtensionKit
 
 protocol ExtensionRuntimeHost: AnyObject {
     func activateRuntime(for loaded: LoadedExtension)

@@ -5,6 +5,7 @@
 
 import Foundation
 import UniformTypeIdentifiers
+import FoofoilExtensionKit
 
 enum ProviderMatchStrength: Int, Codable, Comparable, Sendable {
     case conforms = 100

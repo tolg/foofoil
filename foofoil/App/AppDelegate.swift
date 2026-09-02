@@ -8,6 +8,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Combine
 import WebKit
+import FoofoilExtensionKit
 
 
 public class AppDelegate: NSObject, NSApplicationDelegate {

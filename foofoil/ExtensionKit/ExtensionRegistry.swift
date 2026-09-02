@@ -5,6 +5,7 @@
 
 import CryptoKit
 import Foundation
+import FoofoilExtensionKit
 
 enum ExtensionReleaseStatus: String, Codable, Sendable {
     case active

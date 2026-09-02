@@ -12,6 +12,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 import ImageIO
 import SwiftUI
+import FoofoilExtensionKit
 
 
 extension AppState {

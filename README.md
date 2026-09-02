@@ -84,6 +84,8 @@ Additional content-specific and window-position shortcuts are available from the
 
 ## Build from Source
 
+Check out `extension-kit` as a sibling of this repository. The Xcode project links it as a local package at `../extension-kit`.
+
 1. Open `foofoil.xcodeproj` in Xcode.
 2. Select the `foofoil` scheme and the **My Mac** destination.
 3. Configure a development signing team if Xcode requests one.

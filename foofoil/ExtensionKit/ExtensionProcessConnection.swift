@@ -4,6 +4,7 @@
 //  Created by tolg on 2026/8/25.
 
 import Foundation
+import FoofoilExtensionKit
 
 @objc(FoofoilExtensionServiceProtocol)
 protocol FoofoilExtensionServiceProtocol {
