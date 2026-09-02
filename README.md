@@ -9,7 +9,7 @@ foofoil is a lightweight reference app for macOS that keeps images, videos, audi
 
 The name **foofoil** combines *foo* — the familiar placeholder for anything or arbitrary content — with *foil*, a thin sheet that carries whatever you put on it. It reflects a simple idea: whatever the content is, keep it lightweight and right where you need it.
 
-Built with SwiftUI and AppKit, foofoil favors native macOS capabilities, fast interaction, and a small dependency footprint.
+Built with SwiftUI and AppKit, foofoil favors native macOS capabilities, fast interaction, and a small dependency footprint. Formats that need extra codecs, renderers, or runtimes ship as optional first-party extensions and are installed from inside the app.
 
 ## Features
 
@@ -24,6 +24,25 @@ Built with SwiftUI and AppKit, foofoil favors native macOS capabilities, fast in
 - Restore window state and keep a local content history.
 - Search history by title and content, including on-device OCR for images and extracted text from PDFs and web pages.
 - Use English or Simplified Chinese throughout the interface.
+- Install optional first-party extensions from Settings when you need capabilities beyond macOS-native formats.
+
+## Extensions
+
+foofoil Core stays small: windows, history, and content types that macOS already handles well (images, PDF, web, ordinary audio and video, text). Additional capability domains are independent repositories with their own versioning and releases:
+
+| Repository | Role |
+| --- | --- |
+| [extension-kit](https://github.com/foofoil/extension-kit) | Extension API contracts, ABI header, Manifest schema, and fixtures |
+| [hifi](https://github.com/foofoil/hifi) | Hi-Fi audio extension. Requires foofoil. |
+
+Host loading, the Extension Manager, Registry client, and UI remain in this repository. Check out sibling directories when developing locally:
+
+```text
+foofoil/
+  foofoil/
+  extension-kit/
+  hifi/
+```
 
 ## Quick Start
 

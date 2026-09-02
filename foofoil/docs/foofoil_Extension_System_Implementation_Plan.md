@@ -32,9 +32,11 @@ Test Extension 样机，以及 Extension Manager 的 Registry 解析、兼容版
 
 现阶段 Extension Manager 默认使用本地种子 Registry 和 Test Extension 完成开发闭环；生产
 Registry URL、正式 Registry 签名密钥、固定 Team ID、强制代码签名和 notarization 校验仍属于发布
-接线工作，不能把本地样机状态视为正式分发已经上线。`hifi-ext` 功能分支已验证 Hi-Fi 的首条
-真实硬件播放链路，但尚未进入当前主线或正式发布仓库。Hi-Fi、EPUB、Video+ 与 Retro 仍按独立
-能力仓库和独立 Release 推进，不把它们重新并入 Core 的长期发布物。
+接线工作，不能把本地样机状态视为正式分发已经上线。公开契约已提取到 `foofoil/extension-kit`；
+Hi-Fi 源码已提取到 `foofoil/hifi`。宿主仍在本仓库编译与 API v1 同步的契约源码，并继续持有
+Loader、Installer、Registry 客户端和 UI。`hifi-ext` 功能分支已完成首条真实硬件播放验证，计划删除，
+不再作为长期开发入口。Hi-Fi、EPUB、Video+ 与 Retro 仍按独立能力仓库和独立 Release 推进，不把
+它们重新并入 Core 的长期发布物。
 
 典型体验一：增加新内容类型。
 
@@ -228,11 +230,11 @@ README 随后给出 foofoil 的安装入口、扩展内安装方式和兼容版�
 `app.foofoil.extension.hifi`、`HiFiExtensionRuntime` 等明确的技术命名；本节只约束公开仓库 slug
 和由此形成的发现路径。
 
-当前 ExtensionKit 和 Extension Manager 源码位于 `foofoil/foofoil`，便于 API v1 与宿主同步
-收敛。这是当前实现布局，不是最终发布仓库边界。`extension-kit` 应承载可复用契约、Manifest
-Schema、ABI 头文件和扩展构建支持；宿主 Loader、Installer、Registry 客户端及 UI 继续由
-`foofoil/foofoil` 持有。正式能力可以在功能分支中孵化，但首个公开 Release 前必须迁入对应短名
-仓库，避免继续形成与 Core 同步发版的事实耦合。
+公开复用契约、Manifest Schema、ABI 头文件和扩展构建支持位于 `foofoil/extension-kit`。
+宿主 Loader、Installer、Registry 客户端及 UI 继续由 `foofoil/foofoil` 持有；API v1 收敛期间，
+宿主仍编译与 kit 对应的契约源码，避免单仓库检出无法构建。正式能力在首个公开 Release 前必须
+位于对应短名仓库，避免继续形成与 Core 同步发版的事实耦合。`foofoil/hifi` 已从原 `hifi-ext`
+功能分支抽出。
 
 各扩展独立维护：
 
@@ -999,8 +1001,9 @@ PresentationAdapter
 
 ### Phase 0：ExtensionKit
 
-当前状态：基础实现已在 `foofoil/foofoil` 落地；公开复用部分仍需按第 5 节边界提取到
-`foofoil/extension-kit`。
+当前状态：基础实现已在 `foofoil/foofoil` 落地；公开复用契约、ABI、Manifest Schema 和
+fixture 已提取到 `foofoil/extension-kit`。宿主仍在本仓库编译对应契约源码，与 API v1 同步
+收敛。
 
 已完成：
 
@@ -1073,11 +1076,11 @@ Test Extension；生产分发接线与真实发布验收尚未完成。
 目标仓库：`foofoil/hifi`。这是首个正式能力仓库，也是验证“短名能力入口 → 认识 foofoil →
 在 App 内安装扩展”完整发现与安装路径的首要样本。
 
-当前状态：`hifi-ext` 功能分支已经打通 DSF raw DSD → DoP → CoreAudio HAL → USB DAC 的最小
-闭环，并在真实 Stereo DSD64 设备上完成播放验收；宿主侧已具备播放、暂停、进度轮询、输出设备
-选择和关闭时释放设备的样机能力。这一结果证明 Extension API 能承载真实 Hi-Fi Pipeline，但
-仍是功能分支中的 in-process 开发样机，不代表 `foofoil/hifi` 已建立或 Hi-Fi 已可通过正式
-Registry 安装。
+当前状态：`foofoil/hifi` 已建立，源码从原 `hifi-ext` 功能分支抽出。该分支已经打通 DSF raw
+DSD → DoP → CoreAudio HAL → USB DAC 的最小闭环，并在真实 Stereo DSD64 设备上完成播放验收；
+宿主侧已具备播放、暂停、进度轮询、输出设备选择和关闭时释放设备的样机能力。这一结果证明
+Extension API 能承载真实 Hi-Fi Pipeline，但仍是 in-process 开发样机，不代表 Hi-Fi 已可通过
+正式 Registry 安装。`hifi-ext` 不再作为长期开发入口，计划删除。
 
 尚未完成的关键发布范围包括 DSD → PCM fallback、raw DFF / DST / SACD ISO、完整 seek、播放
 队列与 Navigator 闭环、metadata 与封面、Session 恢复、更多 DSD 速率和设备回归、进程隔离评估，

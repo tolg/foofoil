@@ -11,7 +11,7 @@
 
 “箔”的意象也来自刘慈欣《三体》中的“二向箔”——将复杂的世界压成轻薄的一层。于是有了浮箔的 slogan：**给你的桌面降维。**
 
-浮箔使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。
+浮箔使用 SwiftUI 与 AppKit 构建，优先利用 macOS 原生能力，追求快速、自然的交互和尽可能少的依赖。需要额外编解码器、渲染器或运行库的格式，以第一方扩展按需安装。
 
 ## 功能特性
 
@@ -26,6 +26,25 @@
 - 恢复窗口状态，并在本地保存内容历史。
 - 按标题和内容搜索历史记录，包括使用设备端 OCR 识别图片，以及提取 PDF 和网页文本。
 - 完整支持英文与简体中文界面。
+- 需要超出 macOS 原生格式的能力时，可在设置中安装官方扩展。
+
+## 扩展
+
+浮箔 Core 保持轻量：窗口、历史，以及 macOS 已能很好处理的内容类型（图片、PDF、网页、普通音视频、文本）。其他能力域是独立仓库，拥有各自的版本与 Release：
+
+| 仓库 | 职责 |
+| --- | --- |
+| [extension-kit](https://github.com/foofoil/extension-kit) | 扩展 API 契约、ABI 头文件、Manifest Schema 与 fixture |
+| [hifi](https://github.com/foofoil/hifi) | Hi-Fi 音频扩展，需要先安装浮箔 |
+
+宿主加载、Extension Manager、Registry 客户端和界面仍在本仓库。本地开发时按兄弟目录检出：
+
+```text
+foofoil/
+  foofoil/
+  extension-kit/
+  hifi/
+```
 
 ## 快速开始
 
