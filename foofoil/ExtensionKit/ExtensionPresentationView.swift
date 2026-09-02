@@ -35,7 +35,7 @@ struct ExtensionPresentationView: View {
                                 .accessibilityLabel(outputStatus)
                         }
                         if let playback = session.mediaPlayback {
-                            playbackControls(playback)
+                            playbackControls(playback, hasQueue: (session.playbackQueue?.items.count ?? 0) > 1)
                             if playback.state == .failed {
                                 Label(
                                     NSLocalizedString("Hi-Fi Playback Failed", comment: ""),
@@ -67,9 +67,16 @@ struct ExtensionPresentationView: View {
     }
 
     @ViewBuilder
-    private func playbackControls(_ playback: MediaPlaybackSnapshot) -> some View {
+    private func playbackControls(_ playback: MediaPlaybackSnapshot, hasQueue: Bool) -> some View {
         let isPlaying = playback.state == .playing
         HStack(spacing: 12) {
+            if hasQueue {
+                Button { appState.performExtensionCommand("hifi.previous") } label: {
+                    Image(systemName: "backward.fill")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("Previous", comment: ""))
+            }
             Button {
                 appState.performExtensionCommand(isPlaying ? "hifi.pause" : "hifi.play")
             } label: {
@@ -78,6 +85,14 @@ struct ExtensionPresentationView: View {
             }
             .buttonStyle(.borderedProminent)
             .accessibilityLabel(NSLocalizedString(isPlaying ? "Pause" : "Play", comment: ""))
+
+            if hasQueue {
+                Button { appState.performExtensionCommand("hifi.next") } label: {
+                    Image(systemName: "forward.fill")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("Next", comment: ""))
+            }
 
             if playback.isSeekable, let duration = playback.duration {
                 ExtensionPlaybackSlider(

@@ -48,4 +48,18 @@ final class InProcessContentProvider: ContentProvider {
             try runtime.perform(commandID: commandID, session: session)
         }.value
     }
+
+    func perform(navigatorAction: NavigatorAction, session: ContentSession) async throws -> ContentSession {
+        guard navigatorAction.kind == .activate,
+              let selectedID = navigatorAction.itemIDs.first,
+              let index = session.navigatorContributions.firstIndex(where: { $0.id == navigatorAction.contributionID }) else {
+            return session
+        }
+        var requested = session
+        requested.navigatorContributions[index].selectedItemIDs = [selectedID]
+        let runtime = runtime
+        return try await Task.detached(priority: .userInitiated) {
+            try runtime.perform(commandID: "hifi.navigator.activate", session: requested)
+        }.value
+    }
 }

@@ -65,6 +65,15 @@ final class ExtensionHost: ExtensionRuntimeHost {
         )
     }
 
+    func open(urls: [URL]) async throws -> SessionResolutionOutcome {
+        let request = ContentRequest.fileCollection(urls.map(ExtensionResource.sandboxed(url:)))
+        let domain = resolver.candidates(for: request).compactMap(\.descriptor.enhancementDomain).first
+        return try await resolver.makeSession(
+            for: request,
+            preferredProviderID: domain.flatMap { preferredProvidersByDomain[$0] }
+        )
+    }
+
     func perform(commandID: String, in session: ContentSession) async throws -> ContentSession {
         guard let provider = resolver.provider(id: session.providerID) else {
             throw ContentProviderError.unavailable(session.providerID)

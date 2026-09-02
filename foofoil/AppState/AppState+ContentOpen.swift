@@ -476,6 +476,11 @@ extension AppState {
         }
 
         func openUsingExtension(url: URL) {
+            openUsingExtension(urls: [url])
+        }
+
+        func openUsingExtension(urls: [URL]) {
+            guard let url = urls.first else { return }
             let targetID = (imageURL != nil || webURL != nil || textURL != nil || extensionSession != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 ? UUID()
                 : id
@@ -484,7 +489,9 @@ extension AppState {
                 guard let self else { return }
                 defer { self.isLoading = false }
                 do {
-                    let outcome = try await ExtensionHost.shared.open(url: url)
+                    let outcome = try await (urls.count == 1
+                        ? ExtensionHost.shared.open(url: url)
+                        : ExtensionHost.shared.open(urls: urls))
                     self.isBatchUpdating = true
                     self.id = targetID
                     self.stopVideoAccess()

@@ -93,6 +93,10 @@ extension AppState {
     }
 
     func openFileGroup(_ group: FileListGroup, preservesIdentity: Bool, title: String? = nil) {
+        if group.urls.count >= 2, group.urls.allSatisfy(ExtensionHost.shared.canOpen(url:)) {
+            openUsingExtension(urls: group.urls)
+            return
+        }
         switch group.kind {
         case .cueSheets:
             installCueSheets(urls: group.urls, preservesIdentity: preservesIdentity)
