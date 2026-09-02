@@ -37,7 +37,7 @@
 | [extension-kit](https://github.com/foofoil/extension-kit) | 扩展 API 契约、ABI 头文件、Manifest Schema 与 fixture |
 | [hifi](https://github.com/foofoil/hifi) | Hi-Fi 音频扩展，需要先安装浮箔 |
 
-宿主加载、Extension Manager、Registry 客户端和界面仍在本仓库。本地开发时按兄弟目录检出。若存在 `../hifi/build-plugin`，`./run` 会把 Hi-Fi 开发插件注入 Debug 应用；Xcode 的 ⌘R 不会。
+宿主加载、Extension Manager、Registry 客户端和界面仍在本仓库。本地开发时按兄弟目录检出，并用 Xcode 打开 `foofoil.xcworkspace`。若存在 `../hifi/build-plugin`，`./run` 会把 Hi-Fi 开发插件注入 Debug 应用；Xcode 的 ⌘R 不会。
 
 ```text
 foofoil/
@@ -86,9 +86,9 @@ foofoil/
 
 ## 从源码构建
 
-请将 `extension-kit` 作为本仓库的兄弟目录检出。Xcode 工程以本地包的形式链接 `../extension-kit`。
+请将 `extension-kit` 和 `hifi` 作为本仓库的兄弟目录检出。用 Xcode 打开 `foofoil.xcworkspace`，可同时编辑宿主、kit 和 Hi-Fi。App target 仍以本地包链接 `../extension-kit`。
 
-1. 使用 Xcode 打开 `foofoil.xcodeproj`。
+1. 使用 Xcode 打开 `foofoil.xcworkspace`。
 2. 选择 `foofoil` Scheme 和 **My Mac** 运行目标。
 3. 如果 Xcode 提示签名问题，请配置开发者签名团队。
 4. 构建并运行项目。

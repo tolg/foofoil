@@ -10,6 +10,7 @@ DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+*.xcworkspace/xcshareddata/swiftpm/Package.resolved
 .swiftpm/xcode/xcuserdata/
 .swiftpm/xcode/xcshareddata/swiftpm/Package.resolved
 

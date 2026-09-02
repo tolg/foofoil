@@ -8,6 +8,8 @@ The app is written in Swift and uses SwiftUI for most interface code, with AppKi
 
 Reusable Extension API contracts live in the sibling `extension-kit` repository; this app links it as a local Swift package at `../extension-kit`. Capability extensions such as Hi-Fi live in their own sibling repositories and are not part of the Core app target. Host loading, the Extension Manager, Registry client, and UI stay in this repository.
 
+When editing the app together with `extension-kit` or `hifi`, open `foofoil.xcworkspace` rather than `foofoil.xcodeproj`. Command-line builds can keep using `foofoil.xcodeproj`.
+
 ## Core Product Principles
 
 1. **Keep foofoil lightweight.** Favor small, focused implementations with low runtime, memory, launch-time, and binary-size costs. Do not add infrastructure that is disproportionate to the feature.

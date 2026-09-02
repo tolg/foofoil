@@ -35,7 +35,7 @@ foofoil Core stays small: windows, history, and content types that macOS already
 | [extension-kit](https://github.com/foofoil/extension-kit) | Extension API contracts, ABI header, Manifest schema, and fixtures |
 | [hifi](https://github.com/foofoil/hifi) | Hi-Fi audio extension. Requires foofoil. |
 
-Host loading, the Extension Manager, Registry client, and UI remain in this repository. Check out sibling directories when developing locally. `./run` injects the sibling `hifi` Debug plugin when `../hifi/build-plugin` exists; Xcode ⌘R does not.
+Host loading, the Extension Manager, Registry client, and UI remain in this repository. Check out sibling directories when developing locally and open `foofoil.xcworkspace`. `./run` injects the sibling `hifi` Debug plugin when `../hifi/build-plugin` exists; Xcode ⌘R does not.
 
 ```text
 foofoil/
@@ -84,9 +84,9 @@ Additional content-specific and window-position shortcuts are available from the
 
 ## Build from Source
 
-Check out `extension-kit` as a sibling of this repository. The Xcode project links it as a local package at `../extension-kit`.
+Check out `extension-kit` and `hifi` as siblings of this repository. Open `foofoil.xcworkspace` to edit the app, kit, and Hi-Fi together. The app target still links `../extension-kit` as a local package.
 
-1. Open `foofoil.xcodeproj` in Xcode.
+1. Open `foofoil.xcworkspace` in Xcode.
 2. Select the `foofoil` scheme and the **My Mac** destination.
 3. Configure a development signing team if Xcode requests one.
 4. Build and run the project.
