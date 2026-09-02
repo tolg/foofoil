@@ -248,7 +248,107 @@ struct ExtensionKitTests {
 
         let decoded = try JSONDecoder().decode(ContentSession.self, from: legacyData)
         #expect(decoded.navigatorContributions.isEmpty)
+        #expect(decoded.mediaPlayback == nil)
+        #expect(decoded.playbackQueue == nil)
+        #expect(decoded.audioDeviceSelection == nil)
         #expect(decoded.providerID == session.providerID)
+    }
+
+    @Test func mediaAndDeviceContractsRoundTripAndValidateCapabilities() throws {
+        let capabilities = [
+            NegotiatedCapability(
+                declaration: .init(id: ExtensionCapabilityIdentifier.seekable, scope: .session),
+                state: .active
+            ),
+            NegotiatedCapability(
+                declaration: .init(id: ExtensionCapabilityIdentifier.mediaPlaybackQueue, scope: .session),
+                state: .active
+            ),
+            NegotiatedCapability(
+                declaration: .init(id: ExtensionCapabilityIdentifier.deviceSelector, scope: .application),
+                state: .active
+            )
+        ]
+        let session = ContentSession(
+            extensionID: "app.foofoil.extension.hifi",
+            providerID: "audio.hifi",
+            request: .singleFile(.init(url: URL(fileURLWithPath: "/tmp/album.dsf"))),
+            presentation: .text(titleKey: "Hi-Fi", body: "album.dsf"),
+            capabilities: capabilities,
+            mediaPlayback: .init(state: .paused, position: 12, duration: 120, isSeekable: true),
+            playbackQueue: .init(
+                items: [.init(id: "track-1", title: "Track 1", duration: 120)],
+                currentItemID: "track-1"
+            ),
+            audioDeviceSelection: .init(
+                devices: [
+                    .init(
+                        id: "device-uid",
+                        displayName: "USB DAC",
+                        supportedDoPRates: [2_822_400, 5_644_800]
+                    )
+                ],
+                selectedDeviceID: "device-uid",
+                activeTransport: .dop,
+                statusDescription: "DSD64 · DoP · USB DAC"
+            )
+        )
+
+        try MediaSessionContractValidator.validate(session)
+        let decoded = try JSONDecoder().decode(ContentSession.self, from: JSONEncoder().encode(session))
+        #expect(decoded.playbackQueue?.currentItemID == "track-1")
+        #expect(decoded.audioDeviceSelection?.selectedDeviceID == "device-uid")
+        #expect(decoded.audioDeviceSelection?.activeTransport == .dop)
+
+        var missingCapability = session
+        missingCapability.capabilities = []
+        #expect(throws: MediaSessionContractError.missingCapability(ExtensionCapabilityIdentifier.seekable)) {
+            try MediaSessionContractValidator.validate(missingCapability)
+        }
+    }
+
+    @Test func hierarchicalCommandsAcceptDynamicDeviceNamesAndRejectCycles() throws {
+        let session = ContentSession(
+            extensionID: "app.foofoil.extension.hifi",
+            providerID: "audio.hifi",
+            request: .singleFile(.init(url: URL(fileURLWithPath: "/tmp/album.dsf"))),
+            presentation: .text(titleKey: "Hi-Fi", body: "album.dsf"),
+            capabilities: [
+                NegotiatedCapability(
+                    declaration: .init(id: ExtensionCapabilityIdentifier.commandProvider, scope: .presentation),
+                    state: .active
+                )
+            ],
+            commands: [
+                .init(id: "output", titleLocalizationKey: "Output Device"),
+                .init(
+                    id: "output.usb-dac",
+                    titleLocalizationKey: "",
+                    displayTitle: "USB DAC",
+                    parentID: "output",
+                    isChecked: true
+                )
+            ]
+        )
+        try CommandContributionValidator.validate(session)
+
+        var cycle = session
+        cycle.commands[0].parentID = "output.usb-dac"
+        #expect(throws: CommandContributionError.hierarchyCycle("output")) {
+            try CommandContributionValidator.validate(cycle)
+        }
+
+        var legacyObject = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as? [String: Any]
+        )
+        var legacyCommands = try #require(legacyObject["commands"] as? [[String: Any]])
+        legacyCommands[0].removeValue(forKey: "displayTitle")
+        legacyCommands[0].removeValue(forKey: "parentID")
+        legacyObject["commands"] = legacyCommands
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+        let decoded = try JSONDecoder().decode(ContentSession.self, from: legacyData)
+        #expect(decoded.commands[0].displayTitle == nil)
+        #expect(decoded.commands[0].parentID == nil)
     }
 
     @Test func navigatorWidthDragFollowsOuterEdge() {

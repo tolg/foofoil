@@ -3151,6 +3151,27 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "切换音频增强"}}
       }
     },
+    "Hi-Fi Playback Failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Hi-Fi playback failed"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "Hi-Fi 播放失败"}}
+      }
+    },
+    "Hi-Fi Audio": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Hi-Fi Audio"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "Hi-Fi 音频"}}
+      }
+    },
+    "Hi-Fi Output Device": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Output Device"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "输出设备"}}
+      }
+    },
     "Zoom Out Window": {
       "extractionState": "manual",
       "localizations": {

@@ -37,7 +37,7 @@
 | [extension-kit](https://github.com/foofoil/extension-kit) | 扩展 API 契约、ABI 头文件、Manifest Schema 与 fixture |
 | [hifi](https://github.com/foofoil/hifi) | Hi-Fi 音频扩展，需要先安装浮箔 |
 
-宿主加载、Extension Manager、Registry 客户端和界面仍在本仓库。本地开发时按兄弟目录检出：
+宿主加载、Extension Manager、Registry 客户端和界面仍在本仓库。本地开发时按兄弟目录检出。若存在 `../hifi/build-plugin`，`./run` 会把 Hi-Fi 开发插件注入 Debug 应用；Xcode 的 ⌘R 不会。
 
 ```text
 foofoil/

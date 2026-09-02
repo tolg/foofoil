@@ -49,9 +49,12 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     /// 扩展会话仅通过可序列化描述驱动宿主展示，不让扩展 View 穿过 ABI/XPC 边界。
     @Published var extensionSession: ContentSession? {
         didSet {
+            let oldSessionID = oldValue?.id
+            let newSessionID = extensionSession?.id
+            guard oldSessionID != newSessionID else { return }
             let oldID = oldValue?.extensionID
             let newID = extensionSession?.extensionID
-            guard oldID != newID else { return }
+            if let oldValue { ExtensionHost.shared.closeSession(oldValue) }
             if let oldID { ExtensionHost.shared.releaseSession(extensionID: oldID) }
             if let newID { ExtensionHost.shared.retainSession(extensionID: newID) }
         }
@@ -463,8 +466,11 @@ public class AppState: NSObject, ObservableObject, Identifiable {
         saveTask?.cancel()
         imageListSlideshowWorkItem?.cancel()
         stopVideoAccess()
-        if let extensionID = extensionSession?.extensionID {
-            ExtensionHost.shared.releaseSession(extensionID: extensionID)
+        if let session = extensionSession {
+            ExtensionHost.shared.closeSession(session)
+            if let extensionID = session.extensionID {
+                ExtensionHost.shared.releaseSession(extensionID: extensionID)
+            }
         }
     }
 }

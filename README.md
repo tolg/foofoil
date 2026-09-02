@@ -35,7 +35,7 @@ foofoil Core stays small: windows, history, and content types that macOS already
 | [extension-kit](https://github.com/foofoil/extension-kit) | Extension API contracts, ABI header, Manifest schema, and fixtures |
 | [hifi](https://github.com/foofoil/hifi) | Hi-Fi audio extension. Requires foofoil. |
 
-Host loading, the Extension Manager, Registry client, and UI remain in this repository. Check out sibling directories when developing locally:
+Host loading, the Extension Manager, Registry client, and UI remain in this repository. Check out sibling directories when developing locally. `./run` injects the sibling `hifi` Debug plugin when `../hifi/build-plugin` exists; Xcode ⌘R does not.
 
 ```text
 foofoil/

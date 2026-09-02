@@ -550,7 +550,10 @@ extension AppState {
                 do {
                     let updated = try await ExtensionHost.shared.perform(commandID: commandID, in: session)
                     self.extensionSession = updated
-                    if let extensionID = updated.extensionID,
+                    // 播放进度轮询是瞬时状态，不应每秒写扩展状态和窗口历史。
+                    let persistsState = commandID != "hifi.status"
+                    if persistsState,
+                       let extensionID = updated.extensionID,
                        let reference = self.extensionStateReference {
                         let payload = try JSONEncoder().encode(updated)
                         try ExtensionHost.shared.stateStore.save(
@@ -560,7 +563,7 @@ extension AppState {
                             reference: reference
                         )
                     }
-                    self.saveState()
+                    if persistsState { self.saveState() }
                 } catch {
                     NSLog("Extension command failed: \(error.localizedDescription)")
                 }
