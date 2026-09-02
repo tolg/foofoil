@@ -570,6 +570,16 @@ extension AppState {
             }
         }
 
+        func seekExtensionPlayback(to position: TimeInterval) {
+            guard var session = extensionSession,
+                  var playback = session.mediaPlayback,
+                  playback.isSeekable else { return }
+            playback.position = position
+            session.mediaPlayback = playback
+            extensionSession = session
+            performExtensionCommand("hifi.seek")
+        }
+
         func performNavigatorAction(_ action: NavigatorAction) {
             if let session = extensionSession {
                 Task { @MainActor [weak self] in

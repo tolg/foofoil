@@ -79,8 +79,16 @@ struct ExtensionPresentationView: View {
             .buttonStyle(.borderedProminent)
             .accessibilityLabel(NSLocalizedString(isPlaying ? "Pause" : "Play", comment: ""))
 
-            ProgressView(value: playback.position, total: max(playback.duration ?? 1, 1))
-                .accessibilityLabel(NSLocalizedString("Playback Progress", comment: ""))
+            if playback.isSeekable, let duration = playback.duration {
+                ExtensionPlaybackSlider(
+                    position: playback.position,
+                    duration: duration,
+                    onSeek: appState.seekExtensionPlayback(to:)
+                )
+            } else {
+                ProgressView(value: playback.position, total: max(playback.duration ?? 1, 1))
+                    .accessibilityLabel(NSLocalizedString("Playback Progress", comment: ""))
+            }
 
             Text(playbackTime(playback.position))
                 .monospacedDigit()
@@ -95,5 +103,30 @@ struct ExtensionPresentationView: View {
     private func playbackTime(_ seconds: TimeInterval) -> String {
         let value = max(0, Int(seconds.rounded(.down)))
         return String(format: "%d:%02d", value / 60, value % 60)
+    }
+}
+
+private struct ExtensionPlaybackSlider: View {
+    let position: TimeInterval
+    let duration: TimeInterval
+    let onSeek: (TimeInterval) -> Void
+
+    @State private var pendingPosition: TimeInterval = 0
+    @State private var isEditing = false
+
+    var body: some View {
+        Slider(
+            value: $pendingPosition,
+            in: 0...max(duration, 0.001),
+            onEditingChanged: { editing in
+                isEditing = editing
+                if !editing { onSeek(pendingPosition) }
+            }
+        )
+        .accessibilityLabel(NSLocalizedString("Playback Progress", comment: ""))
+        .onAppear { pendingPosition = min(position, duration) }
+        .onChange(of: position) { _, newValue in
+            if !isEditing { pendingPosition = min(newValue, duration) }
+        }
     }
 }
