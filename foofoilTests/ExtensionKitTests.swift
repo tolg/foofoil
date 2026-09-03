@@ -90,6 +90,25 @@ struct ExtensionKitTests {
         #expect(handled)
     }
 
+    @Test func clearingExtensionSessionProvidesACompletedReleaseBarrier() async throws {
+        let provider = DelayedCloseTestProvider()
+        ExtensionHost.shared.resolver.register(provider)
+        defer { ExtensionHost.shared.resolver.unregister(providerID: provider.descriptor.id) }
+
+        let state = AppState()
+        state.extensionSession = ContentSession(
+            extensionID: provider.descriptor.extensionID,
+            providerID: provider.descriptor.id,
+            request: .singleFile(.init(url: URL(fileURLWithPath: "/tmp/release.dsf"))),
+            presentation: .text(titleKey: "Test", body: "DSD")
+        )
+
+        state.extensionSession = nil
+        #expect(provider.didClose == false)
+        await state.extensionSessionCloseTask?.value
+        #expect(provider.didClose)
+    }
+
     @Test func abiV1HeaderAndLoaderKeepVersionedBoundary() throws {
         #expect(FOOFOIL_EXTENSION_API_V1 == ExtensionAPI.v1)
         #expect(MemoryLayout<FoofoilExtensionInterfaceV1>.size > MemoryLayout<UInt32>.size)
@@ -898,5 +917,39 @@ private final class ExtensionAudioListTestProvider: ContentProvider {
             request: request,
             presentation: .text(titleKey: "Test", body: "DSD")
         )
+    }
+}
+
+private final class DelayedCloseTestProvider: ContentProvider {
+    let descriptor = ProviderDescriptor(
+        id: "test.delayed-close",
+        extensionID: "app.foofoil.extension.delayed-close-test",
+        role: .primary,
+        fallbackProviderID: nil,
+        enhancementDomain: "audio",
+        contentFamily: .audio,
+        filenameExtensions: ["dsf"],
+        isEnabled: true,
+        isRuntimeAvailable: true
+    )
+    var didClose = false
+
+    func match(_ request: ContentRequest) -> ProviderMatch? { nil }
+
+    func makeSession(for request: ContentRequest, negotiatedAPI: UInt32) async throws -> ContentSession {
+        ContentSession(
+            extensionID: descriptor.extensionID,
+            providerID: descriptor.id,
+            request: request,
+            presentation: .text(titleKey: "Test", body: "DSD")
+        )
+    }
+
+    func perform(commandID: String, session: ContentSession) async throws -> ContentSession {
+        if commandID == "hifi.close" {
+            try await Task.sleep(for: .milliseconds(20))
+            didClose = true
+        }
+        return session
     }
 }

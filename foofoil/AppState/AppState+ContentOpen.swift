@@ -280,9 +280,17 @@ extension AppState {
         /// - Parameter holdsSecurityAccess: 已对 `url` 取得安全范围访问；不可播放时由本方法释放，可播放时转交窗口持有。
         func openExternalMediaIfPlayable(url: URL, holdsSecurityAccess: Bool = false) {
             let asset = AVURLAsset(url: url)
+            let routeGeneration = currentMediaRouteGeneration
             Task { @MainActor [weak self] in
                 let isPlayable = (try? await asset.load(.isPlayable)) ?? false
                 guard isPlayable, let self else {
+                    if holdsSecurityAccess { url.stopAccessingSecurityScopedResource() }
+                    return
+                }
+                if let closeTask = self.extensionSessionCloseTask {
+                    await closeTask.value
+                }
+                guard self.currentMediaRouteGeneration == routeGeneration else {
                     if holdsSecurityAccess { url.stopAccessingSecurityScopedResource() }
                     return
                 }
@@ -488,10 +496,16 @@ extension AppState {
                 ? UUID()
                 : id
             isLoading = true
+            extensionSession = nil
+            extensionFallbackProviderID = nil
+            extensionStateReference = nil
+            let closeTask = extensionSessionCloseTask
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 defer { self.isLoading = false }
                 do {
+                    await closeTask?.value
+                    guard self.currentMediaRouteGeneration == routeGeneration else { return }
                     let outcome = try await (urls.count == 1
                         ? ExtensionHost.shared.open(url: url)
                         : ExtensionHost.shared.open(urls: urls))
@@ -548,10 +562,14 @@ extension AppState {
             originalImageName = url.lastPathComponent
             sourceFingerprint = nil
             isLoading = true
+            let closeTask = extensionSessionCloseTask
 
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 do {
+                    await closeTask?.value
+                    guard self.currentMediaRouteGeneration == routeGeneration,
+                          self.fileList?.currentID == itemID else { return }
                     let outcome = try await ExtensionHost.shared.open(url: url)
                     guard self.currentMediaRouteGeneration == routeGeneration,
                           self.fileList?.currentID == itemID else {

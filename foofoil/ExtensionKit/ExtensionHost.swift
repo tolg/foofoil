@@ -108,9 +108,14 @@ final class ExtensionHost: ExtensionRuntimeHost {
     /// 通知扩展释放会话持有的文件访问与独占音频设备；普通扩展可忽略此命令。
     func closeSession(_ session: ContentSession) {
         Task { @MainActor in
-            guard let provider = resolver.provider(id: session.providerID) else { return }
-            _ = try? await provider.perform(commandID: "hifi.close", session: session)
+            await closeSessionAndWait(session)
         }
+    }
+
+    /// 需要紧接着接管同一硬件资源时使用。返回前扩展已完成 stop、格式恢复与 hog mode 释放。
+    func closeSessionAndWait(_ session: ContentSession) async {
+        guard let provider = resolver.provider(id: session.providerID) else { return }
+        _ = try? await provider.perform(commandID: "hifi.close", session: session)
     }
 
     func perform(navigatorAction: NavigatorAction, in session: ContentSession) async throws -> ContentSession {

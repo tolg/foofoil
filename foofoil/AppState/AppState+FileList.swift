@@ -230,16 +230,34 @@ extension AppState {
             openFileListAudioUsingExtension(url: url, itemID: item.id)
         case .video, .audio:
             currentMediaRouteGeneration &+= 1
-            isLoading = false
+            let routeGeneration = currentMediaRouteGeneration
             extensionSession = nil
             extensionFallbackProviderID = nil
             extensionStateReference = nil
-            applyExternalMedia(
-                url: url,
-                holdsSecurityAccess: false,
-                rotatesIdentity: rotatesIdentity,
-                clearsFileList: false
-            )
+            if let closeTask = extensionSessionCloseTask {
+                isLoading = true
+                Task { @MainActor [weak self] in
+                    await closeTask.value
+                    guard let self,
+                          self.currentMediaRouteGeneration == routeGeneration,
+                          self.fileList?.currentID == item.id else { return }
+                    self.isLoading = false
+                    self.applyExternalMedia(
+                        url: url,
+                        holdsSecurityAccess: false,
+                        rotatesIdentity: rotatesIdentity,
+                        clearsFileList: false
+                    )
+                }
+            } else {
+                isLoading = false
+                applyExternalMedia(
+                    url: url,
+                    holdsSecurityAccess: false,
+                    rotatesIdentity: rotatesIdentity,
+                    clearsFileList: false
+                )
+            }
         }
         syncFileListNavigator()
         scheduleImageListSlideshowAdvance()

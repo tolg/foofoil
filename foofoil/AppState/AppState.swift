@@ -32,6 +32,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     var currentDropGeneration: UInt64 = 0
     /// 列表切项可能异步创建扩展会话；只允许最后一次路由结果接管播放器。
     var currentMediaRouteGeneration: UInt64 = 0
+    /// 串行关闭旧扩展会话；切回原生播放器时用作音频设备释放屏障。
+    var extensionSessionCloseTask: Task<Void, Never>?
     /// 目录扫描令牌；新的拖放会主动终止仍在枚举的旧目录。
     var activeDirectoryDropScan: DroppedFileScanCancellation?
 
@@ -56,8 +58,16 @@ public class AppState: NSObject, ObservableObject, Identifiable {
             guard oldSessionID != newSessionID else { return }
             let oldID = oldValue?.extensionID
             let newID = extensionSession?.extensionID
-            if let oldValue { ExtensionHost.shared.closeSession(oldValue) }
-            if let oldID { ExtensionHost.shared.releaseSession(extensionID: oldID) }
+            if let oldValue {
+                let precedingClose = extensionSessionCloseTask
+                extensionSessionCloseTask = Task { @MainActor in
+                    await precedingClose?.value
+                    await ExtensionHost.shared.closeSessionAndWait(oldValue)
+                    if let oldID {
+                        ExtensionHost.shared.releaseSession(extensionID: oldID)
+                    }
+                }
+            }
             if let newID { ExtensionHost.shared.retainSession(extensionID: newID) }
         }
     }
