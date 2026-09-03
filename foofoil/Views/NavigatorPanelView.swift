@@ -234,6 +234,18 @@ struct NavigatorPanelView: View {
         contribution.id == AppState.fileListNavigatorID && appState.fileList?.isCueBased == true
     }
 
+    /// CUE / SACD 曲目把 Track 号显示为左侧序号，标题本身用曲名。
+    private func cueTrackNumber(for row: VisibleRow, contribution: NavigatorContribution) -> String? {
+        guard contribution.id == AppState.fileListNavigatorID,
+              appState.fileList?.isCueBased == true,
+              let item = appState.fileList?.items.first(where: { $0.id == row.item.id }),
+              let number = item.cue?.trackNumber?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !number.isEmpty else {
+            return nil
+        }
+        return number
+    }
+
     @ViewBuilder
     private func navigatorContent(_ contribution: NavigatorContribution) -> some View {
         if contribution.items.isEmpty {
@@ -314,6 +326,12 @@ struct NavigatorPanelView: View {
                                 .frame(width: 16)
                                 .foregroundStyle(row.item.isCurrent ? Color.accentColor : Color.secondary)
                         }
+                    }
+                    if let number = cueTrackNumber(for: row, contribution: contribution) {
+                        Text(number)
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 16, alignment: .trailing)
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         NavigatorScrollingTitle(

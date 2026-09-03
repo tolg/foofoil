@@ -97,6 +97,13 @@ extension AppState {
         case .cueSheets:
             installCueSheets(urls: group.urls, preservesIdentity: preservesIdentity)
         case .listable(let kind) where group.urls.count >= 2:
+            if kind == .audio {
+                let sacd = group.urls.filter { FileListGrouper.isSACDISOFile($0) }
+                if sacd.count == group.urls.count, let url = sacd.first {
+                    openFile(url: url)
+                    return
+                }
+            }
             installFileList(kind: kind, urls: group.urls, preservesIdentity: preservesIdentity, title: title)
         case .listable, .other:
             if let url = group.urls.first {
@@ -227,6 +234,11 @@ extension AppState {
                 cacheToken: item.id
             )
         case .audio where ExtensionHost.shared.canOpen(url: url):
+            if activateExistingHiFiContainerTrack(item) {
+                syncFileListNavigator()
+                saveState()
+                return
+            }
             openFileListAudioUsingExtension(url: url, itemID: item.id)
         case .video, .audio:
             currentMediaRouteGeneration &+= 1
@@ -573,7 +585,7 @@ extension AppState {
         )
     }
 
-    /// CUE 曲目在列表末尾显示分段时长，不显示序号。
+    /// CUE / SACD 曲目在列表末尾显示分段时长；序号由导航行单独绘制。
     func cueSegmentDurationBadge(for item: FileListItem) -> String? {
         guard let seconds = cueSegmentDurationSeconds(for: item) else { return nil }
         return AudioMetadataLoader.formatDuration(seconds)
@@ -673,6 +685,80 @@ extension AppState {
         case .other:
             openFile(url: url)
         }
+    }
+
+    /// 同一 SACD ISO 会话内切歌，不重建 Session、不重配 HAL。
+    /// 自然播完后由 Hi-Fi Runtime 在 activate 时继续播放下一曲；此处只切换队列项。
+    @discardableResult
+    func activateExistingHiFiContainerTrack(_ item: FileListItem) -> Bool {
+        guard let session = extensionSession,
+              session.providerID == "audio.hifi",
+              let queue = session.playbackQueue,
+              queue.items.contains(where: { $0.id == item.id }) else {
+            return false
+        }
+        let sessionURL = session.request.primaryFileURL
+        let itemURL = resolvedURL(for: item) ?? item.url
+        if let sessionURL {
+            let same = sessionURL.resolvingSymlinksInPath().standardizedFileURL.path
+                == itemURL.resolvingSymlinksInPath().standardizedFileURL.path
+            guard same else { return false }
+        }
+        if queue.currentItemID != item.id {
+            performNavigatorAction(
+                NavigatorAction(
+                    contributionID: "hifi.playback-queue",
+                    kind: .activate,
+                    itemIDs: [item.id]
+                )
+            )
+        }
+        return true
+    }
+
+    func installContainerAudioList(url: URL, queue: MediaPlaybackQueueSnapshot, bookmark: Data?) {
+        guard queue.items.count >= 2 else { return }
+        let sectionID = UUID().uuidString.lowercased()
+        let album = FileListState.normalizedTitle(queue.title)
+            ?? url.deletingPathExtension().lastPathComponent
+        let section = FileListSection(
+            id: sectionID,
+            title: album,
+            cueSheetPath: url.path,
+            cueSheetBookmark: bookmark
+        )
+        var start: Int64 = 0
+        let items: [FileListItem] = queue.items.enumerated().map { index, item in
+            let frames = Int64(((item.duration ?? 0) * Double(CueTime.timescale)).rounded())
+            let cue = FileListCueInfo(
+                startCueFrames: start,
+                endCueFrames: start + max(0, frames),
+                title: item.title,
+                artist: item.subtitle,
+                album: album,
+                trackNumber: "\(index + 1)",
+                sectionID: sectionID,
+                cueSheetPath: url.path
+            )
+            start += max(0, frames)
+            return FileListItem(
+                id: item.id,
+                path: url.path,
+                bookmark: bookmark,
+                displayName: item.title,
+                cue: cue
+            )
+        }
+        fileList = FileListState(
+            kind: .audio,
+            items: items,
+            currentID: queue.currentItemID.flatMap { id in items.contains(where: { $0.id == id }) ? id : nil }
+                ?? items[0].id,
+            title: album,
+            sections: [section]
+        )
+        mediaPlaybackMode = .sequentialLoop
+        syncFileListNavigator()
     }
 
     func installCueSheets(urls: [URL], preservesIdentity: Bool) {

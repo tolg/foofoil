@@ -164,7 +164,10 @@ struct ExtensionAudioModeView: View {
         self.shouldHideBorder = shouldHideBorder
         _controller = StateObject(wrappedValue: ExtensionAudioPlaybackController(appState: appState, session: session))
         let url = Self.currentURL(in: session)
-        _info = State(initialValue: AudioTrackInfo.fallback(fileName: url?.lastPathComponent ?? ""))
+        _info = State(initialValue: AudioModeView.overlay(
+            AudioTrackInfo.fallback(fileName: url?.lastPathComponent ?? ""),
+            with: appState.fileList?.currentItem?.cue
+        ))
     }
 
     var body: some View {
@@ -261,7 +264,7 @@ struct ExtensionAudioModeView: View {
             if loaded.artwork != nil { appState.sidecarCoverDidBecomeAvailable() }
         }
         if loaded.sidecarCoverURL != nil { appState.recordSidecarCoverAccess(for: url) }
-        return loaded
+        return AudioModeView.overlay(loaded, with: appState.fileList?.currentItem?.cue)
     }
 
     private static func currentURL(in session: ContentSession) -> URL? {

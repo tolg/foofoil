@@ -108,7 +108,7 @@ struct AudioModeView: View {
     }
 
     /// 箔内展示 CUE 段落元数据，封面与格式信息仍取自音频文件。
-    private static func overlay(_ info: AudioTrackInfo, with cue: FileListCueInfo?) -> AudioTrackInfo {
+    static func overlay(_ info: AudioTrackInfo, with cue: FileListCueInfo?) -> AudioTrackInfo {
         guard let cue else { return info }
         var merged = info
         if let title = cue.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {

@@ -532,6 +532,11 @@ extension AppState {
                     self.extensionSession = outcome.session
                     self.extensionFallbackProviderID = outcome.failures.first?.providerID
                     self.extensionStateReference = nil
+                    self.installHiFiContainerListIfNeeded(
+                        url: url,
+                        session: outcome.session,
+                        preferredItemID: nil
+                    )
                     if let extensionID = outcome.session.extensionID {
                         let payload = try JSONEncoder().encode(outcome.session)
                         self.extensionStateReference = try ExtensionHost.shared.stateStore.save(
@@ -597,6 +602,11 @@ extension AppState {
                     self.sourceFingerprint = nil
                     self.extensionSession = outcome.session
                     self.extensionFallbackProviderID = outcome.failures.first?.providerID
+                    self.installHiFiContainerListIfNeeded(
+                        url: url,
+                        session: outcome.session,
+                        preferredItemID: itemID
+                    )
                     if let extensionID = outcome.session.extensionID {
                         let payload = try JSONEncoder().encode(outcome.session)
                         self.extensionStateReference = try ExtensionHost.shared.stateStore.save(
@@ -643,6 +653,39 @@ extension AppState {
                     failed.runModal()
                 }
             }
+        }
+
+        func installHiFiContainerListIfNeeded(
+            url: URL,
+            session: ContentSession,
+            preferredItemID: String?
+        ) {
+            guard session.providerID == "audio.hifi",
+                  let queue = session.playbackQueue,
+                  queue.items.count >= 2 else { return }
+            let alreadyInstalled = fileList?.items.contains(where: { item in
+                item.cue != nil && queue.items.contains(where: { $0.id == item.id })
+            }) == true
+            if !alreadyInstalled {
+                let bookmark = session.request.resources.first?.securityScopedBookmark
+                    ?? Self.makeSecurityScopedBookmark(for: url)
+                installContainerAudioList(url: url, queue: queue, bookmark: bookmark)
+            }
+            if let preferredItemID,
+               queue.items.contains(where: { $0.id == preferredItemID }),
+               preferredItemID != queue.currentItemID,
+               var list = fileList {
+                list.currentID = preferredItemID
+                fileList = list
+                performNavigatorAction(
+                    NavigatorAction(
+                        contributionID: "hifi.playback-queue",
+                        kind: .activate,
+                        itemIDs: [preferredItemID]
+                    )
+                )
+            }
+            syncFileListNavigator()
         }
 
         func performExtensionCommand(_ commandID: String) {

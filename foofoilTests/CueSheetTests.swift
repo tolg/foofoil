@@ -387,6 +387,96 @@ struct CueSheetTests {
         #expect(!controller.isPlaying)
     }
 
+    @Test func sacdQueueInstallsCueLikeNavigator() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-sacd-list-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("symphony.iso")
+        try Data("iso".utf8).write(to: url)
+        let queue = MediaPlaybackQueueSnapshot(
+            items: [
+                MediaPlaybackQueueItem(
+                    id: "track:stereo:01",
+                    title: "Allegro",
+                    subtitle: "Beethoven",
+                    duration: 60
+                ),
+                MediaPlaybackQueueItem(
+                    id: "track:stereo:02",
+                    title: "Andante",
+                    subtitle: "Beethoven",
+                    duration: 90
+                )
+            ],
+            currentItemID: "track:stereo:01",
+            title: "Symphony No. 5"
+        )
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.installContainerAudioList(url: url, queue: queue, bookmark: nil)
+
+        #expect(state.fileList?.kind == .audio)
+        #expect(state.fileList?.isCueBased == true)
+        #expect(state.fileList?.isReorderable == false)
+        #expect(state.fileList?.title == "Symphony No. 5")
+        #expect(state.fileList?.items.map(\.displayName) == ["Allegro", "Andante"])
+        #expect(state.fileList?.items.map(\.path) == [url.path, url.path])
+        #expect(state.fileList?.items.map(\.id) == ["track:stereo:01", "track:stereo:02"])
+        #expect(state.fileList?.items[0].cue?.artist == "Beethoven")
+        #expect(state.fileList?.items[0].cue?.album == "Symphony No. 5")
+        let contribution = try #require(state.navigatorContributions.first)
+        #expect(contribution.id == AppState.fileListNavigatorID)
+        #expect(contribution.style == .flat)
+        #expect(contribution.items.map(\.title) == ["Allegro", "Andante"])
+        #expect(contribution.items.map(\.subtitle) == ["Beethoven", "Beethoven"])
+        #expect(contribution.items.map(\.badge) == ["1:00", "1:30"])
+        #expect(!contribution.allowedActions.contains(.move))
+    }
+
+    @Test func sniffMatcherAcceptsSACDMagicAndIgnoresOrdinaryISO() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-iso-sniff-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let ordinary = directory.appendingPathComponent("disk.iso")
+        try Data(repeating: 0, count: 32).write(to: ordinary)
+        let sacd = directory.appendingPathComponent("album.iso")
+        var payload = Data(repeating: 0, count: 511 * 2048)
+        payload.replaceSubrange((510 * 2048)..<(510 * 2048 + 8), with: Data("SACDMTOC".utf8))
+        try payload.write(to: sacd)
+
+        let declarations = [ContentTypeDeclaration(extensions: ["iso"], strategy: .sniff)]
+        let sniff: (URL) -> Bool = { url in
+            guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+            defer { try? handle.close() }
+            let offset = UInt64(510) * 2048
+            guard let size = try? handle.seekToEnd(), size >= offset + 8 else { return false }
+            try? handle.seek(toOffset: offset)
+            return (try? handle.read(upToCount: 8)) == Data("SACDMTOC".utf8)
+        }
+        #expect(
+            ProviderContentMatcher.match(
+                .singleFile(.init(url: ordinary)),
+                declarations: declarations,
+                sniff: sniff
+            ) == nil
+        )
+        let match = ProviderContentMatcher.match(
+            .singleFile(.init(url: sacd)),
+            declarations: declarations,
+            sniff: sniff
+        )
+        #expect(match?.strength == .sniff)
+        #expect(
+            ProviderContentMatcher.match(
+                .singleFile(.init(url: sacd)),
+                declarations: declarations
+            ) == nil
+        )
+    }
+
     private func writePCMWav(url: URL, sampleRate: Int, seconds: Double) throws {
         let frames = Int((Double(sampleRate) * seconds).rounded())
         let dataSize = frames * 2

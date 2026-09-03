@@ -460,6 +460,10 @@ public enum FileListGrouper {
         url.pathExtension.lowercased() == "cue"
     }
 
+    static func isSACDISOFile(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == "iso" && ExtensionHost.shared.canOpenAsAudio(url: url)
+    }
+
     static func dropKind(url: URL) -> DroppedFileKind {
         switch classify(url: url) {
         case .listable(.image): return .image
@@ -504,11 +508,14 @@ public enum FileListGrouper {
         return unique
     }
 
-    /// 批次中只要有 CUE，就只保留 CUE，其它类型忽略。
+    /// 批次中只要有 CUE，就只保留 CUE；否则 SACD ISO 优先于普通音频。
     static func preferredOpenableURLs(from urls: [URL]) -> [URL] {
         let unique = uniqued(urls)
         let cues = unique.filter { isCueFile($0) }
-        return cues.isEmpty ? unique : cues
+        if !cues.isEmpty { return cues }
+        let sacd = unique.filter { isSACDISOFile($0) }
+        if !sacd.isEmpty { return sacd }
+        return unique
     }
 
     /// 一次批次只选择一种内容：CUE、音频、视频、图片依次优先；其它类型按数量最多者选择。
@@ -517,6 +524,10 @@ public enum FileListGrouper {
         let cues = unique.filter { isCueFile($0) }
         if !cues.isEmpty {
             return [FileListGroup(kind: .cueSheets, urls: cues)]
+        }
+        let sacd = unique.filter { isSACDISOFile($0) }
+        if !sacd.isEmpty {
+            return [FileListGroup(kind: .listable(.audio), urls: sacd)]
         }
 
         for kind in [FileListKind.audio, .video, .image] {

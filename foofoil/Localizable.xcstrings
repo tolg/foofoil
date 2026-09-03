@@ -3200,6 +3200,20 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "该 DSF 文件无效或已截断"}}
       }
     },
+    "Hi-Fi Invalid SACD ISO": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This SACD ISO is invalid or truncated"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "该 SACD ISO 无效或已截断"}}
+      }
+    },
+    "Hi-Fi Unsupported SACD Area": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This SACD ISO has no playable stereo area"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "该 SACD ISO 没有可播放的立体声区"}}
+      }
+    },
     "Hi-Fi Unsupported Source": {
       "extractionState": "manual",
       "localizations": {
