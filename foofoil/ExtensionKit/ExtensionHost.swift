@@ -5,6 +5,7 @@
 
 import Foundation
 import FoofoilExtensionKit
+import UniformTypeIdentifiers
 
 final class ExtensionHost: ExtensionRuntimeHost {
     static let shared = ExtensionHost()
@@ -54,6 +55,25 @@ final class ExtensionHost: ExtensionRuntimeHost {
         guard let resolution = try? resolver.resolve(request, preferredProviderID: preferred),
               let provider = resolver.provider(id: resolution.selectedProviderID) else { return false }
         return !provider.descriptor.isBuiltIn
+    }
+
+    /// 扩展只声明内容家族，宿主据此决定应复用哪一套列表与呈现；
+    /// 是否真的由该扩展播放，仍在打开当前项目时重新执行 provider resolution。
+    func canOpenAsAudio(url: URL) -> Bool {
+        let request = ContentRequest.singleFile(.init(url: url))
+        return resolver.candidates(for: request).contains {
+            !$0.descriptor.isBuiltIn && $0.descriptor.contentFamily == .audio
+        }
+    }
+
+    func additionalContentTypes(for family: ExtensionContentFamily) -> [UTType] {
+        let extensions = resolver.allDescriptors()
+            .filter { !$0.isBuiltIn && $0.contentFamily == family }
+            .flatMap(\.filenameExtensions)
+        var seen = Set<String>()
+        return extensions.compactMap { UTType(filenameExtension: $0) }.filter {
+            seen.insert($0.identifier).inserted
+        }
     }
 
     func open(url: URL) async throws -> SessionResolutionOutcome {

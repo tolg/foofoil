@@ -454,7 +454,8 @@ public nonisolated enum DroppedFileResolver {
     }
 }
 
-public nonisolated enum FileListGrouper {
+/// 内容分组会查询当前已加载的扩展声明，因此由宿主主 actor 串行访问。
+public enum FileListGrouper {
     static func isCueFile(_ url: URL) -> Bool {
         url.pathExtension.lowercased() == "cue"
     }
@@ -482,6 +483,7 @@ public nonisolated enum FileListGrouper {
         if ["html", "htm", "webarchive", "xhtml"].contains(ext) { return .other }
         if AppState.isVideoFileName(name) { return .listable(.video) }
         if AppState.isAudioFileName(name) { return .listable(.audio) }
+        if ExtensionHost.shared.canOpenAsAudio(url: url) { return .listable(.audio) }
         if let type = UTType(filenameExtension: ext) {
             if type.conforms(to: .text) { return .other }
             if type.conforms(to: .image) || type.conforms(to: .svg) { return .listable(.image) }
@@ -489,7 +491,7 @@ public nonisolated enum FileListGrouper {
         return .other
     }
 
-    static func uniqued(_ urls: [URL]) -> [URL] {
+    nonisolated static func uniqued(_ urls: [URL]) -> [URL] {
         var seenPaths = Set<String>()
         var unique: [URL] = []
         unique.reserveCapacity(urls.count)

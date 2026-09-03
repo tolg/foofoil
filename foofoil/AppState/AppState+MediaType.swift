@@ -49,6 +49,9 @@ extension AppState {
 
         /// 内置音频与 Hi-Fi 扩展共享封面/元数据呈现时所对应的当前源文件。
         var currentAudioPresentationURL: URL? {
+            if fileList?.kind == .audio, let item = fileList?.currentItem {
+                return resolvedURL(for: item) ?? item.url
+            }
             guard let session = extensionSession, session.providerID == "audio.hifi" else {
                 return isAudioDocument ? imageURL : nil
             }

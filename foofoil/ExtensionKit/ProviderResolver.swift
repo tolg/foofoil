@@ -28,6 +28,8 @@ struct ProviderDescriptor: Codable, Equatable, Sendable {
     let role: ExtensionProviderRole
     let fallbackProviderID: String?
     let enhancementDomain: String?
+    let contentFamily: ExtensionContentFamily?
+    let filenameExtensions: [String]
     var isEnabled: Bool
     var isRuntimeAvailable: Bool
 

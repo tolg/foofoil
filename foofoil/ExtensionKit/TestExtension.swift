@@ -14,6 +14,8 @@ final class BuiltInAudioProvider: ContentProvider {
         role: .primary,
         fallbackProviderID: nil,
         enhancementDomain: "audio",
+        contentFamily: .audio,
+        filenameExtensions: [],
         isEnabled: true,
         isRuntimeAvailable: true
     )
@@ -46,6 +48,8 @@ final class TestContentProvider: ContentProvider {
         role: .primary,
         fallbackProviderID: nil,
         enhancementDomain: nil,
+        contentFamily: nil,
+        filenameExtensions: [],
         isEnabled: true,
         isRuntimeAvailable: true
     )
@@ -148,6 +152,8 @@ final class AudioEnhancerTestProvider: ContentProvider {
         role: .override,
         fallbackProviderID: "builtin.audio",
         enhancementDomain: "audio",
+        contentFamily: .audio,
+        filenameExtensions: ["mp3"],
         isEnabled: true,
         isRuntimeAvailable: true
     )
@@ -220,6 +226,7 @@ enum LocalTestExtension {
                 id: "test.audio-enhancer",
                 role: .override,
                 fallbackProvider: "builtin.audio",
+                contentFamily: .audio,
                 contentTypes: [
                     ContentTypeDeclaration(extensions: ["mp3"], strategy: .fileExtension),
                     ContentTypeDeclaration(utTypes: ["public.audio"], strategy: .conforms)

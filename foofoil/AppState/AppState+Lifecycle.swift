@@ -17,6 +17,7 @@ import FoofoilExtensionKit
 
 extension AppState {
         public func resetContent() {
+            currentMediaRouteGeneration &+= 1
             NotificationCenter.default.post(
                 name: .willResetContent,
                 object: self

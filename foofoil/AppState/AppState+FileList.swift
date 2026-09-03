@@ -93,10 +93,6 @@ extension AppState {
     }
 
     func openFileGroup(_ group: FileListGroup, preservesIdentity: Bool, title: String? = nil) {
-        if group.urls.count >= 2, group.urls.allSatisfy(ExtensionHost.shared.canOpen(url:)) {
-            openUsingExtension(urls: group.urls)
-            return
-        }
         switch group.kind {
         case .cueSheets:
             installCueSheets(urls: group.urls, preservesIdentity: preservesIdentity)
@@ -230,7 +226,14 @@ extension AppState {
                 clearsFileList: false,
                 cacheToken: item.id
             )
+        case .audio where ExtensionHost.shared.canOpen(url: url):
+            openFileListAudioUsingExtension(url: url, itemID: item.id)
         case .video, .audio:
+            currentMediaRouteGeneration &+= 1
+            isLoading = false
+            extensionSession = nil
+            extensionFallbackProviderID = nil
+            extensionStateReference = nil
             applyExternalMedia(
                 url: url,
                 holdsSecurityAccess: false,

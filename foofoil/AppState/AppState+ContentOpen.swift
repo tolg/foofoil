@@ -443,6 +443,7 @@ extension AppState {
 
         public func openFile(url: URL) {
             guard canOpenFile(url: url) else { return }
+            currentMediaRouteGeneration &+= 1
 
             if FileListGrouper.isCueFile(url) {
                 installCueSheets(urls: [url], preservesIdentity: false)
@@ -481,6 +482,8 @@ extension AppState {
 
         func openUsingExtension(urls: [URL]) {
             guard let url = urls.first else { return }
+            currentMediaRouteGeneration &+= 1
+            let routeGeneration = currentMediaRouteGeneration
             let targetID = (imageURL != nil || webURL != nil || textURL != nil || extensionSession != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 ? UUID()
                 : id
@@ -492,6 +495,16 @@ extension AppState {
                     let outcome = try await (urls.count == 1
                         ? ExtensionHost.shared.open(url: url)
                         : ExtensionHost.shared.open(urls: urls))
+                    guard self.currentMediaRouteGeneration == routeGeneration else {
+                        ExtensionHost.shared.closeSession(outcome.session)
+                        return
+                    }
+                    if outcome.session.providerID == "builtin.audio" {
+                        self.isLoading = false
+                        let accessed = url.startAccessingSecurityScopedResource()
+                        self.openExternalMediaIfPlayable(url: url, holdsSecurityAccess: accessed)
+                        return
+                    }
                     self.isBatchUpdating = true
                     self.id = targetID
                     self.stopVideoAccess()
@@ -519,6 +532,70 @@ extension AppState {
                 } catch {
                     self.isBatchUpdating = false
                     NSLog("Extension session failed: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        /// 统一音频列表只归宿主持有；扩展会话仅播放当前项目，不复制列表、排序或循环状态。
+        func openFileListAudioUsingExtension(url: URL, itemID: String) {
+            currentMediaRouteGeneration &+= 1
+            let routeGeneration = currentMediaRouteGeneration
+            extensionSession = nil
+            extensionFallbackProviderID = nil
+            extensionStateReference = nil
+            stopVideoAccess()
+            imageURL = nil
+            originalImageName = url.lastPathComponent
+            sourceFingerprint = nil
+            isLoading = true
+
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let outcome = try await ExtensionHost.shared.open(url: url)
+                    guard self.currentMediaRouteGeneration == routeGeneration,
+                          self.fileList?.currentID == itemID else {
+                        ExtensionHost.shared.closeSession(outcome.session)
+                        return
+                    }
+                    if outcome.session.providerID == "builtin.audio" {
+                        let asset = AVURLAsset(url: url)
+                        let isPlayable = (try? await asset.load(.isPlayable)) ?? false
+                        guard self.currentMediaRouteGeneration == routeGeneration,
+                              self.fileList?.currentID == itemID else { return }
+                        self.isLoading = false
+                        if isPlayable {
+                            self.applyExternalMedia(
+                                url: url,
+                                holdsSecurityAccess: false,
+                                rotatesIdentity: false,
+                                clearsFileList: false
+                            )
+                        }
+                        return
+                    }
+                    self.isBatchUpdating = true
+                    self.originalImageName = url.lastPathComponent
+                    self.sourceFingerprint = nil
+                    self.extensionSession = outcome.session
+                    self.extensionFallbackProviderID = outcome.failures.first?.providerID
+                    if let extensionID = outcome.session.extensionID {
+                        let payload = try JSONEncoder().encode(outcome.session)
+                        self.extensionStateReference = try ExtensionHost.shared.stateStore.save(
+                            extensionID: extensionID,
+                            schemaVersion: 1,
+                            payload: payload,
+                            reference: outcome.session.id.uuidString.lowercased()
+                        )
+                    }
+                    self.isBatchUpdating = false
+                    self.isLoading = false
+                    self.saveState()
+                } catch {
+                    guard self.currentMediaRouteGeneration == routeGeneration else { return }
+                    self.isBatchUpdating = false
+                    self.isLoading = false
+                    NSLog("Audio provider session failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -556,6 +633,7 @@ extension AppState {
                 guard let self else { return }
                 do {
                     let updated = try await ExtensionHost.shared.perform(commandID: commandID, in: session)
+                    guard self.extensionSession?.id == session.id else { return }
                     self.extensionSession = updated
                     // 播放进度轮询是瞬时状态，不应每秒写扩展状态和窗口历史。
                     let persistsState = commandID != "hifi.status"
@@ -588,6 +666,17 @@ extension AppState {
         }
 
         func performNavigatorAction(_ action: NavigatorAction) {
+            if let contribution = builtInNavigatorContributions.first(where: {
+                $0.id == action.contributionID
+            }) {
+                do {
+                    try NavigatorContributionValidator.validate(action, in: contribution)
+                    builtInNavigatorActionHandler?(action)
+                } catch {
+                    NSLog("Built-in navigator action failed validation: \(error.localizedDescription)")
+                }
+                return
+            }
             if let session = extensionSession {
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -596,6 +685,7 @@ extension AppState {
                             navigatorAction: action,
                             in: session
                         )
+                        guard self.extensionSession?.id == session.id else { return }
                         self.extensionSession = updated
                         if let extensionID = updated.extensionID,
                            let reference = self.extensionStateReference {
@@ -613,15 +703,6 @@ extension AppState {
                     }
                 }
                 return
-            }
-            guard let contribution = builtInNavigatorContributions.first(where: {
-                $0.id == action.contributionID
-            }) else { return }
-            do {
-                try NavigatorContributionValidator.validate(action, in: contribution)
-                builtInNavigatorActionHandler?(action)
-            } catch {
-                NSLog("Built-in navigator action failed validation: \(error.localizedDescription)")
             }
         }
 

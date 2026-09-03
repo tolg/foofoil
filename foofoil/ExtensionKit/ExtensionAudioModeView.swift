@@ -12,12 +12,14 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
     @Published private(set) var volume: Float = 1
     var isScrubbing = false
     let supportsVolumeControl = false
-    let supportsPlaybackModeControl = false
+    let supportsPlaybackModeControl = true
 
     private let appStateID: UUID
     private let command: @MainActor (String) -> Void
     private let seekAction: @MainActor (TimeInterval) -> Void
     private let hasPreviousOrNext: @MainActor () -> Bool
+    private let navigateHostList: @MainActor (Int) -> Bool
+    private let handlePlaybackCompletion: @MainActor () -> Void
     private var mediaTitle: String
     private var observer: NSObjectProtocol?
 
@@ -25,7 +27,18 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
         appStateID = appState.id
         command = { appState.performExtensionCommand($0) }
         seekAction = { appState.seekExtensionPlayback(to: $0) }
-        hasPreviousOrNext = { (appState.extensionSession?.playbackQueue?.items.count ?? 0) > 1 }
+        hasPreviousOrNext = {
+            appState.fileList?.isPresentable == true
+                || (appState.extensionSession?.playbackQueue?.items.count ?? 0) > 1
+        }
+        navigateHostList = { appState.activateMediaListItem(delta: $0) }
+        handlePlaybackCompletion = {
+            if appState.shouldLoopCurrentItem {
+                appState.performExtensionCommand("hifi.play")
+            } else {
+                appState.advanceFileListAfterPlayback()
+            }
+        }
         mediaTitle = Self.title(for: session)
         apply(session: session)
         observer = NotificationCenter.default.addObserver(
@@ -47,12 +60,20 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
     var volumeIconName: String { "speaker.wave.3.fill" }
 
     func apply(session: ContentSession) {
+        let wasPlaying = isPlaying
         mediaTitle = Self.title(for: session)
         guard let playback = session.mediaPlayback else { return }
         isPlaying = playback.state == .playing
         if !isScrubbing { currentTime = playback.position }
         duration = playback.duration ?? 0
         MediaRemoteCommandCoordinator.shared.update(self, title: mediaTitle)
+        if wasPlaying,
+           playback.state == .stopped,
+           duration > 0,
+           currentTime >= duration - 0.05 {
+            let completion = handlePlaybackCompletion
+            Task { @MainActor in completion() }
+        }
     }
 
     func activateRemoteCommands() {
@@ -90,12 +111,14 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
 
     func playPreviousItem() -> Bool {
         guard hasPreviousOrNext() else { return false }
+        if navigateHostList(-1) { return true }
         command("hifi.previous")
         return true
     }
 
     func playNextItem() -> Bool {
         guard hasPreviousOrNext() else { return false }
+        if navigateHostList(1) { return true }
         command("hifi.next")
         return true
     }
@@ -138,6 +161,7 @@ struct ExtensionAudioModeView: View {
         .onAppear {
             appState.isMediaPlaybackControlsVisible = !controller.isPlaying || appState.isPointerInsideWindow
             controller.activateRemoteCommands()
+            controller.play()
         }
         .onDisappear {
             controller.pause()

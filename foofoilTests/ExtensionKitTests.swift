@@ -26,6 +26,7 @@ struct ExtensionKitTests {
 
         #expect(manifest.id == LocalTestExtension.identifier)
         #expect(manifest.providers.map(\.id) == ["test.content", "test.audio-enhancer"])
+        #expect(manifest.providers.last?.contentFamily == .audio)
         #expect(manifest.capabilities.map(\.id).contains(ExtensionCapabilityIdentifier.navigator))
         #expect(ExtensionAPI.negotiate(with: manifest.extensionAPI) == 1)
 
@@ -33,6 +34,60 @@ struct ExtensionKitTests {
         #expect(throws: ExtensionManifestError.incompatibleAPI) {
             try ExtensionManifestValidator.decodeAndValidate(Data(contentsOf: incompatibleURL))
         }
+    }
+
+    @Test func extensionAudioFormatsJoinTheBuiltInAudioList() throws {
+        let provider = ExtensionAudioListTestProvider()
+        ExtensionHost.shared.resolver.register(provider)
+        defer { ExtensionHost.shared.resolver.unregister(providerID: provider.descriptor.id) }
+
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pcm = directory.appendingPathComponent("one.mp3")
+        let dsd = directory.appendingPathComponent("two.dsf")
+        try Data().write(to: pcm)
+        try Data().write(to: dsd)
+
+        #expect(FileListGrouper.classify(url: pcm) == .listable(.audio))
+        #expect(FileListGrouper.classify(url: dsd) == .listable(.audio))
+        let group = try #require(FileListGrouper.groups(from: [pcm, dsd]).first)
+        #expect(group.kind == .listable(.audio))
+        #expect(group.urls == [pcm, dsd])
+
+        let state = AppState()
+        let current = state.makeFileListItem(url: pcm)
+        state.fileList = FileListState(kind: .audio, items: [current], currentID: current.id)
+        #expect(state.appendToFileList(urls: [dsd]).isEmpty)
+        #expect(state.fileList?.items.map(\.url) == [pcm, dsd])
+        #expect(state.navigatorContributions.first?.id == AppState.fileListNavigatorID)
+    }
+
+    @Test func builtInAudioListActionsWinWhileAnExtensionTrackIsActive() {
+        let state = AppState()
+        let contribution = NavigatorContribution(
+            id: AppState.fileListNavigatorID,
+            titleLocalizationKey: "Audio List",
+            style: .flat,
+            items: [NavigatorItem(id: "one", title: "One", isCurrent: true)],
+            selectedItemIDs: ["one"],
+            allowedActions: [.activate]
+        )
+        state.builtInNavigatorContributions = [contribution]
+        var handled = false
+        state.builtInNavigatorActionHandler = { _ in handled = true }
+        state.extensionSession = ContentSession(
+            extensionID: nil,
+            providerID: "audio.hifi",
+            request: .singleFile(.init(url: URL(fileURLWithPath: "/tmp/one.dsf"))),
+            presentation: .text(titleKey: "Hi-Fi", body: "one.dsf")
+        )
+
+        state.performNavigatorAction(NavigatorAction(
+            contributionID: AppState.fileListNavigatorID,
+            kind: .activate,
+            itemIDs: ["one"]
+        ))
+        #expect(handled)
     }
 
     @Test func abiV1HeaderAndLoaderKeepVersionedBoundary() throws {
@@ -815,5 +870,33 @@ struct ExtensionKitTests {
             ExtensionResource(url: URL(fileURLWithPath: "/tmp/two.foo"))
         ])
         #expect(try await connection.createSession(for: request) == request)
+    }
+}
+
+private final class ExtensionAudioListTestProvider: ContentProvider {
+    let descriptor = ProviderDescriptor(
+        id: "test.extension-audio-list",
+        extensionID: "app.foofoil.extension.audio-list-test",
+        role: .primary,
+        fallbackProviderID: nil,
+        enhancementDomain: "audio",
+        contentFamily: .audio,
+        filenameExtensions: ["dsf"],
+        isEnabled: true,
+        isRuntimeAvailable: true
+    )
+
+    func match(_ request: ContentRequest) -> ProviderMatch? {
+        guard request.primaryFileURL?.pathExtension.lowercased() == "dsf" else { return nil }
+        return ProviderMatch(strength: .fileExtension, explanation: "filename-extension:dsf")
+    }
+
+    func makeSession(for request: ContentRequest, negotiatedAPI: UInt32) async throws -> ContentSession {
+        ContentSession(
+            extensionID: descriptor.extensionID,
+            providerID: descriptor.id,
+            request: request,
+            presentation: .text(titleKey: "Test", body: "DSD")
+        )
     }
 }

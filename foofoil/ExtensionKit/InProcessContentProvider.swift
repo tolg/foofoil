@@ -26,6 +26,8 @@ final class InProcessContentProvider: ContentProvider {
             role: declaration.role,
             fallbackProviderID: declaration.fallbackProvider,
             enhancementDomain: declaration.enhancementDomain,
+            contentFamily: declaration.contentFamily,
+            filenameExtensions: declaration.contentTypes.flatMap { $0.extensions ?? [] },
             isEnabled: true,
             isRuntimeAvailable: true
         )

@@ -30,6 +30,8 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     var isBatchUpdating = false
     /// 递增的拖拽代次，用于丢弃过期异步回调，避免“打开以前的东西”或并发覆盖。
     var currentDropGeneration: UInt64 = 0
+    /// 列表切项可能异步创建扩展会话；只允许最后一次路由结果接管播放器。
+    var currentMediaRouteGeneration: UInt64 = 0
     /// 目录扫描令牌；新的拖放会主动终止仍在枚举的旧目录。
     var activeDirectoryDropScan: DroppedFileScanCancellation?
 

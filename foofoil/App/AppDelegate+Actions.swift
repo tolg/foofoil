@@ -8,6 +8,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Combine
 import WebKit
+import FoofoilExtensionKit
 
 
 extension AppDelegate {
@@ -340,7 +341,11 @@ extension AppDelegate {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = kind.allowedContentTypes
+        var contentTypes = kind.allowedContentTypes
+        if kind == .audio {
+            contentTypes.append(contentsOf: ExtensionHost.shared.additionalContentTypes(for: .audio))
+        }
+        panel.allowedContentTypes = Array(Dictionary(grouping: contentTypes, by: \.identifier).compactMap(\.value.first))
 
         panel.begin { response in
             if response == .OK {
