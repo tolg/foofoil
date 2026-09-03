@@ -91,7 +91,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
             queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, !self.isScrubbing else { return }
+                guard let self else { return }
                 self.handlePlayerTime(time)
             }
         }
@@ -524,6 +524,8 @@ struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
     @ObservedObject var appState: AppState
     @ObservedObject var controller: Controller
     @State private var isVolumeHovering = false
+    /// 拖拽进度滑块时的预览时间；松手前不改真实播放位置。
+    @State private var scrubTime: Double?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -550,9 +552,13 @@ struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
         max(controller.duration, controller.currentTime) >= 3600
     }
 
+    private var progressDisplayTime: Double {
+        scrubTime ?? controller.currentTime
+    }
+
     private var elapsedTimeLabel: some View {
         playbackTimeLabel(
-            controller.currentTime,
+            progressDisplayTime,
             accessibilityKey: "Elapsed Time"
         )
     }
@@ -591,8 +597,14 @@ struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
     private var progressSlider: some View {
         WheelSliderView(
             value: Binding(
-                get: { controller.currentTime },
-                set: { controller.seek(to: $0) }
+                get: { progressDisplayTime },
+                set: { newValue in
+                    if scrubTime != nil {
+                        scrubTime = newValue
+                    } else {
+                        controller.seek(to: newValue)
+                    }
+                }
             ),
             range: 0...max(controller.duration, controller.currentTime, 0.01),
             controlSize: .small,
@@ -603,7 +615,16 @@ struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
                 ))
             },
             onEditingChanged: { editing in
-                controller.isScrubbing = editing
+                if editing {
+                    controller.isScrubbing = true
+                    scrubTime = controller.currentTime
+                } else if let time = scrubTime {
+                    controller.seek(to: time)
+                    scrubTime = nil
+                    controller.isScrubbing = false
+                } else {
+                    controller.isScrubbing = false
+                }
             }
         )
         .accessibilityLabel(NSLocalizedString("Playback Progress", comment: ""))

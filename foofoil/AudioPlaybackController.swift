@@ -296,7 +296,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     }
 
     private func refreshCurrentTime() {
-        guard !isScrubbing, isPlaying, sampleRate > 0 else { return }
+        guard isPlaying, sampleRate > 0 else { return }
         guard let nodeTime = playerNode.lastRenderTime,
               let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else { return }
         let elapsed = Double(playerTime.sampleTime) / sampleRate

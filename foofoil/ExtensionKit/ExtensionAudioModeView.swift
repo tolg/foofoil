@@ -72,7 +72,7 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
         mediaTitle = Self.title(for: session)
         guard let playback = session.mediaPlayback else { return }
         isPlaying = playback.state == .playing
-        if !isScrubbing { currentTime = playback.position }
+        currentTime = playback.position
         duration = playback.duration ?? 0
         MediaRemoteCommandCoordinator.shared.update(self, title: mediaTitle)
         if wasPlaying,
