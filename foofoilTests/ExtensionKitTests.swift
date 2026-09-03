@@ -45,20 +45,23 @@ struct ExtensionKitTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let pcm = directory.appendingPathComponent("one.mp3")
         let dsd = directory.appendingPathComponent("two.dsf")
+        let dff = directory.appendingPathComponent("three.dff")
         try Data().write(to: pcm)
         try Data().write(to: dsd)
+        try Data().write(to: dff)
 
         #expect(FileListGrouper.classify(url: pcm) == .listable(.audio))
         #expect(FileListGrouper.classify(url: dsd) == .listable(.audio))
-        let group = try #require(FileListGrouper.groups(from: [pcm, dsd]).first)
+        #expect(FileListGrouper.classify(url: dff) == .listable(.audio))
+        let group = try #require(FileListGrouper.groups(from: [pcm, dsd, dff]).first)
         #expect(group.kind == .listable(.audio))
-        #expect(group.urls == [pcm, dsd])
+        #expect(group.urls == [pcm, dsd, dff])
 
         let state = AppState()
         let current = state.makeFileListItem(url: pcm)
         state.fileList = FileListState(kind: .audio, items: [current], currentID: current.id)
-        #expect(state.appendToFileList(urls: [dsd]).isEmpty)
-        #expect(state.fileList?.items.map(\.url) == [pcm, dsd])
+        #expect(state.appendToFileList(urls: [dsd, dff]).isEmpty)
+        #expect(state.fileList?.items.map(\.url) == [pcm, dsd, dff])
         #expect(state.navigatorContributions.first?.id == AppState.fileListNavigatorID)
     }
 
@@ -926,14 +929,15 @@ private final class ExtensionAudioListTestProvider: ContentProvider {
         fallbackProviderID: nil,
         enhancementDomain: "audio",
         contentFamily: .audio,
-        filenameExtensions: ["dsf"],
+        filenameExtensions: ["dsf", "dff"],
         isEnabled: true,
         isRuntimeAvailable: true
     )
 
     func match(_ request: ContentRequest) -> ProviderMatch? {
-        guard request.primaryFileURL?.pathExtension.lowercased() == "dsf" else { return nil }
-        return ProviderMatch(strength: .fileExtension, explanation: "filename-extension:dsf")
+        let ext = request.primaryFileURL?.pathExtension.lowercased()
+        guard ext == "dsf" || ext == "dff" else { return nil }
+        return ProviderMatch(strength: .fileExtension, explanation: "filename-extension:\(ext ?? "")")
     }
 
     func makeSession(for request: ContentRequest, negotiatedAPI: UInt32) async throws -> ContentSession {

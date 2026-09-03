@@ -229,8 +229,10 @@ struct ExtensionAudioModeView: View {
                 }
                 if session.mediaPlayback?.state == .failed {
                     Label(
-                        session.mediaPlayback?.failureMessage
-                            ?? NSLocalizedString("Hi-Fi Playback Failed", comment: ""),
+                        NSLocalizedString(
+                            session.mediaPlayback?.failureMessage ?? "Hi-Fi Playback Failed",
+                            comment: ""
+                        ),
                         systemImage: "exclamationmark.triangle"
                     )
                     .foregroundStyle(.red)

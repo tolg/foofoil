@@ -3158,6 +3158,69 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "Hi-Fi 播放失败"}}
       }
     },
+    "Hi-Fi Device Disconnected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "The output device was disconnected"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "输出设备已断开"}}
+      }
+    },
+    "Hi-Fi Device Busy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "The output device is in use by another application"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "输出设备正被其他应用占用"}}
+      }
+    },
+    "Hi-Fi Exclusive Mode Failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Could not take exclusive control of the output device"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法独占输出设备"}}
+      }
+    },
+    "Hi-Fi Output Initialization Failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Could not start Hi-Fi output"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法启动 Hi-Fi 输出"}}
+      }
+    },
+    "Hi-Fi Unsupported DoP Rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This device does not support the required DSD rate"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "此设备不支持所需的 DSD 速率"}}
+      }
+    },
+    "Hi-Fi Invalid DSF": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This DSF file is invalid or truncated"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "该 DSF 文件无效或已截断"}}
+      }
+    },
+    "Hi-Fi Unsupported Source": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "This audio file is not supported"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "不支持该音频文件"}}
+      }
+    },
+    "Hi-Fi Resource Access Failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Could not access the audio file"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法访问该音频文件"}}
+      }
+    },
+    "Hi-Fi Seek Failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Could not seek in this audio file"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法在该音频文件中定位"}}
+      }
+    },
     "Hi-Fi Audio": {
       "extractionState": "manual",
       "localizations": {

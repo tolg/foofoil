@@ -324,7 +324,8 @@ extension AppDelegate {
         if let webarchiveType = UTType("com.apple.webarchive") {
             types.append(webarchiveType)
         }
-        panel.allowedContentTypes = types
+        types.append(contentsOf: ExtensionHost.shared.additionalContentTypes(for: .audio))
+        panel.allowedContentTypes = Array(Dictionary(grouping: types, by: \.identifier).compactMap(\.value.first))
 
         panel.begin { response in
             if response == .OK {

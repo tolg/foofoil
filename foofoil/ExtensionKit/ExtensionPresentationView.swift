@@ -55,7 +55,10 @@ struct ExtensionPresentationView: View {
                     playbackControls(playback, hasQueue: (session.playbackQueue?.items.count ?? 0) > 1)
                     if playback.state == .failed {
                         Label(
-                            NSLocalizedString("Hi-Fi Playback Failed", comment: ""),
+                            NSLocalizedString(
+                                playback.failureMessage ?? "Hi-Fi Playback Failed",
+                                comment: ""
+                            ),
                             systemImage: "exclamationmark.triangle"
                         )
                         .font(.caption)
