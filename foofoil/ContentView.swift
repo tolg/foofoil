@@ -23,7 +23,7 @@ public struct ContentView: View {
     public var body: some View {
         // 网页和图片都支持仅隐藏视觉边框；网页切换边框不应改变窗口的缩放规则。
         let shouldHideBorder = appState.isFullScreen
-            || ((appState.imageURL != nil || appState.webURL != nil) && !appState.showBorder)
+            || ((appState.imageURL != nil || appState.webURL != nil || appState.isAudioDocument) && !appState.showBorder)
         // 网页即使同时保留了截图缓存，也不能套用图片无边框模式的最小尺寸规则。
         let isImageMode = appState.imageURL != nil && appState.webURL == nil
         let usesCompactMinimumSize = isImageMode && !appState.effectiveShowBorder
@@ -67,7 +67,7 @@ public struct ContentView: View {
                         .scaleEffect(1.2)
                         .transition(.opacity)
                 } else if appState.extensionSession != nil {
-                    ExtensionPresentationView(appState: appState)
+                    ExtensionPresentationView(appState: appState, shouldHideBorder: shouldHideBorder)
                         .transition(.opacity)
                 } else if let webURL = appState.webURL {
                     // 网页支持内容缩放；调整窗口大小只改变可视区域。

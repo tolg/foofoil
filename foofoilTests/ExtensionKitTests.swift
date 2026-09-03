@@ -307,6 +307,40 @@ struct ExtensionKitTests {
         }
     }
 
+    @Test func hiFiSessionUsesCurrentQueueResourceForAudioPresentation() throws {
+        let first = URL(fileURLWithPath: "/tmp/first.dsf")
+        let second = URL(fileURLWithPath: "/tmp/second.dsf")
+        let state = AppState()
+        defer { state.extensionSession = nil }
+
+        state.extensionSession = ContentSession(
+            extensionID: nil,
+            providerID: "audio.hifi",
+            request: .fileCollection([
+                .init(url: first),
+                .init(url: second)
+            ]),
+            presentation: .text(titleKey: "Hi-Fi", body: "second.dsf"),
+            mediaPlayback: .init(state: .playing, position: 1, duration: 10, isSeekable: true),
+            playbackQueue: .init(
+                items: [
+                    .init(id: "file:0", title: "first"),
+                    .init(id: "file:1", title: "second")
+                ],
+                currentItemID: "file:1"
+            )
+        )
+
+        #expect(state.isAudioDocument)
+        #expect(state.isExternalMediaDocument)
+        #expect(state.currentAudioPresentationURL == second)
+
+        var reordered = try #require(state.extensionSession)
+        reordered.playbackQueue?.items.swapAt(0, 1)
+        state.extensionSession = reordered
+        #expect(state.currentAudioPresentationURL == second)
+    }
+
     @Test func hierarchicalCommandsAcceptDynamicDeviceNamesAndRejectCycles() throws {
         let session = ContentSession(
             extensionID: "app.foofoil.extension.hifi",

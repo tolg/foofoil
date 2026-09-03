@@ -18,6 +18,8 @@ protocol MediaTransportControlling: ObservableObject {
     var volume: Float { get }
     var volumeIconName: String { get }
     var isScrubbing: Bool { get set }
+    var supportsVolumeControl: Bool { get }
+    var supportsPlaybackModeControl: Bool { get }
     func play()
     func pause()
     func togglePlayPause()
@@ -28,6 +30,11 @@ protocol MediaTransportControlling: ObservableObject {
     func adjustVolume(by delta: Float)
     func playPreviousItem() -> Bool
     func playNextItem() -> Bool
+}
+
+extension MediaTransportControlling {
+    var supportsVolumeControl: Bool { true }
+    var supportsPlaybackModeControl: Bool { true }
 }
 
 /// 媒体播放状态控制：负责播放器生命周期、进度汇报与播放/暂停切换。视频与音频共用。
@@ -510,8 +517,12 @@ struct MediaPlaybackBar<Controller: MediaTransportControlling>: View {
             elapsedTimeLabel
             progressSlider
             durationLabel
-            volumeControl
-            playbackModeButton
+            if controller.supportsVolumeControl {
+                volumeControl
+            }
+            if controller.supportsPlaybackModeControl {
+                playbackModeButton
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

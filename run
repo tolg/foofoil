@@ -49,5 +49,6 @@ fi
 # 终止所有正在运行的实例
 pkill -x "$APP_NAME" 2>/dev/null || true
 
-# 启动
-open "$APP_PATH"
+# 显式启动新实例，避免刚 pkill 的旧实例仍在 LaunchServices 中时，
+# open 尝试向其发送 reopen 事件并返回 -600。
+open -n "$APP_PATH"

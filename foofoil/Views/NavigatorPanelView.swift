@@ -305,7 +305,7 @@ struct NavigatorPanelView: View {
                         )
                     } else if let symbolName = row.item.symbolName {
                         if showsPlaybackIndicator(for: contribution), row.item.isCurrent {
-                            // 内置音视频列表的当前项用频率柱状图指示：播放时底部对齐的
+                            // 内置音视频与 Hi-Fi 队列的当前项用频率柱状图指示：播放时底部对齐的
                             // 柱高持续起伏；暂停时时间轴停走、冻结在最后变化时刻。
                             NavigatorPlaybackBars(isPlaying: appState.isMediaPlaying)
                                 .frame(width: 16)
@@ -459,8 +459,12 @@ struct NavigatorPanelView: View {
         return list.items.first(where: { $0.id == itemID })?.path
     }
 
-    /// 仅内置音视频列表的当前项使用“正在播放”波形图标；图片列表与扩展贡献保持原样。
+    /// 内置音视频与 Hi-Fi 播放队列的当前项共用“正在播放”波形图标。
     private func showsPlaybackIndicator(for contribution: NavigatorContribution) -> Bool {
+        if contribution.id == "hifi.playback-queue" {
+            return appState.extensionSession?.providerID == "audio.hifi"
+                && appState.extensionSession?.mediaPlayback != nil
+        }
         guard contribution.id == AppState.fileListNavigatorID,
               let kind = appState.fileList?.kind else { return false }
         return kind == .video || kind == .audio

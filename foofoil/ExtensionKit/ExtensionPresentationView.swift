@@ -8,61 +8,67 @@ import SwiftUI
 
 struct ExtensionPresentationView: View {
     @ObservedObject var appState: AppState
+    let shouldHideBorder: Bool
 
     var body: some View {
         Group {
             if let session = appState.extensionSession {
-                switch session.presentation {
-                case .text(let titleKey, let body):
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label(NSLocalizedString(titleKey, comment: ""), systemImage: "puzzlepiece.extension")
-                            .font(.headline)
-                        ScrollView {
-                            Text(body)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
-                        }
-                        if appState.extensionFallbackProviderID != nil {
-                            Text(NSLocalizedString("Extension Provider Fallback Notice", comment: ""))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let outputStatus = session.audioDeviceSelection?.statusDescription,
-                           !outputStatus.isEmpty {
-                            Label(outputStatus, systemImage: "hifispeaker.2")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel(outputStatus)
-                        }
-                        if let playback = session.mediaPlayback {
-                            playbackControls(playback, hasQueue: (session.playbackQueue?.items.count ?? 0) > 1)
-                            if playback.state == .failed {
-                                Label(
-                                    NSLocalizedString("Hi-Fi Playback Failed", comment: ""),
-                                    systemImage: "exclamationmark.triangle"
-                                )
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                            }
-                        }
-                    }
-                case .unavailable(let titleKey, let messageKey):
-                    ContentUnavailableView(
-                        NSLocalizedString(titleKey, comment: ""),
-                        systemImage: "puzzlepiece.extension",
-                        description: Text(NSLocalizedString(messageKey, comment: ""))
+                if session.providerID == "audio.hifi", session.mediaPlayback != nil {
+                    ExtensionAudioModeView(
+                        appState: appState,
+                        session: session,
+                        shouldHideBorder: shouldHideBorder
                     )
+                } else {
+                    genericPresentation(session)
+                        .padding(16)
                 }
             }
         }
-        .padding(16)
-        .task(id: appState.extensionSession?.mediaPlayback?.state) {
-            while appState.extensionSession?.mediaPlayback?.state == .playing,
-                  !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                appState.performExtensionCommand("hifi.status")
+    }
+
+    @ViewBuilder
+    private func genericPresentation(_ session: ContentSession) -> some View {
+        switch session.presentation {
+        case .text(let titleKey, let body):
+            VStack(alignment: .leading, spacing: 12) {
+                Label(NSLocalizedString(titleKey, comment: ""), systemImage: "puzzlepiece.extension")
+                    .font(.headline)
+                ScrollView {
+                    Text(body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                if appState.extensionFallbackProviderID != nil {
+                    Text(NSLocalizedString("Extension Provider Fallback Notice", comment: ""))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let outputStatus = session.audioDeviceSelection?.statusDescription,
+                   !outputStatus.isEmpty {
+                    Label(outputStatus, systemImage: "hifispeaker.2")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(outputStatus)
+                }
+                if let playback = session.mediaPlayback {
+                    playbackControls(playback, hasQueue: (session.playbackQueue?.items.count ?? 0) > 1)
+                    if playback.state == .failed {
+                        Label(
+                            NSLocalizedString("Hi-Fi Playback Failed", comment: ""),
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    }
+                }
             }
+        case .unavailable(let titleKey, let messageKey):
+            ContentUnavailableView(
+                NSLocalizedString(titleKey, comment: ""),
+                systemImage: "puzzlepiece.extension",
+                description: Text(NSLocalizedString(messageKey, comment: ""))
+            )
         }
     }
 

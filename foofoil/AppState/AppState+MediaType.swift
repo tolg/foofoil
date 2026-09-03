@@ -12,6 +12,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 import ImageIO
 import SwiftUI
+import FoofoilExtensionKit
 
 
 extension AppState {
@@ -33,6 +34,8 @@ extension AppState {
 
         /// 当前内容是否为音频文档（复用图片内容通道，但不经缓存）。
         public var isAudioDocument: Bool {
+            if extensionSession?.providerID == "audio.hifi",
+               extensionSession?.mediaPlayback != nil { return true }
             if fileList?.kind == .audio { return true }
             if let url = imageURL, Self.isAudioFileName(url.lastPathComponent) { return true }
             guard let name = originalImageName else { return false }
@@ -42,6 +45,26 @@ extension AppState {
         /// 视频或音频：均引用原始文件并依赖安全范围书签。
         public var isExternalMediaDocument: Bool {
             isVideoDocument || isAudioDocument
+        }
+
+        /// 内置音频与 Hi-Fi 扩展共享封面/元数据呈现时所对应的当前源文件。
+        var currentAudioPresentationURL: URL? {
+            guard let session = extensionSession, session.providerID == "audio.hifi" else {
+                return isAudioDocument ? imageURL : nil
+            }
+            let resources = session.request.resources
+            guard let queue = session.playbackQueue,
+                  let currentID = queue.currentItemID else {
+                return session.request.primaryFileURL
+            }
+            let sourceIndex = currentID.hasPrefix("file:")
+                ? Int(currentID.dropFirst("file:".count))
+                : queue.items.firstIndex(where: { $0.id == currentID })
+            guard let index = sourceIndex,
+                  resources.indices.contains(index) else {
+                return session.request.primaryFileURL
+            }
+            return resources[index].url
         }
 
         /// 按扩展名判断是否属于视频类型；仅作快速预筛，实际能否播放需在打开时验证。

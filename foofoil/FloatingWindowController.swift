@@ -250,6 +250,11 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             } else if let nsImage = appState.loadImage(from: url) {
                 self.currentImageSize = AudioMetadataLoader.layoutSize(nsImage)
             }
+        } else if let url = appState.currentAudioPresentationURL {
+            fetchMediaPresentationSize(for: url) { [weak self] size in
+                guard let self, self.appState.currentAudioPresentationURL == url else { return }
+                self.currentMediaSize = size
+            }
         }
 
         // 绑定状态监听
@@ -448,10 +453,14 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                       let targetId = notification.userInfo?["id"] as? UUID,
                       targetId == self.appState.id,
                       self.appState.isAudioDocument,
-                      let url = self.appState.imageURL else { return }
+                      let url = self.appState.currentAudioPresentationURL else { return }
 
+                if let size = notification.userInfo?["size"] as? NSSize {
+                    self.applyMediaPresentationSize(size, animated: true)
+                    return
+                }
                 self.fetchMediaPresentationSize(for: url) { size in
-                    guard self.appState.imageURL == url, let size else { return }
+                    guard self.appState.currentAudioPresentationURL == url, let size else { return }
                     self.applyMediaPresentationSize(size, animated: true)
                 }
             }
@@ -673,7 +682,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     /// 与 ContentView 的圆角规则保持一致：全屏或隐藏边框时窗口内容无圆角。
     private var pinGlowWindowCornerRadius: CGFloat {
         let hidesBorder = appState.isFullScreen
-            || ((appState.imageURL != nil || appState.webURL != nil) && !appState.showBorder)
+            || ((appState.imageURL != nil || appState.webURL != nil || appState.isAudioDocument) && !appState.showBorder)
         return hidesBorder ? 0 : 12
     }
 
@@ -959,7 +968,7 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
 
     /// 音频控制条显隐由状态推导：暂停时常显（无论指针在哪）；播放中仅当指针位于箔窗或目录面板上时显示，不做静止超时。
     private func updateAudioPlaybackControlsVisibility(screenPoint: NSPoint? = nil) {
-        guard appState.isAudioDocument, appState.imageURL != nil else { return }
+        guard appState.isAudioDocument else { return }
         pendingMediaPlaybackControlsHide?.cancel()
         pendingMediaPlaybackControlsHide = nil
         let shouldShow = !appState.isMediaPlaying || isPointerOverAudioHoverRegion(screenPoint: screenPoint)

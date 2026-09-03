@@ -50,16 +50,56 @@ final class InProcessContentProvider: ContentProvider {
     }
 
     func perform(navigatorAction: NavigatorAction, session: ContentSession) async throws -> ContentSession {
-        guard navigatorAction.kind == .activate,
-              let selectedID = navigatorAction.itemIDs.first,
-              let index = session.navigatorContributions.firstIndex(where: { $0.id == navigatorAction.contributionID }) else {
+        guard let index = session.navigatorContributions.firstIndex(where: {
+            $0.id == navigatorAction.contributionID
+        }) else {
             return session
         }
         var requested = session
-        requested.navigatorContributions[index].selectedItemIDs = [selectedID]
+        let commandID: String
+        switch navigatorAction.kind {
+        case .activate:
+            guard let selectedID = navigatorAction.itemIDs.first else { return session }
+            requested.navigatorContributions[index].selectedItemIDs = [selectedID]
+            commandID = "hifi.navigator.activate"
+        case .move:
+            requested.navigatorContributions[index].items = Self.movingItems(
+                requested.navigatorContributions[index].items,
+                action: navigatorAction
+            )
+            commandID = "hifi.navigator.move"
+        case .remove:
+            return session
+        }
         let runtime = runtime
         return try await Task.detached(priority: .userInitiated) {
-            try runtime.perform(commandID: "hifi.navigator.activate", session: requested)
+            try runtime.perform(commandID: commandID, session: requested)
         }.value
+    }
+
+    private static func movingItems(
+        _ items: [NavigatorItem],
+        action: NavigatorAction
+    ) -> [NavigatorItem] {
+        guard let position = action.movePosition else { return items }
+        let movingIDs = Set(action.itemIDs)
+        let moving = items.filter { movingIDs.contains($0.id) }
+        guard moving.count == movingIDs.count else { return items }
+        var remaining = items.filter { !movingIDs.contains($0.id) }
+        let insertionIndex: Int
+        switch position {
+        case .end:
+            insertionIndex = remaining.endIndex
+        case .before, .after:
+            guard let destinationID = action.destinationItemID,
+                  let destinationIndex = remaining.firstIndex(where: { $0.id == destinationID }) else {
+                return items
+            }
+            insertionIndex = position == .before
+                ? destinationIndex
+                : remaining.index(after: destinationIndex)
+        }
+        remaining.insert(contentsOf: moving, at: insertionIndex)
+        return remaining
     }
 }
