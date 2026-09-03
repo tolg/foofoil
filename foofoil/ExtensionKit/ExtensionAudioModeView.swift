@@ -20,6 +20,7 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
     private let hasPreviousOrNext: @MainActor () -> Bool
     private let navigateHostList: @MainActor (Int) -> Bool
     private let handlePlaybackCompletion: @MainActor () -> Void
+    private let notePlaybackIntent: @MainActor (Bool) -> Void
     private var mediaTitle: String
     private var observer: NSObjectProtocol?
 
@@ -27,6 +28,13 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
         appStateID = appState.id
         command = { appState.performExtensionCommand($0) }
         seekAction = { appState.seekExtensionPlayback(to: $0) }
+        notePlaybackIntent = { playing in
+            if playing {
+                appState.noteUserStartedMediaPlayback()
+            } else {
+                appState.noteUserPausedMediaPlayback()
+            }
+        }
         hasPreviousOrNext = {
             appState.fileList?.isPresentable == true
                 || (appState.extensionSession?.playbackQueue?.items.count ?? 0) > 1
@@ -81,15 +89,26 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
     }
 
     func play() {
-        command("hifi.play")
-        isPlaying = true
-        activateRemoteCommands()
+        notePlaybackIntent(true)
+        startPlayback()
     }
 
     func pause() {
+        notePlaybackIntent(false)
+        stopOutput()
+    }
+
+    /// 视图卸载或自然播完时停输出，不改写用户的播放/暂停意图。
+    func stopOutput() {
         command("hifi.pause")
         isPlaying = false
         MediaRemoteCommandCoordinator.shared.update(self)
+    }
+
+    private func startPlayback() {
+        command("hifi.play")
+        isPlaying = true
+        activateRemoteCommands()
     }
 
     func togglePlayPause() { isPlaying ? pause() : play() }
@@ -159,12 +178,15 @@ struct ExtensionAudioModeView: View {
             statusOverlay
         }
         .onAppear {
-            appState.isMediaPlaybackControlsVisible = !controller.isPlaying || appState.isPointerInsideWindow
+            appState.isMediaPlaybackControlsVisible = !appState.resumesMediaPlaybackOnActivation
+                || appState.isPointerInsideWindow
             controller.activateRemoteCommands()
-            controller.play()
+            if appState.resumesMediaPlaybackOnActivation {
+                controller.play()
+            }
         }
         .onDisappear {
-            controller.pause()
+            controller.stopOutput()
             MediaRemoteCommandCoordinator.shared.deactivate(controller)
             appState.isMediaPlaying = false
         }

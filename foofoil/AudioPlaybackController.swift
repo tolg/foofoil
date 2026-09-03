@@ -34,6 +34,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     private var mediaTitle: String
     private let previousItemAction: @MainActor () -> Bool
     private let nextItemAction: @MainActor () -> Bool
+    private let playbackIntentHandler: (@MainActor (Bool) -> Void)?
 
     init(
         appStateID: UUID,
@@ -41,13 +42,15 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         isLooping: Bool,
         range: MediaPlaybackRange? = nil,
         previousItemAction: @escaping @MainActor () -> Bool = { false },
-        nextItemAction: @escaping @MainActor () -> Bool = { false }
+        nextItemAction: @escaping @MainActor () -> Bool = { false },
+        playbackIntentHandler: (@MainActor (Bool) -> Void)? = nil
     ) {
         self.appStateID = appStateID
         self.isLooping = isLooping
         self.mediaTitle = url.deletingPathExtension().lastPathComponent
         self.previousItemAction = previousItemAction
         self.nextItemAction = nextItemAction
+        self.playbackIntentHandler = playbackIntentHandler
         engine.attach(playerNode)
         observers.append(
             NotificationCenter.default.addObserver(
@@ -72,6 +75,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     }
 
     func play() {
+        playbackIntentHandler?(true)
         guard audioFile != nil, segmentFrames > 0 else { return }
         MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
         if duration > 0, currentTime >= duration - 0.05 {
@@ -91,6 +95,12 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     }
 
     func pause() {
+        playbackIntentHandler?(false)
+        stopOutput()
+    }
+
+    /// 视图卸载或自然播完时停输出，不改写用户的播放/暂停意图。
+    func stopOutput() {
         playerNode.pause()
         isPlaying = false
         refreshCurrentTime()
@@ -240,7 +250,7 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             schedule(from: 0, play: true)
             return
         }
-        pause()
+        stopOutput()
         currentTime = duration
         NotificationCenter.default.post(
             name: .mediaPlaybackDidFinish,

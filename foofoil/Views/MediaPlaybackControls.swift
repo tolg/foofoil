@@ -65,6 +65,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
     private var mediaTitle: String
     private let previousItemAction: @MainActor () -> Bool
     private let nextItemAction: @MainActor () -> Bool
+    private let playbackIntentHandler: (@MainActor (Bool) -> Void)?
 
     init(
         appStateID: UUID,
@@ -72,13 +73,15 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
         isLooping: Bool,
         range: MediaPlaybackRange? = nil,
         previousItemAction: @escaping @MainActor () -> Bool = { false },
-        nextItemAction: @escaping @MainActor () -> Bool = { false }
+        nextItemAction: @escaping @MainActor () -> Bool = { false },
+        playbackIntentHandler: (@MainActor (Bool) -> Void)? = nil
     ) {
         self.appStateID = appStateID
         self.isLooping = isLooping
         self.mediaTitle = url.deletingPathExtension().lastPathComponent
         self.previousItemAction = previousItemAction
         self.nextItemAction = nextItemAction
+        self.playbackIntentHandler = playbackIntentHandler
         self.player = AVPlayer(url: url)
         apply(range)
         loadFileDuration()
@@ -117,7 +120,12 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
         observers.forEach(NotificationCenter.default.removeObserver)
     }
 
+    func activateRemoteCommands() {
+        MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
+    }
+
     func play() {
+        playbackIntentHandler?(true)
         MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
         // 已播到结尾时再次播放从头开始。
         if duration > 0, currentTime >= duration - 0.05 {
@@ -139,6 +147,12 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
     }
 
     func pause() {
+        playbackIntentHandler?(false)
+        stopOutput()
+    }
+
+    /// 视图卸载或自然播完时停输出，不改写用户的播放/暂停意图。
+    func stopOutput() {
         player.pause()
         isPlaying = false
         MediaRemoteCommandCoordinator.shared.update(self)
@@ -204,7 +218,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
                     self.isPlaying = true
                     MediaRemoteCommandCoordinator.shared.update(self)
                 } else if thenPlay == false {
-                    self.pause()
+                    self.stopOutput()
                 }
                 self.isHandlingEnd = false
             }
@@ -259,8 +273,8 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
         return String(format: "%d:%02d", minutes, remainder)
     }
 
-    /// 同一窗口内换片时替换播放内容并自动开始播放。同一文件的 CUE 曲目只切换区间。
-    func load(url: URL, range: MediaPlaybackRange? = nil) {
+    /// 同一窗口内换片时替换播放内容。`autoplay` 沿用切歌前的播放/暂停意图。
+    func load(url: URL, range: MediaPlaybackRange? = nil, autoplay: Bool = true) {
         mediaTitle = url.deletingPathExtension().lastPathComponent
         let currentURL = (player.currentItem?.asset as? AVURLAsset)?.url
         if currentURL != url {
@@ -271,7 +285,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
         }
         apply(range)
         MediaRemoteCommandCoordinator.shared.activate(self, title: mediaTitle)
-        seek(to: 0, thenPlay: true)
+        seek(to: 0, thenPlay: autoplay)
     }
 
     func apply(_ range: MediaPlaybackRange?) {
@@ -314,7 +328,7 @@ final class VideoPlayerController: ObservableObject, MediaTransportControlling {
         if isLooping {
             seek(to: 0, thenPlay: true)
         } else {
-            pause()
+            stopOutput()
             currentTime = duration
             NotificationCenter.default.post(
                 name: .mediaPlaybackDidFinish,

@@ -42,7 +42,14 @@ struct VideoModeView: View {
             url: url,
             isLooping: appState.shouldLoopCurrentItem,
             previousItemAction: { appState.activateMediaListItem(delta: -1) },
-            nextItemAction: { appState.activateMediaListItem(delta: 1) }
+            nextItemAction: { appState.activateMediaListItem(delta: 1) },
+            playbackIntentHandler: { playing in
+                if playing {
+                    appState.noteUserStartedMediaPlayback()
+                } else {
+                    appState.noteUserPausedMediaPlayback()
+                }
+            }
         ))
     }
 
@@ -73,17 +80,20 @@ struct VideoModeView: View {
         .padding(shouldHideBorder ? 0 : 8)
         .onAppear {
             controller.isLooping = appState.shouldLoopCurrentItem
-            controller.play()
+            controller.activateRemoteCommands()
+            if appState.resumesMediaPlaybackOnActivation {
+                controller.play()
+            }
         }
         .onDisappear {
-            controller.pause()
+            controller.stopOutput()
             MediaRemoteCommandCoordinator.shared.deactivate(controller)
             appState.isMediaPlaying = false
         }
         // 播放状态桥接到 appState，导航面板据此驱动“正在播放”图标的动效。
         .onReceive(controller.$isPlaying) { appState.isMediaPlaying = $0 }
         .onChange(of: url) {
-            controller.load(url: url)
+            controller.load(url: url, autoplay: appState.resumesMediaPlaybackOnActivation)
         }
         .onChange(of: appState.shouldLoopCurrentItem) {
             controller.isLooping = appState.shouldLoopCurrentItem

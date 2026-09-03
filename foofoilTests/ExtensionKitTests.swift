@@ -62,6 +62,32 @@ struct ExtensionKitTests {
         #expect(state.navigatorContributions.first?.id == AppState.fileListNavigatorID)
     }
 
+    @Test func mediaTrackActivationPreservesUserPlaybackIntent() {
+        let state = AppState()
+        #expect(state.resumesMediaPlaybackOnActivation)
+
+        let session = ContentSession(
+            extensionID: nil,
+            providerID: "audio.hifi",
+            request: .singleFile(.init(url: URL(fileURLWithPath: "/tmp/one.dsf"))),
+            presentation: .text(titleKey: "Hi-Fi", body: "one.dsf"),
+            mediaPlayback: .init(state: .paused, position: 0, duration: 10, isSeekable: true)
+        )
+        let controller = ExtensionAudioPlaybackController(appState: state, session: session)
+
+        controller.pause()
+        #expect(state.resumesMediaPlaybackOnActivation == false)
+        state.isMediaPlaying = false
+        controller.stopOutput()
+        #expect(state.resumesMediaPlaybackOnActivation == false)
+
+        controller.play()
+        #expect(state.resumesMediaPlaybackOnActivation)
+        state.isMediaPlaying = false
+        controller.stopOutput()
+        #expect(state.resumesMediaPlaybackOnActivation)
+    }
+
     @Test func builtInAudioListActionsWinWhileAnExtensionTrackIsActive() {
         let state = AppState()
         let contribution = NavigatorContribution(

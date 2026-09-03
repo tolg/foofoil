@@ -299,6 +299,17 @@ public class AppState: NSObject, ObservableObject, Identifiable {
     /// 当前音视频是否正在播放；由媒体视图从播放控制器桥接，供导航面板显示“正在播放”图标状态。
     @Published public var isMediaPlaying = false
 
+    /// 切歌时是否自动播放。只由用户点播放/暂停改写；视图卸载和自然播完不得改写，否则暂停切歌会被 onAppear 强制起播。
+    var resumesMediaPlaybackOnActivation = true
+
+    func noteUserStartedMediaPlayback() {
+        resumesMediaPlaybackOnActivation = true
+    }
+
+    func noteUserPausedMediaPlayback() {
+        resumesMediaPlaybackOnActivation = false
+    }
+
     /// 视频/音频播放模式；仅媒体模式生效，默认顺序循环。
     @Published public var mediaPlaybackMode: MediaPlaybackMode {
         didSet {
