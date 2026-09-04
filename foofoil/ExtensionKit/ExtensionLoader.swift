@@ -201,9 +201,9 @@ final class ExtensionLoader {
 final class InProcessExtensionInterface: @unchecked Sendable {
     typealias CreateFunction = @convention(c) (UInt32) -> UnsafePointer<FoofoilExtensionInterfaceV1>?
 
-    private let imageHandle: UnsafeMutableRawPointer
+    nonisolated(unsafe) private let imageHandle: UnsafeMutableRawPointer
     private let callLock = NSLock()
-    let interface: UnsafePointer<FoofoilExtensionInterfaceV1>
+    nonisolated(unsafe) let interface: UnsafePointer<FoofoilExtensionInterfaceV1>
 
     init(executableURL: URL, negotiatedAPI: UInt32) throws {
         guard let imageHandle = dlopen(executableURL.path, RTLD_NOW | RTLD_LOCAL) else {
@@ -213,9 +213,12 @@ final class InProcessExtensionInterface: @unchecked Sendable {
             throw ExtensionLoaderError.missingEntryPoint
         }
         let create = unsafeBitCast(symbol, to: CreateFunction.self)
+        let requiredPrefixSize = MemoryLayout<FoofoilExtensionInterfaceV1>.offset(
+            of: \FoofoilExtensionInterfaceV1.perform_application_command
+        ) ?? MemoryLayout<FoofoilExtensionInterfaceV1>.size
         guard let interface = create(negotiatedAPI),
               interface.pointee.api_version == negotiatedAPI,
-              interface.pointee.struct_size >= MemoryLayout<FoofoilExtensionInterfaceV1>.size,
+              interface.pointee.struct_size >= requiredPrefixSize,
               interface.pointee.create_session != nil,
               interface.pointee.release_bytes != nil else {
             throw ExtensionLoaderError.invalidInterface
@@ -240,10 +243,24 @@ final class InProcessExtensionInterface: @unchecked Sendable {
         return try call(performCommand, input: JSONEncoder().encode(message))
     }
 
-    nonisolated private func call(
+    nonisolated func performApplicationCommand(
+        _ request: AudioDeviceServiceRequest
+    ) throws -> AudioDeviceServiceSnapshot {
+        let fieldOffset = MemoryLayout<FoofoilExtensionInterfaceV1>.offset(
+            of: \FoofoilExtensionInterfaceV1.perform_application_command
+        ) ?? MemoryLayout<FoofoilExtensionInterfaceV1>.size
+        let fieldEnd = fieldOffset + MemoryLayout<UnsafeRawPointer?>.size
+        guard interface.pointee.struct_size >= fieldEnd,
+              let command = interface.pointee.perform_application_command else {
+            throw ExtensionLoaderError.invalidInterface
+        }
+        return try call(command, input: JSONEncoder().encode(request))
+    }
+
+    nonisolated private func call<Response: Decodable>(
         _ function: ((UnsafeMutableRawPointer?, UnsafePointer<UInt8>?, Int, UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?, UnsafeMutablePointer<Int>?) -> Int32)?,
         input: Data
-    ) throws -> ContentSession {
+    ) throws -> Response {
         guard let function else { throw ExtensionLoaderError.invalidInterface }
         // ABI v1 不要求插件可重入；宿主按 runtime 串行调用，避免多窗口并发破坏插件状态。
         callLock.lock()
@@ -262,7 +279,7 @@ final class InProcessExtensionInterface: @unchecked Sendable {
         guard status == 0 else { throw ExtensionLoaderError.runtimeCallFailed(status) }
         guard let output, outputLength > 0 else { throw ExtensionLoaderError.invalidRuntimeResponse }
         defer { interface.pointee.release_bytes?(interface.pointee.context, output, outputLength) }
-        return try JSONDecoder().decode(ContentSession.self, from: Data(bytes: output, count: outputLength))
+        return try JSONDecoder().decode(Response.self, from: Data(bytes: output, count: outputLength))
     }
 }
 

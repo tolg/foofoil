@@ -8,6 +8,7 @@
 import SwiftUI
 import Combine
 import AppKit
+import FoofoilExtensionKit
 
 /// 音频模式：封面按图片方式铺为背景，叠加曲目信息，播放控件与视频一致。
 struct AudioModeView: View {
@@ -46,6 +47,9 @@ struct AudioModeView: View {
             info: info,
             shouldHideBorder: shouldHideBorder
         )
+        .overlay(alignment: .topTrailing) {
+            outputDeviceOverlay
+        }
         .onAppear {
             controller.isLooping = appState.shouldLoopCurrentItem
             if appState.resumesMediaPlaybackOnActivation {
@@ -53,7 +57,7 @@ struct AudioModeView: View {
             }
         }
         .onDisappear {
-            controller.stopOutput()
+            controller.closeOutput()
             MediaRemoteCommandCoordinator.shared.deactivate(controller)
             appState.isMediaPlaying = false
         }
@@ -68,6 +72,71 @@ struct AudioModeView: View {
         .task(id: presentationID) {
             info = await loadTrackInfo()
         }
+    }
+
+    @ViewBuilder
+    private var outputDeviceOverlay: some View {
+        if let snapshot = controller.deviceServiceSnapshot {
+            VStack(alignment: .trailing, spacing: 6) {
+                Menu {
+                    Button {
+                        controller.selectSystemDefaultOutput()
+                    } label: {
+                        if snapshot.pcmRouteMode == .systemDefault {
+                            Label(NSLocalizedString("System Default Output", comment: ""), systemImage: "checkmark")
+                        } else {
+                            Text(NSLocalizedString("System Default Output", comment: ""))
+                        }
+                    }
+                    Divider()
+                    ForEach(snapshot.devices) { device in
+                        Button {
+                            controller.selectExclusiveOutput(deviceID: device.id)
+                        } label: {
+                            if snapshot.pcmRouteMode == .exclusiveDevice,
+                               snapshot.selectedPCMDeviceID == device.id {
+                                Label(device.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(device.displayName)
+                            }
+                        }
+                        .disabled(!device.isConnected || !device.supportsExclusiveMode)
+                    }
+                } label: {
+                    Label(pcmOutputStatus(snapshot), systemImage: "hifispeaker.2")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+
+                if let failure = controller.deviceFailureMessage, !failure.isEmpty {
+                    Label(failure, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
+            .padding(14)
+        }
+    }
+
+    private func pcmOutputStatus(_ snapshot: AudioDeviceServiceSnapshot) -> String {
+        if snapshot.pcmRouteMode == .systemDefault {
+            let name = snapshot.devices.first(where: \.isSystemDefault)?.displayName
+                ?? NSLocalizedString("System Default Output", comment: "")
+            return "\(name) · \(NSLocalizedString("System Default Output", comment: ""))"
+        }
+        let name = snapshot.selectedPCMDeviceID.flatMap { selected in
+            snapshot.devices.first(where: { $0.id == selected })?.displayName
+        } ?? NSLocalizedString("Hi-Fi Output Device", comment: "")
+        guard let activeRate = snapshot.activeSampleRate else {
+            return "\(name) · \(NSLocalizedString("Exclusive PCM", comment: ""))"
+        }
+        let rate = AudioMetadataLoader.formatSampleRate(activeRate)
+        if snapshot.sampleRateMatched == false, let sourceRate = snapshot.sourceSampleRate {
+            return "\(name) · PCM \(AudioMetadataLoader.formatSampleRate(sourceRate))→\(rate)"
+        }
+        return "\(name) · \(NSLocalizedString("Exclusive PCM", comment: "")) · \(rate)"
     }
 
     private var presentationID: String {

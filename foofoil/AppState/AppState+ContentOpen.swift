@@ -505,6 +505,7 @@ extension AppState {
                 defer { self.isLoading = false }
                 do {
                     await closeTask?.value
+                    await ExtensionHost.shared.releaseHiFiPCMOutputAndWait()
                     guard self.currentMediaRouteGeneration == routeGeneration else { return }
                     let outcome = try await (urls.count == 1
                         ? ExtensionHost.shared.open(url: url)
@@ -573,6 +574,7 @@ extension AppState {
                 guard let self else { return }
                 do {
                     await closeTask?.value
+                    await ExtensionHost.shared.releaseHiFiPCMOutputAndWait()
                     guard self.currentMediaRouteGeneration == routeGeneration,
                           self.fileList?.currentID == itemID else { return }
                     let outcome = try await ExtensionHost.shared.open(url: url)

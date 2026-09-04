@@ -3249,6 +3249,20 @@
         "zh-Hans": {"stringUnit": {"state": "translated", "value": "输出设备"}}
       }
     },
+    "System Default Output": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Follow System Default"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "跟随系统默认"}}
+      }
+    },
+    "Exclusive PCM": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {"stringUnit": {"state": "translated", "value": "Exclusive PCM"}},
+        "zh-Hans": {"stringUnit": {"state": "translated", "value": "独占 PCM"}}
+      }
+    },
     "Zoom Out Window": {
       "extractionState": "manual",
       "localizations": {

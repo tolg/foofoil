@@ -227,8 +227,30 @@ struct ExtensionAudioModeView: View {
     private var statusOverlay: some View {
         if let session = appState.extensionSession {
             VStack(alignment: .trailing, spacing: 6) {
-                if let status = session.audioDeviceSelection?.statusDescription, !status.isEmpty {
-                    Label(status, systemImage: "hifispeaker.2")
+                if let selection = session.audioDeviceSelection,
+                   let status = selection.statusDescription,
+                   !status.isEmpty {
+                    Menu {
+                        ForEach(selection.devices) { device in
+                            Button {
+                                appState.performExtensionCommand("hifi.device.\(device.id)")
+                            } label: {
+                                if selection.selectedDeviceID == device.id {
+                                    Label(device.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(device.displayName)
+                                }
+                            }
+                            .disabled(
+                                !device.isConnected
+                                    || !isDSDDeviceEnabled(device.id, in: session)
+                            )
+                        }
+                    } label: {
+                        Label(status, systemImage: "hifispeaker.2")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
                 if session.mediaPlayback?.state == .failed {
                     Label(
@@ -246,6 +268,10 @@ struct ExtensionAudioModeView: View {
             .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
             .padding(14)
         }
+    }
+
+    private func isDSDDeviceEnabled(_ deviceID: String, in session: ContentSession) -> Bool {
+        session.commands.first(where: { $0.id == "hifi.device.\(deviceID)" })?.isEnabled == true
     }
 
     private var presentationID: String {

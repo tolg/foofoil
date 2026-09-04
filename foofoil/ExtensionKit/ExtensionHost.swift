@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 
 final class ExtensionHost: ExtensionRuntimeHost {
     static let shared = ExtensionHost()
+    static let hiFiExtensionID = "app.foofoil.extension.hifi"
 
     let resolver: ProviderResolver
     let stateStore: ExtensionStateStore
@@ -45,6 +46,29 @@ final class ExtensionHost: ExtensionRuntimeHost {
 
     func preferredProvider(for domain: String) -> String? {
         preferredProvidersByDomain[domain]
+    }
+
+    var isHiFiDeviceServiceAvailable: Bool {
+        inProcessRuntimes[Self.hiFiExtensionID] != nil
+    }
+
+    func performHiFiDeviceCommand(
+        _ request: AudioDeviceServiceRequest
+    ) async throws -> AudioDeviceServiceSnapshot {
+        guard let runtime = inProcessRuntimes[Self.hiFiExtensionID] else {
+            throw ContentProviderError.unavailable(Self.hiFiExtensionID)
+        }
+        return try await Task.detached(priority: .userInitiated) {
+            try runtime.performApplicationCommand(request)
+        }.value
+    }
+
+    func releaseHiFiPCMOutputAndWait() async {
+        guard isHiFiDeviceServiceAvailable else { return }
+        _ = try? await performHiFiDeviceCommand(.init(
+            command: .releaseAllPCM,
+            clientID: UUID()
+        ))
     }
 
     func canOpen(url: URL) -> Bool {
