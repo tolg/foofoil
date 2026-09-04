@@ -143,7 +143,7 @@ extension AppState {
     func appendToFileList(urls: [URL]) -> [URL] {
         guard let kind = listableKind else { return urls }
         if kind == .audio {
-            let cueURLs = uniqueExistingURLs(urls).filter(FileListGrouper.isCueFile)
+            let cueURLs = uniqueExistingURLs(urls).filter { FileListGrouper.isCueFile($0) }
             if !cueURLs.isEmpty {
                 appendCueSheets(urls: cueURLs)
                 return urls.filter { url in
@@ -169,10 +169,14 @@ extension AppState {
         }
 
         let existingPaths = Set(list.items.map { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().standardizedFileURL.path })
+        var appendedSACDURLs: [URL] = []
         for url in incoming {
             let key = url.resolvingSymlinksInPath().standardizedFileURL.path
             if existingPaths.contains(key) { continue }
             list.items.append(makeFileListItem(url: url))
+            if kind == .audio, FileListGrouper.isSACDISOFile(url) {
+                appendedSACDURLs.append(url)
+            }
         }
 
         guard list.items.count >= 2 else { return leftover }
@@ -183,7 +187,40 @@ extension AppState {
         id = previousID
         syncFileListNavigator()
         saveState()
+        expandAppendedSACDContainers(urls: appendedSACDURLs)
         return leftover
+    }
+
+    /// 已有列表接收 SACD ISO 后，用一个不启动播放的临时 Hi-Fi 会话解析曲目，再原位展开为子目录。
+    func expandAppendedSACDContainers(urls: [URL]) {
+        for url in urls {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let outcome = try await ExtensionHost.shared.open(url: url)
+                    let session = outcome.session
+                    let queue = session.providerID == "audio.hifi" ? session.playbackQueue : nil
+                    let bookmark = session.request.resources.first?.securityScopedBookmark
+                        ?? Self.makeSecurityScopedBookmark(for: url)
+                    await ExtensionHost.shared.closeSessionAndWait(session)
+                    guard let queue, queue.items.count >= 2,
+                          self.fileList?.items.contains(where: { item in
+                              item.cue == nil
+                                  && item.url.resolvingSymlinksInPath().standardizedFileURL.path
+                                      == url.resolvingSymlinksInPath().standardizedFileURL.path
+                          }) == true else { return }
+                    self.installContainerAudioList(
+                        url: url,
+                        queue: queue,
+                        bookmark: bookmark,
+                        selectsContainerTrack: false
+                    )
+                    self.saveState()
+                } catch {
+                    NSLog("Failed to expand appended SACD ISO: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     /// 已显示可列表内容时，拖放只接收当前类型；混入的其它文件直接忽略。批次含 CUE 时只收 CUE。
@@ -410,12 +447,61 @@ extension AppState {
             }
             removeFileListItems(ids: ids)
         case .move:
-            moveFileListItems(
-                ids: action.itemIDs,
-                destinationID: action.destinationItemID,
-                position: action.movePosition
-            )
+            if let list = fileList,
+               action.itemIDs.allSatisfy({ id in list.sections.contains(where: { $0.id == id }) }) {
+                moveFileListSections(
+                    ids: action.itemIDs,
+                    destinationID: action.destinationItemID,
+                    position: action.movePosition
+                )
+            } else {
+                moveFileListItems(
+                    ids: action.itemIDs,
+                    destinationID: action.destinationItemID,
+                    position: action.movePosition
+                )
+            }
         }
+    }
+
+    /// 只重排顶层容器；每个 CUE / SACD 内部曲目保持原始顺序，并同步改变连续播放顺序。
+    func moveFileListSections(
+        ids: [String],
+        destinationID: String?,
+        position: NavigatorMovePosition?
+    ) {
+        guard var list = fileList, list.sections.count >= 2, let position else { return }
+        let movingIDs = Set(ids)
+        let movingSections = list.sections.filter { movingIDs.contains($0.id) }
+        guard movingSections.count == movingIDs.count else { return }
+
+        var remainingSections = list.sections.filter { !movingIDs.contains($0.id) }
+        let insertionIndex: Int
+        switch position {
+        case .end:
+            guard destinationID == nil else { return }
+            insertionIndex = remainingSections.endIndex
+        case .before, .after:
+            guard let destinationID,
+                  let destinationIndex = remainingSections.firstIndex(where: { $0.id == destinationID }) else { return }
+            insertionIndex = position == .before ? destinationIndex : remainingSections.index(after: destinationIndex)
+        }
+        remainingSections.insert(contentsOf: movingSections, at: insertionIndex)
+        guard remainingSections != list.sections else { return }
+
+        list.sections = remainingSections
+        let sectionIDs = Set(remainingSections.map(\.id))
+        let groupedItems = remainingSections.flatMap { section in
+            list.items.filter { $0.cue?.sectionID == section.id }
+        }
+        let ungroupedItems = list.items.filter { item in
+            guard let sectionID = item.cue?.sectionID else { return true }
+            return !sectionIDs.contains(sectionID)
+        }
+        list.items = groupedItems + ungroupedItems
+        fileList = list
+        syncFileListNavigator()
+        saveState()
     }
 
     /// 普通文件列表按稳定 ID 重排；CUE 曲目必须保持谱表定义的时间顺序。
@@ -494,7 +580,10 @@ extension AppState {
         if let item = fileList?.currentItem {
             return resolvedURL(for: item) ?? item.url
         }
-        if isExternalMediaDocument {
+        if isAudioDocument, let url = currentAudioPresentationURL {
+            return url
+        }
+        if isVideoDocument {
             return imageURL
         }
         if let fingerprint = sourceFingerprint, fingerprint.hasPrefix("file:") {
@@ -522,7 +611,7 @@ extension AppState {
         }
 
         fileListRevision &+= 1
-        let useOutline = list.sections.count >= 2
+        let useOutline = !list.sections.isEmpty && list.soleContainerFormat == nil
         if useOutline {
             expandedNavigatorItemIDs.formUnion(list.sections.map(\.id))
         }
@@ -535,6 +624,7 @@ extension AppState {
                         id: section.id,
                         title: section.title,
                         symbolName: "opticaldisc",
+                        badge: NSLocalizedString(section.resolvedFormat.badgeLocalizationKey, comment: ""),
                         isEnabled: true,
                         isCurrent: false
                     )
@@ -550,6 +640,7 @@ extension AppState {
         } else {
             items = list.items.map { makeNavigatorItem(for: $0, in: list, parentID: nil) }
         }
+        let canMove = list.isReorderable || list.sections.count >= 2
         builtInNavigatorContributions = [
             NavigatorContribution(
                 id: Self.fileListNavigatorID,
@@ -558,7 +649,7 @@ extension AppState {
                 selectionMode: .single,
                 items: items,
                 selectedItemIDs: [list.currentID],
-                allowedActions: list.isReorderable ? [.activate, .remove, .move] : [.activate, .remove],
+                allowedActions: canMove ? [.activate, .remove, .move] : [.activate, .remove],
                 revision: fileListRevision
             )
         ]
@@ -716,7 +807,12 @@ extension AppState {
         return true
     }
 
-    func installContainerAudioList(url: URL, queue: MediaPlaybackQueueSnapshot, bookmark: Data?) {
+    func installContainerAudioList(
+        url: URL,
+        queue: MediaPlaybackQueueSnapshot,
+        bookmark: Data?,
+        selectsContainerTrack: Bool = true
+    ) {
         guard queue.items.count >= 2 else { return }
         let sectionID = UUID().uuidString.lowercased()
         let album = FileListState.normalizedTitle(queue.title)
@@ -725,7 +821,8 @@ extension AppState {
             id: sectionID,
             title: album,
             cueSheetPath: url.path,
-            cueSheetBookmark: bookmark
+            cueSheetBookmark: bookmark,
+            format: .sacd
         )
         var start: Int64 = 0
         let items: [FileListItem] = queue.items.enumerated().map { index, item in
@@ -749,14 +846,30 @@ extension AppState {
                 cue: cue
             )
         }
-        fileList = FileListState(
-            kind: .audio,
-            items: items,
-            currentID: queue.currentItemID.flatMap { id in items.contains(where: { $0.id == id }) ? id : nil }
-                ?? items[0].id,
-            title: album,
-            sections: [section]
-        )
+        let currentID = queue.currentItemID.flatMap { id in items.contains(where: { $0.id == id }) ? id : nil }
+            ?? items[0].id
+        if var list = fileList,
+           list.kind == .audio,
+           let containerIndex = list.items.firstIndex(where: {
+               $0.cue == nil && $0.url.resolvingSymlinksInPath().standardizedFileURL.path
+                   == url.resolvingSymlinksInPath().standardizedFileURL.path
+           }) {
+            // 混合列表首次打开 ISO 时，将占位文件原位展开为 SACD 子目录并保留其它音频。
+            list.items.replaceSubrange(containerIndex...containerIndex, with: items)
+            list.sections.append(section)
+            if selectsContainerTrack {
+                list.currentID = currentID
+            }
+            fileList = list
+        } else {
+            fileList = FileListState(
+                kind: .audio,
+                items: items,
+                currentID: currentID,
+                title: album,
+                sections: [section]
+            )
+        }
         mediaPlaybackMode = .sequentialLoop
         syncFileListNavigator()
     }
@@ -840,7 +953,8 @@ extension AppState {
             id: UUID().uuidString.lowercased(),
             title: sheet.displayTitle,
             cueSheetPath: sheet.url.path,
-            cueSheetBookmark: bookmark
+            cueSheetBookmark: bookmark,
+            format: .cue
         )
     }
 

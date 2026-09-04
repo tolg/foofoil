@@ -104,18 +104,44 @@ public nonisolated struct FileListItem: Codable, Equatable, Identifiable, Sendab
     }
 }
 
-/// 侧边栏中一个 CUE 专辑分区。
+public nonisolated enum FileListContainerFormat: String, Codable, Equatable, Sendable {
+    case cue
+    case sacd
+
+    var badgeLocalizationKey: String {
+        switch self {
+        case .cue: "Navigator CUE Badge"
+        case .sacd: "Navigator SACD Badge"
+        }
+    }
+}
+
+/// 侧边栏中一个 CUE 或 SACD 专辑分区。
 public nonisolated struct FileListSection: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public var title: String
     public var cueSheetPath: String?
     public var cueSheetBookmark: Data?
+    public var format: FileListContainerFormat?
 
-    public init(id: String, title: String, cueSheetPath: String? = nil, cueSheetBookmark: Data? = nil) {
+    public init(
+        id: String,
+        title: String,
+        cueSheetPath: String? = nil,
+        cueSheetBookmark: Data? = nil,
+        format: FileListContainerFormat? = nil
+    ) {
         self.id = id
         self.title = title
         self.cueSheetPath = cueSheetPath
         self.cueSheetBookmark = cueSheetBookmark
+        self.format = format
+    }
+
+    /// 旧版持久化数据没有格式字段，可由容器扩展名无损恢复。
+    public var resolvedFormat: FileListContainerFormat {
+        if let format { return format }
+        return URL(fileURLWithPath: cueSheetPath ?? "").pathExtension.lowercased() == "iso" ? .sacd : .cue
     }
 }
 
@@ -250,7 +276,7 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
     public var isSlideshowEnabled: Bool
     /// 轮播间隔秒数快照；实际计时以 SettingsStore 全局偏好为准。
     public var slideshowInterval: TimeInterval
-    /// 多个 CUE 时每个 CUE 一个分区；单 CUE 或普通目录为空或一项。
+    /// CUE / SACD 容器分区；纯单容器平铺，多个容器或混合文件时作为层级目录。
     public var sections: [FileListSection]
 
     public var isPresentable: Bool { items.count >= 2 }
@@ -258,6 +284,14 @@ public nonisolated struct FileListState: Codable, Equatable, Sendable {
     /// CUE 曲目顺序由谱表时间轴决定，不能像普通文件列表一样重排。
     public var isCueBased: Bool {
         !sections.isEmpty || items.contains(where: { $0.cue != nil })
+    }
+
+    /// 纯单 CUE / SACD 列表在标题上显示格式；混合列表改由子目录显示。
+    public var soleContainerFormat: FileListContainerFormat? {
+        guard sections.count == 1, let section = sections.first,
+              !items.isEmpty,
+              items.allSatisfy({ $0.cue?.sectionID == section.id }) else { return nil }
+        return section.resolvedFormat
     }
 
     public var isReorderable: Bool { isPresentable && !isCueBased }

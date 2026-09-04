@@ -2827,6 +2827,23 @@
         }
       }
     },
+    "Navigator SACD Badge": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SACD"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SACD"
+          }
+        }
+      }
+    },
     "Navigator Empty": {
       "localizations": {
         "en": {"stringUnit": {"state": "translated", "value": "No Navigation Items"}},

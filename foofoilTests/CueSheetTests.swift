@@ -236,6 +236,22 @@ struct CueSheetTests {
         #expect(state.navigatorContributions.first?.style == .outline)
         #expect(state.navigatorContributions.first?.items.map(\.title) == ["First Album", "Intro", "Song", "Second Album", "Only"])
         #expect(state.navigatorContributions.first?.items.filter { $0.parentID == nil }.map(\.title) == ["First Album", "Second Album"])
+        #expect(state.navigatorContributions.first?.allowedActions.contains(.move) == true)
+
+        let firstSectionID = try #require(state.fileList?.sections.first?.id)
+        let secondSectionID = try #require(state.fileList?.sections.last?.id)
+        state.performNavigatorAction(
+            NavigatorAction(
+                contributionID: AppState.fileListNavigatorID,
+                kind: .move,
+                itemIDs: [secondSectionID],
+                destinationItemID: firstSectionID,
+                movePosition: .before
+            )
+        )
+        #expect(state.fileList?.sections.map(\.title) == ["Second Album", "First Album"])
+        #expect(state.fileList?.items.map(\.displayName) == ["Only", "Intro", "Song"])
+        #expect(state.navigatorContributions.first?.items.map(\.title) == ["Second Album", "Only", "First Album", "Intro", "Song"])
     }
 
     @Test func blankMixedDropOpensCueAndIgnoresOtherTypes() throws {
@@ -263,6 +279,36 @@ struct CueSheetTests {
         #expect(state.originalImageName == "disc.wav")
         #expect(state.isAudioDocument)
         #expect(state.fileList?.currentItem?.displayName == "A")
+    }
+
+    @Test func singleCueBecomesLabeledSectionAfterAppendingAudio() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-cue-append-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let albumAudio = directory.appendingPathComponent("album.wav")
+        let extraAudio = directory.appendingPathComponent("extra.mp3")
+        let cue = directory.appendingPathComponent("album.cue")
+        try Data().write(to: albumAudio)
+        try Data().write(to: extraAudio)
+        try cueSheet(title: "Album", performer: "Artist", fileName: "album.wav", tracks: [
+            ("First", "00:00:00"),
+            ("Second", "01:00:00")
+        ]).write(to: cue, atomically: true, encoding: .utf8)
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        state.installCueSheets(urls: [cue], preservesIdentity: true)
+        #expect(state.fileList?.soleContainerFormat == .cue)
+        #expect(state.navigatorContributions.first?.style == .flat)
+
+        state.appendToFileList(urls: [extraAudio])
+
+        #expect(state.fileList?.soleContainerFormat == nil)
+        let contribution = try #require(state.navigatorContributions.first)
+        #expect(contribution.style == .outline)
+        #expect(contribution.items.map(\.title) == ["Album", "First", "Second", "extra.mp3"])
+        #expect(contribution.items.first?.badge == "CUE")
     }
 
     @Test func navigatorShowsCueSegmentDurationInsteadOfTrackNumber() throws {
@@ -419,6 +465,7 @@ struct CueSheetTests {
         #expect(state.fileList?.kind == .audio)
         #expect(state.fileList?.isCueBased == true)
         #expect(state.fileList?.isReorderable == false)
+        #expect(state.fileList?.soleContainerFormat == .sacd)
         #expect(state.fileList?.title == "Symphony No. 5")
         #expect(state.fileList?.items.map(\.displayName) == ["Allegro", "Andante"])
         #expect(state.fileList?.items.map(\.path) == [url.path, url.path])
@@ -432,6 +479,52 @@ struct CueSheetTests {
         #expect(contribution.items.map(\.subtitle) == ["Beethoven", "Beethoven"])
         #expect(contribution.items.map(\.badge) == ["1:00", "1:30"])
         #expect(!contribution.allowedActions.contains(.move))
+    }
+
+    @Test func sacdBecomesLabeledSectionWhenMixedWithAudioFiles() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-sacd-mixed-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let iso = directory.appendingPathComponent("album.iso")
+        let song = directory.appendingPathComponent("encore.mp3")
+        try Data("iso".utf8).write(to: iso)
+        try Data().write(to: song)
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        let isoItem = state.makeFileListItem(url: iso)
+        let songItem = state.makeFileListItem(url: song)
+        state.fileList = FileListState(
+            kind: .audio,
+            items: [isoItem, songItem],
+            currentID: songItem.id
+        )
+        state.installContainerAudioList(
+            url: iso,
+            queue: MediaPlaybackQueueSnapshot(
+                items: [
+                    MediaPlaybackQueueItem(id: "track:1", title: "First", duration: 60),
+                    MediaPlaybackQueueItem(id: "track:2", title: "Second", duration: 90)
+                ],
+                currentItemID: "track:1",
+                title: "Album"
+            ),
+            bookmark: nil,
+            selectsContainerTrack: false
+        )
+
+        let list = try #require(state.fileList)
+        #expect(list.items.map(\.id) == ["track:1", "track:2", songItem.id])
+        #expect(list.sections.count == 1)
+        #expect(list.sections[0].resolvedFormat == .sacd)
+        #expect(list.soleContainerFormat == nil)
+        #expect(list.currentID == songItem.id)
+        let contribution = try #require(state.navigatorContributions.first)
+        #expect(contribution.style == .outline)
+        #expect(contribution.items.map(\.title) == ["Album", "First", "Second", "encore.mp3"])
+        #expect(contribution.items.first?.badge == "SACD")
+        #expect(contribution.items.last?.parentID == nil)
     }
 
     @Test func sniffMatcherAcceptsSACDMagicAndIgnoresOrdinaryISO() throws {

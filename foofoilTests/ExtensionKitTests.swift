@@ -65,6 +65,30 @@ struct ExtensionKitTests {
         #expect(state.navigatorContributions.first?.id == AppState.fileListNavigatorID)
     }
 
+    @Test func appendingToSingleHiFiFileKeepsThePlayingFileFirst() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let current = directory.appendingPathComponent("playing.dsf")
+        let incoming = directory.appendingPathComponent("next.dff")
+        try Data().write(to: current)
+        try Data().write(to: incoming)
+
+        let state = AppState()
+        state.extensionSession = ContentSession(
+            extensionID: nil,
+            providerID: "audio.hifi",
+            request: .singleFile(.init(url: current)),
+            presentation: .text(titleKey: "Hi-Fi", body: current.lastPathComponent),
+            mediaPlayback: .init(state: .playing, position: 1, duration: 10, isSeekable: true)
+        )
+        state.originalImageName = current.lastPathComponent
+        state.sourceFingerprint = AppState.localSourceFingerprint(for: current)
+
+        #expect(state.appendToFileList(urls: [incoming]).isEmpty)
+        #expect(state.fileList?.items.map(\.url) == [current, incoming])
+        #expect(state.fileList?.currentItem?.url == current)
+    }
+
     @Test func mediaTrackActivationPreservesUserPlaybackIntent() {
         let state = AppState()
         #expect(state.resumesMediaPlaybackOnActivation)

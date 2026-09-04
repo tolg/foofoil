@@ -120,7 +120,7 @@ struct NavigatorPanelView: View {
     }
 
     /// 单一贡献时的固定小标题：显示列表自定义/专辑标题（不附数量），过长时悬停滚动，
-    /// CUE 列表在尾部追加格式标记；高度与选择器一致，贡献数量变化时顶部区域不跳动。
+    /// 纯单 CUE / SACD 列表在尾部追加格式标记；高度与选择器一致，贡献数量变化时顶部区域不跳动。
     private func contributionTitleHeader(_ contribution: NavigatorContribution) -> some View {
         HStack(spacing: 6) {
             NavigatorScrollingTitle(
@@ -128,8 +128,8 @@ struct NavigatorPanelView: View {
                 font: .caption.weight(.semibold),
                 isRowHovering: isHoveringNavigatorHeader
             )
-            if showsCUEBadge(for: contribution) {
-                Text(NSLocalizedString("Navigator CUE Badge", comment: ""))
+            if let badge = containerHeaderBadge(for: contribution) {
+                Text(badge)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5)
@@ -229,9 +229,11 @@ struct NavigatorPanelView: View {
         return localizedTitle(for: contribution)
     }
 
-    /// CUE 标记放在尾部独立徽标中，标题过长被截断时仍然可见。
-    private func showsCUEBadge(for contribution: NavigatorContribution) -> Bool {
-        contribution.id == AppState.fileListNavigatorID && appState.fileList?.isCueBased == true
+    /// 只有纯单 CUE / SACD 列表在标题显示格式；混合列表的格式跟随容器子目录。
+    private func containerHeaderBadge(for contribution: NavigatorContribution) -> String? {
+        guard contribution.id == AppState.fileListNavigatorID,
+              let format = appState.fileList?.soleContainerFormat else { return nil }
+        return NSLocalizedString(format.badgeLocalizationKey, comment: "")
     }
 
     /// CUE / SACD 曲目把 Track 号显示为左侧序号，标题本身用曲名。
@@ -396,7 +398,7 @@ struct NavigatorPanelView: View {
         }
     }
 
-    /// 只有扩展明确开放 move 的平面列表才能拖动；层级列表（包括 CUE）保持来源顺序。
+    /// 平面列表可拖动项目；层级播放列表只允许拖动顶层 CUE / SACD 子目录。
     @ViewBuilder
     private func reorderableRow<Content: View>(
         _ content: Content,
@@ -404,7 +406,7 @@ struct NavigatorPanelView: View {
         contribution: NavigatorContribution,
         hasThumbnail: Bool
     ) -> some View {
-        if contribution.style == .flat, contribution.allowedActions.contains(.move) {
+        if canReorder(row: row, in: contribution) {
             content
                 .onDrag {
                     draggedNavigatorContributionID = contribution.id
@@ -440,12 +442,23 @@ struct NavigatorPanelView: View {
         }
     }
 
+    private func canReorder(row: VisibleRow, in contribution: NavigatorContribution) -> Bool {
+        guard contribution.allowedActions.contains(.move) else { return false }
+        if contribution.style == .flat { return true }
+        return contribution.id == AppState.fileListNavigatorID
+            && row.depth == 0
+            && row.hasChildren
+            && appState.fileList?.sections.contains(where: { $0.id == row.item.id }) == true
+    }
+
     /// 列表项以下的剩余区域作为末尾投放区。
     private func navigatorEndDropDelegate(for contribution: NavigatorContribution) -> NavigatorMoveDropDelegate {
         NavigatorMoveDropDelegate(
             canDrop: {
-                contribution.style == .flat
-                    && contribution.allowedActions.contains(.move)
+                contribution.allowedActions.contains(.move)
+                    && (contribution.style == .flat || appState.fileList?.sections.contains(where: {
+                        $0.id == draggedNavigatorItemID
+                    }) == true)
                     && draggedNavigatorContributionID == contribution.id
                     && draggedNavigatorItemID != nil
             },
