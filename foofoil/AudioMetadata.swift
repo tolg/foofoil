@@ -133,7 +133,9 @@ nonisolated enum AudioMetadataLoader {
     }
 
     static func presentationSize(for info: AudioTrackInfo) -> NSSize {
-        if let artwork = info.artwork, let size = reliableImageSize(artwork) {
+        // 和图片模式保持一致：按点尺寸布局，与 SwiftUI `Image(nsImage:)` 绘制一致；
+        // 仅在 size 无效时退回像素尺寸，避免 DPI 异常把封面压成 0/1。
+        if let artwork = info.artwork, let size = layoutSize(artwork) {
             return size
         }
         return AudioTrackInfo.fallbackPresentationSize

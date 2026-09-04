@@ -99,7 +99,11 @@ extension AppState {
             if clearsFileList || imageURL == nil {
                 self.showBorder = false
             }
-            self.imageScale = 1.0
+            // 列表内切曲保留当前缩放，由窗口按新封面比例重算（与图片列表切图一致）；
+            // 新打开媒体才恢复默认缩放。
+            if clearsFileList {
+                self.imageScale = 1.0
+            }
             if clearsFileList {
                 // 新打开的媒体恢复默认顺序循环；列表内切项保留用户选择
                 self.mediaPlaybackMode = .sequentialLoop

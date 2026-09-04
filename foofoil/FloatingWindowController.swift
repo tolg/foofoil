@@ -365,7 +365,12 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
                     if self.appState.isExternalMediaDocument {
                         self.fetchMediaPresentationSize(for: url) { size in
                             guard self.appState.imageURL == url, let size else { return }
-                            self.applyMediaPresentationSize(size, animated: !isFirst)
+                            // 音乐列表内切曲与图片列表切图一致：保持上一首的显示面积，按新封面比例缩放。
+                            if !isFirst, self.shouldPreserveAudioListDisplayArea {
+                                self.applyImageListSuccessorLayout(imageSize: size, animated: true)
+                            } else {
+                                self.applyMediaPresentationSize(size, animated: !isFirst)
+                            }
                         }
                         return
                     }
@@ -1263,7 +1268,14 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
             && !appState.isPDFDocument
     }
 
-    /// 列表内切图：保持上一张的显示面积，并贴导航栏所在侧垂直居中。
+    /// 音乐列表内切曲与图片列表切图一致：保持上一首的显示面积，按新封面比例缩放。
+    private var shouldPreserveAudioListDisplayArea: Bool {
+        appState.fileList?.isPresentable == true
+            && appState.fileList?.kind == .audio
+            && appState.isAudioDocument
+    }
+
+    /// 列表内切图/切曲：保持上一张的显示面积，并贴导航栏所在侧垂直居中。
     private func applyImageListSuccessorLayout(imageSize: NSSize, animated: Bool) {
         guard let window = window, imageSize.width > 0, imageSize.height > 0 else {
             initializeImageLayout(imageSize: imageSize, animated: animated)
@@ -1738,7 +1750,10 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     /// 把已读取的媒体尺寸套到当前窗口：恢复历史时保留已保存大小，新打开则按初始规则适配。
+    /// 音乐列表内切曲（含 Hi-Fi 扩展切歌、同目录封面授权后补读）与图片列表切图一致，
+    /// 保持上一首的显示面积，按新封面比例缩放。
     private func applyMediaPresentationSize(_ size: NSSize, animated: Bool) {
+        let hadPreviousMediaSize = currentMediaSize != nil
         currentMediaSize = size
         guard !isLiveResizing else { return }
         if isRestoringFrame {
@@ -1747,6 +1762,10 @@ public class FloatingWindowController: NSWindowController, NSWindowDelegate {
         if pendingSavedFrameRestore {
             pendingSavedFrameRestore = false
             restoreSavedMediaFrameIfNeeded(contentSize: size)
+            return
+        }
+        if hadPreviousMediaSize, shouldPreserveAudioListDisplayArea {
+            applyImageListSuccessorLayout(imageSize: size, animated: animated)
             return
         }
         initializeImageLayout(imageSize: size, animated: animated)
