@@ -469,7 +469,8 @@ struct CueSheetTests {
         #expect(state.fileList?.title == "Symphony No. 5")
         #expect(state.fileList?.items.map(\.displayName) == ["Allegro", "Andante"])
         #expect(state.fileList?.items.map(\.path) == [url.path, url.path])
-        #expect(state.fileList?.items.map(\.id) == ["track:stereo:01", "track:stereo:02"])
+        #expect(state.fileList?.items.map(\.cue?.containerTrackID) == ["track:stereo:01", "track:stereo:02"])
+        #expect(Set(state.fileList?.items.map(\.id) ?? []).count == 2)
         #expect(state.fileList?.items[0].cue?.artist == "Beethoven")
         #expect(state.fileList?.items[0].cue?.album == "Symphony No. 5")
         let contribution = try #require(state.navigatorContributions.first)
@@ -515,7 +516,8 @@ struct CueSheetTests {
         )
 
         let list = try #require(state.fileList)
-        #expect(list.items.map(\.id) == ["track:1", "track:2", songItem.id])
+        #expect(list.items.map(\.cue?.containerTrackID) == ["track:1", "track:2", nil])
+        #expect(list.items.map(\.id).dropLast().allSatisfy { $0.hasPrefix("sacd:") })
         #expect(list.sections.count == 1)
         #expect(list.sections[0].resolvedFormat == .sacd)
         #expect(list.soleContainerFormat == nil)
@@ -525,6 +527,70 @@ struct CueSheetTests {
         #expect(contribution.items.map(\.title) == ["Album", "First", "Second", "encore.mp3"])
         #expect(contribution.items.first?.badge == "SACD")
         #expect(contribution.items.last?.parentID == nil)
+    }
+
+    @Test func multipleSACDSectionsKeepDistinctRowsAndSingleCurrentItem() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("foofoil-sacd-multiple-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let firstISO = directory.appendingPathComponent("first.iso")
+        let secondISO = directory.appendingPathComponent("second.iso")
+        try Data("iso-1".utf8).write(to: firstISO)
+        try Data("iso-2".utf8).write(to: secondISO)
+
+        let state = AppState()
+        defer { HistoryManager.shared.removeFromHistory(state.toConfig()) }
+        let firstPlaceholder = state.makeFileListItem(url: firstISO)
+        let secondPlaceholder = state.makeFileListItem(url: secondISO)
+        state.fileList = FileListState(
+            kind: .audio,
+            items: [firstPlaceholder, secondPlaceholder],
+            currentID: firstPlaceholder.id
+        )
+        let firstQueue = MediaPlaybackQueueSnapshot(
+            items: [
+                MediaPlaybackQueueItem(id: "track:stereo:01", title: "First A", duration: 10),
+                MediaPlaybackQueueItem(id: "track:stereo:02", title: "First B", duration: 20)
+            ],
+            currentItemID: "track:stereo:01",
+            title: "First Disc"
+        )
+        let secondQueue = MediaPlaybackQueueSnapshot(
+            items: [
+                MediaPlaybackQueueItem(id: "track:stereo:01", title: "Second A", duration: 30),
+                MediaPlaybackQueueItem(id: "track:stereo:02", title: "Second B", duration: 40)
+            ],
+            currentItemID: "track:stereo:01",
+            title: "Second Disc"
+        )
+
+        state.installContainerAudioList(
+            url: firstISO,
+            queue: firstQueue,
+            bookmark: nil,
+            selectsContainerTrack: true
+        )
+        state.installContainerAudioList(
+            url: secondISO,
+            queue: secondQueue,
+            bookmark: nil,
+            selectsContainerTrack: false
+        )
+
+        let list = try #require(state.fileList)
+        #expect(list.sections.map(\.title) == ["First Disc", "Second Disc"])
+        #expect(list.items.map(\.displayName) == ["First A", "First B", "Second A", "Second B"])
+        #expect(Set(list.items.map(\.id)).count == 4)
+        #expect(list.items.map(\.cue?.containerTrackID) == [
+            "track:stereo:01", "track:stereo:02", "track:stereo:01", "track:stereo:02"
+        ])
+        let contribution = try #require(state.navigatorContributions.first)
+        #expect(contribution.items.map(\.title) == [
+            "First Disc", "First A", "First B", "Second Disc", "Second A", "Second B"
+        ])
+        #expect(contribution.items.filter(\.isCurrent).count == 1)
+        #expect(contribution.selectedItemIDs.count == 1)
     }
 
     @Test func sniffMatcherAcceptsSACDMagicAndIgnoresOrdinaryISO() throws {

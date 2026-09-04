@@ -785,7 +785,7 @@ extension AppState {
         guard let session = extensionSession,
               session.providerID == "audio.hifi",
               let queue = session.playbackQueue,
-              queue.items.contains(where: { $0.id == item.id }) else {
+              let containerTrackID = containerTrackID(for: item, in: queue) else {
             return false
         }
         let sessionURL = session.request.primaryFileURL
@@ -795,16 +795,34 @@ extension AppState {
                 == itemURL.resolvingSymlinksInPath().standardizedFileURL.path
             guard same else { return false }
         }
-        if queue.currentItemID != item.id {
+        if queue.currentItemID != containerTrackID {
             performNavigatorAction(
                 NavigatorAction(
                     contributionID: "hifi.playback-queue",
                     kind: .activate,
-                    itemIDs: [item.id]
+                    itemIDs: [containerTrackID]
                 )
             )
         }
         return true
+    }
+
+    /// 新列表显式保存容器内部 ID；旧版持久化数据则按原 ID 或曲目序号兼容恢复。
+    func containerTrackID(for item: FileListItem, in queue: MediaPlaybackQueueSnapshot) -> String? {
+        if let id = item.cue?.containerTrackID,
+           queue.items.contains(where: { $0.id == id }) {
+            return id
+        }
+        if queue.items.contains(where: { $0.id == item.id }) {
+            return item.id
+        }
+        if let number = item.cue?.trackNumber.flatMap(Int.init) {
+            let index = number - 1
+            if queue.items.indices.contains(index) {
+                return queue.items[index].id
+            }
+        }
+        return nil
     }
 
     func installContainerAudioList(
@@ -835,18 +853,21 @@ extension AppState {
                 album: album,
                 trackNumber: "\(index + 1)",
                 sectionID: sectionID,
-                cueSheetPath: url.path
+                cueSheetPath: url.path,
+                containerTrackID: item.id
             )
             start += max(0, frames)
             return FileListItem(
-                id: item.id,
+                id: "sacd:\(sectionID):\(index):\(item.id)",
                 path: url.path,
                 bookmark: bookmark,
                 displayName: item.title,
                 cue: cue
             )
         }
-        let currentID = queue.currentItemID.flatMap { id in items.contains(where: { $0.id == id }) ? id : nil }
+        let currentID = queue.currentItemID.flatMap { id in
+            items.first(where: { $0.cue?.containerTrackID == id })?.id
+        }
             ?? items[0].id
         if var list = fileList,
            list.kind == .audio,

@@ -665,8 +665,10 @@ extension AppState {
             guard session.providerID == "audio.hifi",
                   let queue = session.playbackQueue,
                   queue.items.count >= 2 else { return }
+            let normalizedPath = url.resolvingSymlinksInPath().standardizedFileURL.path
             let alreadyInstalled = fileList?.items.contains(where: { item in
-                item.cue != nil && queue.items.contains(where: { $0.id == item.id })
+                item.cue != nil
+                    && item.url.resolvingSymlinksInPath().standardizedFileURL.path == normalizedPath
             }) == true
             if !alreadyInstalled {
                 let bookmark = session.request.resources.first?.securityScopedBookmark
@@ -674,18 +676,20 @@ extension AppState {
                 installContainerAudioList(url: url, queue: queue, bookmark: bookmark)
             }
             if let preferredItemID,
-               queue.items.contains(where: { $0.id == preferredItemID }),
-               preferredItemID != queue.currentItemID,
+               let preferredItem = fileList?.items.first(where: { $0.id == preferredItemID }),
+               let containerTrackID = containerTrackID(for: preferredItem, in: queue),
                var list = fileList {
                 list.currentID = preferredItemID
                 fileList = list
-                performNavigatorAction(
-                    NavigatorAction(
-                        contributionID: "hifi.playback-queue",
-                        kind: .activate,
-                        itemIDs: [preferredItemID]
+                if containerTrackID != queue.currentItemID {
+                    performNavigatorAction(
+                        NavigatorAction(
+                            contributionID: "hifi.playback-queue",
+                            kind: .activate,
+                            itemIDs: [containerTrackID]
+                        )
                     )
-                )
+                }
             }
             syncFileListNavigator()
         }

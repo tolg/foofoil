@@ -168,6 +168,9 @@ public nonisolated struct FileListCueInfo: Codable, Equatable, Sendable {
     public var trackNumber: String?
     public var sectionID: String?
     public var cueSheetPath: String?
+    /// SACD 容器内部的 Hi-Fi 队列项目 ID。它只在对应容器会话内唯一，
+    /// 不能直接用作跨多个容器的 FileListItem.id。
+    public var containerTrackID: String?
 
     public var startSeconds: Double { CueTime.seconds(from: startCueFrames) }
     public var endSeconds: Double? { endCueFrames.map(CueTime.seconds(from:)) }
@@ -183,7 +186,8 @@ public nonisolated struct FileListCueInfo: Codable, Equatable, Sendable {
         year: String? = nil,
         trackNumber: String? = nil,
         sectionID: String? = nil,
-        cueSheetPath: String? = nil
+        cueSheetPath: String? = nil,
+        containerTrackID: String? = nil
     ) {
         self.startCueFrames = startCueFrames
         self.endCueFrames = endCueFrames
@@ -196,6 +200,7 @@ public nonisolated struct FileListCueInfo: Codable, Equatable, Sendable {
         self.trackNumber = trackNumber
         self.sectionID = sectionID
         self.cueSheetPath = cueSheetPath
+        self.containerTrackID = containerTrackID
     }
 
     public var playbackRange: MediaPlaybackRange? {
@@ -205,7 +210,7 @@ public nonisolated struct FileListCueInfo: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case startCueFrames, endCueFrames, startSeconds, endSeconds
-        case title, artist, album, composer, genre, year, trackNumber, sectionID, cueSheetPath
+        case title, artist, album, composer, genre, year, trackNumber, sectionID, cueSheetPath, containerTrackID
     }
 
     public init(from decoder: Decoder) throws {
@@ -232,6 +237,7 @@ public nonisolated struct FileListCueInfo: Codable, Equatable, Sendable {
         trackNumber = try container.decodeIfPresent(String.self, forKey: .trackNumber)
         sectionID = try container.decodeIfPresent(String.self, forKey: .sectionID)
         cueSheetPath = try container.decodeIfPresent(String.self, forKey: .cueSheetPath)
+        containerTrackID = try container.decodeIfPresent(String.self, forKey: .containerTrackID)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -247,6 +253,7 @@ public nonisolated struct FileListCueInfo: Codable, Equatable, Sendable {
         try container.encode(trackNumber, forKey: .trackNumber)
         try container.encode(sectionID, forKey: .sectionID)
         try container.encode(cueSheetPath, forKey: .cueSheetPath)
+        try container.encode(containerTrackID, forKey: .containerTrackID)
     }
 }
 
