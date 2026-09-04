@@ -1,4 +1,5 @@
 import Combine
+import CoreAudio
 import FoofoilExtensionKit
 import SwiftUI
 
@@ -23,6 +24,8 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
     private let notePlaybackIntent: @MainActor (Bool) -> Void
     private var mediaTitle: String
     private var observer: NSObjectProtocol?
+    private var systemDevicesListener: AudioObjectPropertyListenerBlock?
+    private var systemDefaultListener: AudioObjectPropertyListenerBlock?
 
     init(appState: AppState, session: ContentSession) {
         appStateID = appState.id
@@ -59,10 +62,78 @@ final class ExtensionAudioPlaybackController: ObservableObject, MediaTransportCo
                 self.togglePlayPause()
             }
         }
+        startSystemDeviceObservation()
     }
 
     deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        // CoreAudio 监听的移除必须与添加使用相同的 selector；此处直接重建 address 即可。
+        var devicesAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var defaultAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        if let listener = systemDevicesListener {
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &devicesAddress,
+                DispatchQueue.main,
+                listener
+            )
+        }
+        if let listener = systemDefaultListener {
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &defaultAddress,
+                DispatchQueue.main,
+                listener
+            )
+        }
+    }
+
+    /// 系统设备插拔时立刻刷新扩展会话，避免设备列表与播放状态卡在已离线的独占设备上。
+    private func startSystemDeviceObservation() {
+        var devicesAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var defaultAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let devicesListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor [weak self] in self?.requestDeviceRefresh() }
+        }
+        let defaultListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor [weak self] in self?.requestDeviceRefresh() }
+        }
+        systemDevicesListener = devicesListener
+        systemDefaultListener = defaultListener
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &devicesAddress,
+            DispatchQueue.main,
+            devicesListener
+        )
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultAddress,
+            DispatchQueue.main,
+            defaultListener
+        )
+    }
+
+    private func requestDeviceRefresh() {
+        // 运行时侧会在每次命令前刷新设备列表并在独占设备离线时自动暂停回退；
+        // 这里无论是否正在播放都要触发一次 status，确保菜单立刻刷新且播放状态不卡死。
+        command("hifi.status")
     }
 
     var volumeIconName: String { "speaker.wave.3.fill" }

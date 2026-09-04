@@ -42,6 +42,8 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
     private var scheduleGeneration: UInt64 = 0
     private var progressTimer: Timer?
     private var observers: [NSObjectProtocol] = []
+    private var systemDevicesListener: AudioObjectPropertyListenerBlock?
+    private var systemDefaultListener: AudioObjectPropertyListenerBlock?
     private var mediaTitle: String
     private let previousItemAction: @MainActor () -> Bool
     private let nextItemAction: @MainActor () -> Bool
@@ -78,11 +80,39 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
         load(url: url, range: range)
         startProgressTimer()
         Task { await refreshDeviceService() }
+        startSystemDeviceObservation()
     }
 
     deinit {
         progressTimer?.invalidate()
         observers.forEach(NotificationCenter.default.removeObserver)
+        // deinit 为非隔离上下文，不能调用 MainActor 方法；此处内联移除监听。
+        if let devicesListener = systemDevicesListener {
+            var devicesAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDevices,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &devicesAddress,
+                DispatchQueue.main,
+                devicesListener
+            )
+        }
+        if let defaultListener = systemDefaultListener {
+            var defaultAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &defaultAddress,
+                DispatchQueue.main,
+                defaultListener
+            )
+        }
         engine.stop()
         let clientID = activeLeaseClientID ?? deviceServiceClientID
         Task {
@@ -290,6 +320,76 @@ final class AudioPlaybackController: ObservableObject, MediaTransportControlling
             deviceServiceSnapshot = nil
             deviceFailureMessage = error.localizedDescription
         }
+    }
+
+    /// 监听系统设备插拔与默认设备切换；独占设备离线时立刻暂停并切回跟随系统默认。
+    private func startSystemDeviceObservation() {
+        var devicesAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var defaultAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let devicesListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor [weak self] in await self?.handleSystemDevicesChanged() }
+        }
+        let defaultListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            Task { @MainActor [weak self] in await self?.handleSystemDevicesChanged() }
+        }
+        systemDevicesListener = devicesListener
+        systemDefaultListener = defaultListener
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &devicesAddress,
+            DispatchQueue.main,
+            devicesListener
+        )
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultAddress,
+            DispatchQueue.main,
+            defaultListener
+        )
+    }
+
+    private func handleSystemDevicesChanged() async {
+        guard ExtensionHost.shared.isHiFiDeviceServiceAvailable else { return }
+        let previousMode = deviceServiceSnapshot?.pcmRouteMode
+        let previousPrepared = preparedDeviceID
+        let previousSelected = deviceServiceSnapshot?.selectedPCMDeviceID
+        await refreshDeviceService()
+        guard let snapshot = deviceServiceSnapshot else { return }
+        // 服务端离线后已自动切回系统默认；宿主侧把仍指向旧设备的引擎重建为系统默认并暂停。
+        let preparedGone = previousPrepared.flatMap { id in
+            snapshot.devices.first(where: { $0.id == id && $0.isConnected })
+        } == nil && previousPrepared != nil
+        let selectedGone = previousSelected.flatMap { id in
+            snapshot.devices.first(where: { $0.id == id })
+        } == nil && previousSelected != nil
+        let fellBackToDefault = previousMode == .exclusiveDevice && snapshot.pcmRouteMode == .systemDefault
+        let exclusiveStillInvalid = snapshot.pcmRouteMode == .exclusiveDevice
+            && snapshot.selectedPCMDeviceID.flatMap({ id in snapshot.devices.first(where: { $0.id == id }) }) == nil
+        guard preparedGone || selectedGone || fellBackToDefault || exclusiveStillInvalid else { return }
+        playbackIntentHandler?(false)
+        routeGeneration &+= 1
+        refreshCurrentTime()
+        scheduleGeneration &+= 1
+        playerNode.stop()
+        engine.stop()
+        isPlaying = false
+        preparedDeviceID = nil
+        preparedSourceSampleRate = nil
+        activeLeaseClientID = nil
+        PCMExclusivePlaybackCoordinator.shared.release(self)
+        rebuildEngineForSystemDefault()
+        schedule(from: currentTime, play: false)
+        MediaRemoteCommandCoordinator.shared.update(self)
+        // 刷新一次快照，确保右上角立刻显示跟随系统默认而非已不存在的设备。
+        await refreshDeviceService()
     }
 
     private func preparePreferredRouteAndPlay(generation: UInt64) async {
