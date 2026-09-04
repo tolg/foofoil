@@ -293,12 +293,15 @@ struct NavigatorPanelView: View {
                     Image(systemName: appState.expandedNavigatorItemIDs.contains(row.item.id)
                           ? "chevron.down" : "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .frame(width: 12)
+                        // chevron 视觉居中不变，外层整块 28pt 都可点：
+                        // contentShape 外扩超不出布局边界，必须用真实 frame 扩大才有效。
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(NSLocalizedString("Toggle Navigator Group", comment: ""))
             } else if contribution.style == .outline {
-                Color.clear.frame(width: 12, height: 1)
+                Color.clear.frame(width: 28, height: 28)
             }
 
             Button {
